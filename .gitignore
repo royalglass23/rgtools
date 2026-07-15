@@ -53,6 +53,8 @@ next-env.d.ts
 .vscode/
 .worktrees/
 .github/
+.publish-the-godfather/
+plugins/
 AGENTS.md
 
 # Local scratch (e.g. quote-pull test output)
