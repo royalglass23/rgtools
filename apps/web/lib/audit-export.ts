@@ -15,8 +15,17 @@ export type AuditExportRow = {
 
 function csvValue(value: unknown) {
   if (value == null) return '""'
-  const text = value instanceof Date ? value.toISOString() : String(value)
+  const text = value instanceof Date ? value.toISOString() : safeSpreadsheetText(value)
   return `"${text.replace(/"/g, '""')}"`
+}
+
+function safeSpreadsheetText(value: unknown) {
+  const text = String(value)
+  if (typeof value !== 'string') return text
+
+  const startsWithFormulaMarker = /^[=+\-@]/.test(text.trimStart())
+  const startsWithControlWhitespace = /^[\t\r\n]/.test(text)
+  return startsWithFormulaMarker || startsWithControlWhitespace ? `'${text}` : text
 }
 
 export function rowsToCsv(rows: unknown[][]) {

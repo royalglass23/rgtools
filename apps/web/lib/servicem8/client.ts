@@ -12,6 +12,7 @@ const SERVICEM8_BASE = 'https://api.servicem8.com/api_1.0'
 export type ServiceM8JsonResponse = {
   ok: boolean
   status: number
+  headers?: Pick<Headers, 'get'>
   json: () => Promise<unknown>
 }
 
@@ -150,13 +151,14 @@ export function getServiceM8FullApiKey(): string {
 }
 
 function buildServiceM8Request(apiKey: string): ServiceM8FetchRequest {
+  const baseUrl = serviceM8BaseUrl()
   return async (path, init) => {
     const headers = new Headers(init?.headers)
     headers.set('X-API-Key', apiKey)
     headers.set('Accept', 'application/json')
     if (init?.body) headers.set('Content-Type', 'application/json')
 
-    const response = await fetch(`${SERVICEM8_BASE}${path}`, {
+    const response = await fetch(`${baseUrl}${path}`, {
       ...init,
       headers,
     })
@@ -164,9 +166,25 @@ function buildServiceM8Request(apiKey: string): ServiceM8FetchRequest {
     return {
       ok: response.ok,
       status: response.status,
+      headers: response.headers,
       json: () => response.json(),
     }
   }
+}
+
+function serviceM8BaseUrl() {
+  const configuredUrl = process.env.SERVICEM8_API_BASE_URL?.trim()
+  if (!configuredUrl) return SERVICEM8_BASE
+
+  const url = new URL(configuredUrl)
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    throw new Error('SERVICEM8_API_BASE_URL must use HTTP or HTTPS.')
+  }
+  if (process.env.NODE_ENV === 'production' && url.protocol !== 'https:') {
+    throw new Error('SERVICEM8_API_BASE_URL must use HTTPS in production.')
+  }
+
+  return configuredUrl.replace(/\/+$/, '')
 }
 
 /**

@@ -2,9 +2,10 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockUpdateOperationalField = vi.hoisted(() => vi.fn())
+const mockUpdateLabel = vi.hoisted(() => vi.fn())
 
 vi.mock('../actions', () => ({
-  updateWorkOrderItemLabelAction: vi.fn(),
+  updateWorkOrderItemLabelAction: mockUpdateLabel,
   regenerateWorkOrderItemLabelAction: vi.fn(),
   updateWorkOrderItemOperationalFieldAction: mockUpdateOperationalField,
 }))
@@ -136,20 +137,21 @@ describe('WorkOrderItemsSummary', () => {
     ]} />)
 
     expect(screen.getByText('2 active items')).toBeInTheDocument()
-    expect(screen.getByText('GLASS-001')).toBeInTheDocument()
+    expect(screen.getByText('GLASS-001')).toHaveClass('bg-[#142B3A]', 'text-sm', 'font-semibold', 'text-white')
     expect(screen.getByText('Shower glass')).toBeInTheDocument()
     expect(screen.getByText('HARDWARE-001')).toBeInTheDocument()
     expect(screen.getByText('Shower hardware')).toBeInTheDocument()
   })
 
-  it('alternates active item cards between white and a Royal Glass navy tint', () => {
-    render(<WorkOrderItemsSummary items={[
+  it('uses one job-level colour across all active item cards', () => {
+    render(<WorkOrderItemsSummary tone="tint" items={[
       workOrderItem({ id: 'item-1', itemCode: 'GLASS-001', quantity: '1.000', originalDescription: 'Shower glass', lineTotalExcludingGst: '900.00', generatedLabel: null, manualLabelOverride: null, isActive: true }),
       workOrderItem({ id: 'item-2', itemCode: 'HARDWARE-001', quantity: '1.000', originalDescription: 'Shower hardware', lineTotalExcludingGst: '150.00', generatedLabel: null, manualLabelOverride: null, isActive: true }),
     ]} />)
 
-    expect(screen.getByText('GLASS-001').parentElement).toHaveClass('bg-white')
-    expect(screen.getByText('HARDWARE-001').parentElement).toHaveClass('bg-[#E8EEF1]')
+    const rows = screen.getAllByRole('row')
+    expect(rows[0]).toHaveClass('bg-[#E8EEF1]')
+    expect(rows[1]).toHaveClass('bg-[#E8EEF1]')
   })
 
   it('keeps an empty Work Order visible without inventing a child item', () => {
@@ -253,6 +255,50 @@ describe('WorkOrderItemsSummary', () => {
     confirm.mockRestore()
   })
 
+  it('saves a manually edited label and shows visible success feedback', async () => {
+    render(<WorkOrderItemsSummary canManage items={[workOrderItem({
+      id: 'item-save-label',
+      itemCode: 'GLASS-001',
+      quantity: '1.000',
+      originalDescription: 'Original description',
+      lineTotalExcludingGst: '900.00',
+      generatedLabel: 'Original label',
+      manualLabelOverride: null,
+      labelStatus: 'generated',
+      isActive: true,
+    })]} />)
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Short label for GLASS-001' }), {
+      target: { value: 'Updated production label' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save label' }))
+
+    await waitFor(() => expect(mockUpdateLabel).toHaveBeenCalledTimes(1))
+    const submitted = mockUpdateLabel.mock.calls[0][1] as FormData
+    expect(submitted.get('label')).toBe('Updated production label')
+    expect(await screen.findByText('Saved')).toBeInTheDocument()
+  })
+
+  it('shows the label save error and offers a retry', async () => {
+    mockUpdateLabel.mockRejectedValueOnce(new Error('Label editing is unavailable.'))
+    render(<WorkOrderItemsSummary canManage items={[workOrderItem({
+      id: 'item-save-error',
+      itemCode: 'GLASS-ERROR',
+      quantity: '1.000',
+      originalDescription: 'Original description',
+      lineTotalExcludingGst: '900.00',
+      generatedLabel: 'Original label',
+      manualLabelOverride: null,
+      labelStatus: 'generated',
+      isActive: true,
+    })]} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save label' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Label editing is unavailable.')
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+  })
+
   it('gives manage users independent controls for all eight item operational fields', () => {
     render(<WorkOrderItemsSummary
       canManage
@@ -297,6 +343,11 @@ describe('WorkOrderItemsSummary', () => {
     ]) {
       expect(screen.getByLabelText(label)).toBeInTheDocument()
     }
+
+    const operationalLine = screen.getByRole('group', { name: 'Work Order item controls' })
+    expect(operationalLine).toHaveClass('xl:grid-cols-8')
+    expect(operationalLine.querySelectorAll('select, input[type="date"]')).toHaveLength(8)
+    expect(screen.queryByText('Item')).not.toBeInTheDocument()
   })
 
   it('shows item operational values without edit controls for view-only users', () => {

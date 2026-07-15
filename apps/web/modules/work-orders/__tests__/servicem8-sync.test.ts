@@ -176,24 +176,15 @@ describe('mapServiceM8JobsToWorkOrderInputs', () => {
     ])
   })
 
-  it('uses the trusted Royal Glass job number when ServiceM8 UUID is missing', () => {
-    const rows = mapServiceM8JobsToWorkOrderInputs([
+  it('rejects an active Work Order when its stable ServiceM8 UUID is missing', () => {
+    expect(() => mapServiceM8JobsToWorkOrderInputs([
       {
         uuid: null,
         active: '1',
         status: 'WORK ORDER',
         generated_job_id: ' R260210 ',
       },
-    ])
-
-    expect(rows).toEqual([
-      expect.objectContaining({
-        servicem8JobUuid: null,
-        identityKind: 'job_number',
-        identityValue: 'R260210',
-        jobNumber: 'R260210',
-      }),
-    ])
+    ])).toThrow('ServiceM8 Work Order at row 1 is invalid: job UUID is required.')
   })
 
   it('rejects an active Work Order without a stable identity', () => {
@@ -201,6 +192,6 @@ describe('mapServiceM8JobsToWorkOrderInputs', () => {
       active: 1,
       status: 'Work Order',
       generated_job_id: null,
-    }])).toThrow('ServiceM8 Work Order at row 1 is invalid: job UUID or job number is required.')
+    }])).toThrow('ServiceM8 Work Order at row 1 is invalid: job UUID is required.')
   })
 })

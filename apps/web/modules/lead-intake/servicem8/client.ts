@@ -36,6 +36,8 @@ export function createServiceM8InboxClient(config: SmtpConfig): ServiceM8Client 
       user: config.user,
       pass: config.pass,
     } : undefined,
+    disableFileAccess: true,
+    disableUrlAccess: true,
   })
 
   return {

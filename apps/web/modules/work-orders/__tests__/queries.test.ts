@@ -6,6 +6,7 @@ const orderByCalls = vi.hoisted(() => [] as unknown[][])
 const whereCalls = vi.hoisted(() => [] as unknown[])
 const limitCalls = vi.hoisted(() => [] as unknown[])
 const offsetCalls = vi.hoisted(() => [] as unknown[])
+const selectResults = vi.hoisted(() => [] as unknown[])
 
 vi.mock('drizzle-orm', () => {
   function columnName(column: { name?: string }) {
@@ -30,10 +31,18 @@ vi.mock('drizzle-orm', () => {
 })
 
 vi.mock('@rgtools/db/schema-leads', () => ({
+  clientContacts: {
+    id: { name: 'client_contacts.id' },
+    clientId: { name: 'client_contacts.client_id' },
+    name: { name: 'client_contacts.name' },
+    phone: { name: 'client_contacts.phone' },
+    email: { name: 'client_contacts.email' },
+  },
   clients: { id: { name: 'clients.id' }, name: { name: 'clients.name' }, companyName: { name: 'clients.company_name' }, notes: { name: 'clients.notes' } },
   leads: {
     id: { name: 'leads.id' },
     clientId: { name: 'leads.client_id' },
+    contactId: { name: 'leads.contact_id' },
     seedScore: { name: 'leads.seed_score' },
     servicem8JobUuid: { name: 'leads.servicem8_job_uuid' },
     servicem8JobNumber: { name: 'leads.servicem8_job_number' },
@@ -41,6 +50,20 @@ vi.mock('@rgtools/db/schema-leads', () => ({
 }))
 
 vi.mock('@rgtools/db/schema-workorders', () => ({
+  workOrderEvents: {
+    id: { name: 'work_order_events.id' },
+    workOrderId: { name: 'work_order_events.work_order_id' },
+    workOrderItemId: { name: 'work_order_events.work_order_item_id' },
+    actorId: { name: 'work_order_events.actor_id' },
+    fieldName: { name: 'work_order_events.field_name' },
+    previousValue: { name: 'work_order_events.previous_value' },
+    newValue: { name: 'work_order_events.new_value' },
+    note: { name: 'work_order_events.note' },
+    isClientVisibleCandidate: { name: 'work_order_events.is_client_visible_candidate' },
+    portalTitle: { name: 'work_order_events.portal_title' },
+    portalMessage: { name: 'work_order_events.portal_message' },
+    createdAt: { name: 'work_order_events.created_at' },
+  },
   workOrderHardwareStatusOptions: {
     id: { name: 'hardware.id' },
     displayName: { name: 'hardware.display_name' },
@@ -111,6 +134,13 @@ vi.mock('@rgtools/db/schema-workorders', () => ({
   },
 }))
 
+vi.mock('@rgtools/db/schema', () => ({
+  users: {
+    id: { name: 'users.id' },
+    username: { name: 'users.username' },
+  },
+}))
+
 function queryBuilder(result: unknown) {
   const builder: Record<string, unknown> = {}
   builder.leftJoin = vi.fn(() => builder)
@@ -140,13 +170,19 @@ function queryBuilder(result: unknown) {
 vi.mock('@/lib/db', () => ({
   db: {
     select: vi.fn((shape: Record<string, unknown>) => ({
-      from: vi.fn(() => queryBuilder('total' in shape ? [{ total: 0 }] : [])),
+      from: vi.fn(() => queryBuilder(
+        selectResults.length > 0
+          ? selectResults.shift()
+          : ('total' in shape ? [{ total: 0 }] : []),
+      )),
     })),
   },
 }))
 
-import { listWorkOrders, listWorkOrdersForExport } from '../queries'
+import { getWorkOrderDetail, listWorkOrders, listWorkOrdersForExport } from '../queries'
+import type { WorkOrderBaseRow } from '../queries'
 import type { WorkOrderListFilters } from '../list-filters'
+import type { WorkOrderItemSummaryRow } from '../work-order-items'
 
 const filters: WorkOrderListFilters = {
   q: '',
@@ -168,6 +204,7 @@ beforeEach(() => {
   whereCalls.length = 0
   limitCalls.length = 0
   offsetCalls.length = 0
+  selectResults.length = 0
 })
 
 describe('listWorkOrders', () => {
@@ -293,6 +330,124 @@ describe('listWorkOrders', () => {
     expect(offsetCalls).toEqual([])
   })
 
+  it('returns one export row for every included Work Order item', async () => {
+    const workOrder = {
+      id: 'work-order-1',
+      servicem8Status: 'Work Order',
+      isCurrent: true,
+      jobNumber: 'R260199',
+      jobAddress: '19 Glass Lane',
+      jobDescription: 'Replace glazing',
+      clientName: 'Aroha Glass',
+      companyName: null,
+      leadScore: 88,
+      installerName: null,
+      stageName: null,
+      hardwareStatusName: null,
+      maintenanceProgram: false,
+      installDate: null,
+      dateCompleted: null,
+      riskLevel: null,
+      importance: null,
+      aiSuggestion: null,
+      aiSuggestionAt: null,
+      clientContextSummary: null,
+      clientApproachNote: null,
+      updatedAt: new Date('2026-07-15T00:00:00.000Z'),
+    } satisfies WorkOrderBaseRow
+    const firstItem = workOrderItem({ id: 'item-1', itemCode: 'GLASS-01' })
+    const secondItem = workOrderItem({ id: 'item-2', itemCode: 'GLASS-02' })
+    selectResults.push([workOrder], [firstItem, secondItem])
+
+    const rows = await listWorkOrdersForExport(filters)
+
+    expect(rows).toEqual([
+      { ...workOrder, item: firstItem },
+      { ...workOrder, item: secondItem },
+    ])
+  })
+
+  it('keeps a zero-item Work Order in the export with a blank item', async () => {
+    const workOrder = workOrderRow({ id: 'empty-work-order', jobNumber: 'R260200' })
+    selectResults.push([workOrder], [])
+
+    const rows = await listWorkOrdersForExport(filters)
+
+    expect(rows).toEqual([{ ...workOrder, item: null }])
+  })
+
+  it('exports only child items matching item search and configured filters', async () => {
+    const workOrder = workOrderRow({ id: 'filtered-work-order' })
+    const matchingItem = workOrderItem({
+      id: 'matching-item',
+      workOrderId: workOrder.id,
+      originalDescription: 'Balustrade glass',
+      stageOptionId: 'stage-production',
+    })
+    const wrongStage = workOrderItem({
+      id: 'wrong-stage',
+      workOrderId: workOrder.id,
+      originalDescription: 'Balustrade hardware',
+      stageOptionId: 'stage-measure',
+    })
+    const wrongSearch = workOrderItem({
+      id: 'wrong-search',
+      workOrderId: workOrder.id,
+      originalDescription: 'Shower glass',
+      stageOptionId: 'stage-production',
+    })
+    selectResults.push([workOrder], [matchingItem, wrongStage, wrongSearch])
+
+    const rows = await listWorkOrdersForExport({
+      ...filters,
+      q: 'balustrade',
+      stage: 'stage-production',
+    })
+
+    expect(rows).toEqual([{ ...workOrder, item: matchingItem }])
+  })
+
+  it('includes removed items only when Show removed items is active', async () => {
+    const workOrder = workOrderRow({ id: 'restored-work-order' })
+    const removedItem = workOrderItem({
+      id: 'removed-item',
+      workOrderId: workOrder.id,
+      isActive: false,
+    })
+    selectResults.push([workOrder], [removedItem])
+
+    const rows = await listWorkOrdersForExport({ ...filters, showRemovedItems: true })
+
+    expect(rows).toEqual([{ ...workOrder, item: removedItem }])
+    expect(whereCalls[1]).toEqual({
+      type: 'inArray',
+      column: 'work_order_items.work_order_id',
+      values: [workOrder.id],
+    })
+  })
+
+  it('returns active and removed item records for detailed Work Order review', async () => {
+    const workOrder = {
+      ...workOrderRow({ id: 'detail-work-order', jobNumber: 'R260210' }),
+      servicem8JobUuid: 'servicem8-job-1',
+      servicem8Active: true,
+      clientId: null,
+      clientNotes: null,
+      leadId: null,
+      quoteId: null,
+      rawServiceM8Snapshot: {},
+      riskSource: null,
+      importanceSource: null,
+    }
+    const activeItem = workOrderItem({ id: 'active-item', workOrderId: workOrder.id })
+    const removedItem = workOrderItem({ id: 'removed-item', workOrderId: workOrder.id, isActive: false })
+    selectResults.push([workOrder], [], [activeItem, removedItem])
+
+    const detail = await getWorkOrderDetail(workOrder.id)
+
+    expect(detail?.items).toEqual([activeItem, removedItem])
+  })
+
   it('filters maintenance program rows when requested', async () => {
     await listWorkOrders({ ...filters, maintenanceProgram: 'yes' })
 
@@ -309,3 +464,57 @@ describe('listWorkOrders', () => {
     ]))
   })
 })
+
+function workOrderItem(overrides: Partial<WorkOrderItemSummaryRow>): WorkOrderItemSummaryRow {
+  return {
+    id: 'item-1',
+    workOrderId: 'work-order-1',
+    itemCode: 'GLASS-01',
+    quantity: '1.000',
+    originalDescription: 'Original item description',
+    lineTotalExcludingGst: '1200.00',
+    generatedLabel: 'Generated item label',
+    manualLabelOverride: null,
+    isActive: true,
+    installerId: null,
+    installerName: null,
+    stageOptionId: null,
+    stageName: null,
+    hardwareStatusOptionId: null,
+    hardwareStatusName: null,
+    maintenanceProgram: false,
+    installDate: null,
+    dateCompleted: null,
+    riskLevel: null,
+    importance: null,
+    ...overrides,
+  }
+}
+
+function workOrderRow(overrides: Partial<WorkOrderBaseRow>): WorkOrderBaseRow {
+  return {
+    id: 'work-order-1',
+    servicem8Status: 'Work Order',
+    isCurrent: true,
+    jobNumber: 'R260199',
+    jobAddress: '19 Glass Lane',
+    jobDescription: 'Replace glazing',
+    clientName: 'Aroha Glass',
+    companyName: null,
+    leadScore: 88,
+    installerName: null,
+    stageName: null,
+    hardwareStatusName: null,
+    maintenanceProgram: false,
+    installDate: null,
+    dateCompleted: null,
+    riskLevel: null,
+    importance: null,
+    aiSuggestion: null,
+    aiSuggestionAt: null,
+    clientContextSummary: null,
+    clientApproachNote: null,
+    updatedAt: new Date('2026-07-15T00:00:00.000Z'),
+    ...overrides,
+  }
+}

@@ -148,6 +148,65 @@ describe('refreshWorkOrdersFromServiceM8', () => {
     expect(refreshRunValues).toEqual([expect.objectContaining({ status: 'failed' })])
   })
 
+  it('follows every ServiceM8 cursor page before reconciling the complete dataset', async () => {
+    const requestedPaths: string[] = []
+    const request = vi.fn(async (path: string) => {
+      requestedPaths.push(path)
+      if (!path.startsWith('/job.json')) return Response.json([])
+
+      const cursor = new URL(path, 'https://servicem8.example').searchParams.get('cursor')
+      if (cursor === null || cursor === '-1') {
+        return Response.json([{
+          uuid: 'job-1',
+          active: 1,
+          status: 'Work Order',
+          generated_job_id: 'R260210',
+        }], { headers: { 'x-next-cursor': 'cursor-2' } })
+      }
+      if (cursor === 'cursor-2') {
+        return Response.json([{
+          uuid: 'job-2',
+          active: 1,
+          status: 'Work Order',
+          generated_job_id: 'R260211',
+        }])
+      }
+
+      return Response.json([], { status: 400 })
+    })
+
+    await expect(refreshWorkOrdersFromServiceM8(request)).resolves.toEqual({
+      synced: 2,
+      itemsSynced: 0,
+      excludedLineCount: 0,
+    })
+
+    expect(transactionValues.filter((write) => write.table === 'work_orders')).toHaveLength(2)
+    expect(requestedPaths).toEqual(expect.arrayContaining([
+      expect.stringMatching(/^\/job\.json.*cursor=-1/),
+      expect.stringMatching(/^\/job\.json.*cursor=cursor-2/),
+    ]))
+  })
+
+  it('fails before reconciliation when ServiceM8 repeats a pagination cursor', async () => {
+    const request = vi.fn(async (path: string) => {
+      if (!path.startsWith('/job.json')) return Response.json([])
+      return Response.json([{
+        uuid: 'job-1',
+        active: 1,
+        status: 'Work Order',
+        generated_job_id: 'R260210',
+      }], { headers: { 'x-next-cursor': 'cursor-loop' } })
+    })
+
+    await expect(refreshWorkOrdersFromServiceM8(request)).rejects.toThrow(
+      'ServiceM8 job pagination was invalid: cursor cursor-loop repeated.',
+    )
+
+    expect(mockTransaction).not.toHaveBeenCalled()
+    expect(refreshRunValues).toEqual([expect.objectContaining({ status: 'failed' })])
+  })
+
   it('records a failed run when atomic reconciliation rolls back', async () => {
     mockTransaction.mockRejectedValueOnce(new Error('database transaction rolled back'))
     const request = vi.fn(async () => Response.json([]))

@@ -1,5 +1,35 @@
 import { describe, expect, it } from 'vitest'
-import { auditExportRowsToCsv } from '../audit-export'
+import { auditExportRowsToCsv, rowsToCsv } from '../audit-export'
+
+describe('rowsToCsv', () => {
+  it('neutralizes spreadsheet formula prefixes while preserving ordinary values', () => {
+    const csv = rowsToCsv([[
+      '=HYPERLINK("https://attacker.test")',
+      '+SUM(1,1)',
+      '-2+3',
+      '@SUM(1,1)',
+      '\tSUM(1,1)',
+      '   =SUM(1,1)',
+      '\t  +SUM(1,1)',
+      ' ordinary leading space',
+      'Glass + hardware',
+      -12,
+    ]])
+
+    expect(csv).toBe([
+      '"\'=HYPERLINK(""https://attacker.test"")"',
+      '"\'+SUM(1,1)"',
+      '"\'-2+3"',
+      '"\'@SUM(1,1)"',
+      '"\'\tSUM(1,1)"',
+      '"\'   =SUM(1,1)"',
+      '"\'\t  +SUM(1,1)"',
+      '" ordinary leading space"',
+      '"Glass + hardware"',
+      '"-12"',
+    ].join(','))
+  })
+})
 
 describe('auditExportRowsToCsv', () => {
   it('renders diff detail and includes archive/IP columns', () => {

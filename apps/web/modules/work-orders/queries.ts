@@ -51,6 +51,10 @@ export type WorkOrderRow = WorkOrderBaseRow & {
   items: WorkOrderItemSummaryRow[]
 }
 
+export type WorkOrderExportRow = WorkOrderBaseRow & {
+  item: WorkOrderItemSummaryRow | null
+}
+
 export type WorkOrderDetail = WorkOrderBaseRow & {
   servicem8JobUuid: string | null
   servicem8Active: boolean
@@ -61,6 +65,7 @@ export type WorkOrderDetail = WorkOrderBaseRow & {
   rawServiceM8Snapshot: unknown
   riskSource: 'manual' | 'ai' | null
   importanceSource: 'manual' | 'ai' | null
+  items: WorkOrderItemSummaryRow[]
   contacts: Array<{
     id: string
     name: string | null
@@ -110,6 +115,31 @@ const workOrderRowSelection = {
   updatedAt: workOrders.updatedAt,
 }
 
+const workOrderItemSummarySelection = {
+  id: workOrderItems.id,
+  workOrderId: workOrderItems.workOrderId,
+  itemCode: workOrderItems.itemCode,
+  quantity: workOrderItems.quantity,
+  originalDescription: workOrderItems.originalDescription,
+  lineTotalExcludingGst: workOrderItems.lineTotalExcludingGst,
+  generatedLabel: workOrderItems.generatedLabel,
+  manualLabelOverride: workOrderItems.manualLabelOverride,
+  labelStatus: workOrderItems.labelStatus,
+  sourceDescriptionFingerprint: workOrderItems.sourceDescriptionFingerprint,
+  isActive: workOrderItems.isActive,
+  installerId: workOrderItems.installerId,
+  installerName: workOrderInstallers.displayName,
+  stageOptionId: workOrderItems.stageOptionId,
+  stageName: workOrderStageOptions.displayName,
+  hardwareStatusOptionId: workOrderItems.hardwareStatusOptionId,
+  hardwareStatusName: workOrderHardwareStatusOptions.displayName,
+  maintenanceProgram: workOrderItems.maintenanceProgram,
+  installDate: workOrderItems.installDate,
+  dateCompleted: workOrderItems.dateCompleted,
+  riskLevel: sql<WorkOrderLevel | null>`coalesce(${workOrderItems.riskLevelOverride}, ${workOrderItems.aiRiskLevel})`,
+  importance: sql<WorkOrderLevel | null>`coalesce(${workOrderItems.importanceOverride}, ${workOrderItems.aiImportance})`,
+}
+
 export async function listWorkOrders(filters: WorkOrderListFilters) {
   const where = listWhere(filters)
   const offset = (filters.page - 1) * filters.size
@@ -133,44 +163,10 @@ export async function listWorkOrders(filters: WorkOrderListFilters) {
     .limit(filters.size)
     .offset(offset)
 
-  const activeItems = rows.length === 0
-    ? []
-    : await db
-      .select({
-        id: workOrderItems.id,
-        workOrderId: workOrderItems.workOrderId,
-        itemCode: workOrderItems.itemCode,
-        quantity: workOrderItems.quantity,
-        originalDescription: workOrderItems.originalDescription,
-        lineTotalExcludingGst: workOrderItems.lineTotalExcludingGst,
-        generatedLabel: workOrderItems.generatedLabel,
-        manualLabelOverride: workOrderItems.manualLabelOverride,
-        labelStatus: workOrderItems.labelStatus,
-        sourceDescriptionFingerprint: workOrderItems.sourceDescriptionFingerprint,
-        isActive: workOrderItems.isActive,
-        installerId: workOrderItems.installerId,
-        installerName: workOrderInstallers.displayName,
-        stageOptionId: workOrderItems.stageOptionId,
-        stageName: workOrderStageOptions.displayName,
-        hardwareStatusOptionId: workOrderItems.hardwareStatusOptionId,
-        hardwareStatusName: workOrderHardwareStatusOptions.displayName,
-        maintenanceProgram: workOrderItems.maintenanceProgram,
-        installDate: workOrderItems.installDate,
-        dateCompleted: workOrderItems.dateCompleted,
-        riskLevel: sql<WorkOrderLevel | null>`coalesce(${workOrderItems.riskLevelOverride}, ${workOrderItems.aiRiskLevel})`,
-        importance: sql<WorkOrderLevel | null>`coalesce(${workOrderItems.importanceOverride}, ${workOrderItems.aiImportance})`,
-      })
-      .from(workOrderItems)
-      .leftJoin(workOrderInstallers, eq(workOrderItems.installerId, workOrderInstallers.id))
-      .leftJoin(workOrderStageOptions, eq(workOrderItems.stageOptionId, workOrderStageOptions.id))
-      .leftJoin(workOrderHardwareStatusOptions, eq(workOrderItems.hardwareStatusOptionId, workOrderHardwareStatusOptions.id))
-      .where(filters.showRemovedItems
-        ? inArray(workOrderItems.workOrderId, rows.map((row) => row.id))
-        : and(
-          inArray(workOrderItems.workOrderId, rows.map((row) => row.id)),
-          eq(workOrderItems.isActive, true),
-        ))
-      .orderBy(asc(workOrderItems.workOrderId), asc(workOrderItems.sortOrder), asc(workOrderItems.id))
+  const activeItems = await listWorkOrderSummaryItems(
+    rows.map((row) => row.id),
+    filters.showRemovedItems,
+  )
 
   const total = totalRow?.total ?? 0
   const groupedRows = attachActiveItemsToWorkOrders(rows, activeItems)
@@ -181,8 +177,10 @@ export async function listWorkOrders(filters: WorkOrderListFilters) {
   }
 }
 
-export async function listWorkOrdersForExport(filters: WorkOrderListFilters) {
-  return db
+export async function listWorkOrdersForExport(
+  filters: WorkOrderListFilters,
+): Promise<WorkOrderExportRow[]> {
+  const rows = await db
     .select(workOrderRowSelection)
     .from(workOrders)
     .leftJoin(workOrderInstallers, eq(workOrders.installerId, workOrderInstallers.id))
@@ -190,6 +188,40 @@ export async function listWorkOrdersForExport(filters: WorkOrderListFilters) {
     .leftJoin(workOrderHardwareStatusOptions, eq(workOrders.hardwareStatusOptionId, workOrderHardwareStatusOptions.id))
     .where(listWhere(filters))
     .orderBy(...listOrderBy(filters.sort))
+
+  if (rows.length === 0) return []
+
+  const items = await listWorkOrderSummaryItems(
+    rows.map((row) => row.id),
+    filters.showRemovedItems,
+  )
+
+  return applyWorkOrderItemListFilters(attachActiveItemsToWorkOrders(rows, items), filters)
+    .flatMap<WorkOrderExportRow>(({ items: matchingItems, activeItemCount, matchingActiveItemCount, ...workOrder }) => {
+      void activeItemCount
+      void matchingActiveItemCount
+      return matchingItems.length > 0
+        ? matchingItems.map((item) => ({ ...workOrder, item }))
+        : [{ ...workOrder, item: null }]
+    })
+}
+
+async function listWorkOrderSummaryItems(workOrderIds: string[], showRemovedItems: boolean) {
+  if (workOrderIds.length === 0) return []
+
+  return db
+    .select(workOrderItemSummarySelection)
+    .from(workOrderItems)
+    .leftJoin(workOrderInstallers, eq(workOrderItems.installerId, workOrderInstallers.id))
+    .leftJoin(workOrderStageOptions, eq(workOrderItems.stageOptionId, workOrderStageOptions.id))
+    .leftJoin(workOrderHardwareStatusOptions, eq(workOrderItems.hardwareStatusOptionId, workOrderHardwareStatusOptions.id))
+    .where(showRemovedItems
+      ? inArray(workOrderItems.workOrderId, workOrderIds)
+      : and(
+        inArray(workOrderItems.workOrderId, workOrderIds),
+        eq(workOrderItems.isActive, true),
+      ))
+    .orderBy(asc(workOrderItems.workOrderId), asc(workOrderItems.sortOrder), asc(workOrderItems.id))
 }
 
 export async function getWorkOrderFilterOptions() {
@@ -317,7 +349,7 @@ export async function getWorkOrderDetail(workOrderId: string): Promise<WorkOrder
 
   if (!row) return null
 
-  const [contacts, timeline] = await Promise.all([
+  const [contacts, timeline, items] = await Promise.all([
     row.clientId
       ? db
         .select({
@@ -353,9 +385,10 @@ export async function getWorkOrderDetail(workOrderId: string): Promise<WorkOrder
       .leftJoin(users, eq(workOrderEvents.actorId, users.id))
       .where(eq(workOrderEvents.workOrderId, workOrderId))
       .orderBy(desc(workOrderEvents.createdAt)),
+    listWorkOrderSummaryItems([workOrderId], true),
   ])
 
-  return { ...row, contacts, timeline }
+  return { ...row, contacts, timeline, items }
 }
 
 function listWhere(filters: WorkOrderListFilters) {

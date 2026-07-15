@@ -25,11 +25,15 @@ describe('work order detail page', () => {
       'Client Context Summary',
       'Contacts',
       'Job contact',
+      'Work Order Items',
+      'No Work Order Items have been synced yet.',
+      'Original ServiceM8 description',
       'Project Timeline',
     ]) {
       expect(source).toContain(text)
     }
     expect(source).toContain('{detail.companyName &&')
+    expect(source).toContain('detail.items.map')
     expect(source).not.toContain('No job number')
     expect(source).not.toContain('ServiceM8 job UUID')
     expect(source).not.toContain('Client Approach Note')

@@ -1,22 +1,20 @@
 // @vitest-environment node
 
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createR2PresignedPutUrl } from '../r2'
 
-const ORIGINAL_ENV = { ...process.env }
-
 describe('R2 presigned uploads', () => {
   afterEach(() => {
-    process.env = { ...ORIGINAL_ENV }
+    vi.unstubAllEnvs()
   })
 
   it('creates a bounded PUT URL for direct template uploads', () => {
-    process.env.NODE_ENV = 'production'
-    process.env.R2_ACCOUNT_ID = 'account-1'
-    process.env.R2_ACCESS_KEY_ID = 'access-key'
-    process.env.R2_SECRET_ACCESS_KEY = 'secret-key'
-    process.env.R2_BUCKET = 'rgtools-templates'
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('R2_ACCOUNT_ID', 'account-1')
+    vi.stubEnv('R2_ACCESS_KEY_ID', 'access-key')
+    vi.stubEnv('R2_SECRET_ACCESS_KEY', 'secret-key')
+    vi.stubEnv('R2_BUCKET', 'rgtools-templates')
 
     const signed = createR2PresignedPutUrl({
       key: 'drafts/ps-generator/templates/config-1/face-fixed/standard_ps1/Face-Fixed.pdf',

@@ -47,6 +47,9 @@ describe('WorkOrdersTableControls', () => {
     expect(screen.queryByRole('combobox', { name: 'Importance' })).not.toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: 'Sort' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Reset' })).toBeInTheDocument()
+    const utilities = screen.getByRole('group', { name: 'Work Order filter utilities' })
+    expect(within(utilities).getByRole('checkbox', { name: 'Show removed items' })).toBeInTheDocument()
+    expect(within(utilities).getByRole('link', { name: 'Reset' })).toBeInTheDocument()
   })
 
   it('reports matching active children against the parent active total', () => {
@@ -74,6 +77,7 @@ describe('WorkOrdersTableControls', () => {
     expect(within(firstGroup).getByText('1 active item')).toBeInTheDocument()
     expect(within(firstGroup).getByText('Lead Score 91')).toBeInTheDocument()
     expect(within(firstGroup).getByText('Shower glass')).toBeVisible()
+    expect(within(firstGroup).queryByText('Item')).not.toBeInTheDocument()
     expect(within(secondGroup).getByText('Balustrade glass')).toBeVisible()
 
     fireEvent.click(within(firstGroup).getByRole('button', { name: 'Collapse Work Order R100' }))
@@ -81,6 +85,27 @@ describe('WorkOrdersTableControls', () => {
     expect(within(firstGroup).getByRole('button', { name: 'Expand Work Order R100' })).toHaveAttribute('aria-expanded', 'false')
     expect(within(firstGroup).queryByText('Shower glass')).not.toBeInTheDocument()
     expect(within(secondGroup).getByText('Balustrade glass')).toBeVisible()
+  })
+
+  it('bands active item cards by parent job instead of alternating within a job', () => {
+    const firstJob = workOrder({ id: 'job-1', jobNumber: 'R100', clientName: 'Aroha Glass', leadScore: 91, itemLabel: 'Shower glass' })
+    firstJob.items.push({
+      ...firstJob.items[0],
+      id: 'job-1-item-2',
+      itemCode: 'HARDWARE-01',
+      generatedLabel: 'Shower hardware',
+    })
+    firstJob.activeItemCount = 2
+    const secondJob = workOrder({ id: 'job-2', jobNumber: 'R200', clientName: 'Kauri Homes', leadScore: 70, itemLabel: 'Balustrade glass' })
+
+    renderDashboard([firstJob, secondJob])
+
+    const firstRows = within(screen.getByRole('group', { name: 'Work Order R100' })).getAllByRole('row')
+    const secondRows = within(screen.getByRole('group', { name: 'Work Order R200' })).getAllByRole('row')
+    expect(firstRows).toHaveLength(2)
+    expect(firstRows[0]).toHaveClass('bg-white')
+    expect(firstRows[1]).toHaveClass('bg-white')
+    expect(secondRows[0]).toHaveClass('bg-[#E8EEF1]')
   })
 
   it('keeps ServiceM8 item values read-only and exposes immutable hover detail', () => {

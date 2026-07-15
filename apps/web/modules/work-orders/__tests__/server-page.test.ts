@@ -87,7 +87,8 @@ describe('work orders server page', () => {
     const source = controlsSource()
 
     expect(source).toContain('event.currentTarget.form?.requestSubmit()')
-    expect(source).toContain('xl:grid-cols-[minmax(320px,1.6fr)_repeat(5,minmax(150px,1fr))_minmax(180px,1fr)_auto]')
+    expect(source).toContain('xl:grid-cols-[minmax(320px,1.6fr)_repeat(6,minmax(135px,1fr))_auto]')
+    expect(source).toContain('aria-label="Work Order filter utilities"')
     expect(source).toContain('role="group"')
     expect(source).not.toContain('min-w-[1280px]')
     expect(source).not.toContain('Apply')

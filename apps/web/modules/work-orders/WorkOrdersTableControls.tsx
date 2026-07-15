@@ -152,7 +152,7 @@ function WorkOrderFilters({
   const filterable = new Set(fields.filter((field) => field.filterable).map((field) => field.id))
 
   return (
-    <form action={basePath} className="grid items-end gap-3 rounded border border-gray-200 bg-white p-4 shadow-sm md:grid-cols-2 xl:grid-cols-[minmax(320px,1.6fr)_repeat(5,minmax(150px,1fr))_minmax(180px,1fr)_auto]">
+    <form action={basePath} className="grid items-end gap-3 rounded border border-gray-200 bg-white p-4 shadow-sm md:grid-cols-2 xl:grid-cols-[minmax(320px,1.6fr)_repeat(6,minmax(135px,1fr))_auto]">
       {carryOver.map(([key, value]) => (
         <input key={key} type="hidden" name={key} value={value} />
       ))}
@@ -173,17 +173,6 @@ function WorkOrderFilters({
           </button>
         </div>
       </div>
-      <label className="flex items-center gap-2 pb-2 text-sm text-gray-700">
-        <input
-          type="checkbox"
-          name={`${paramPrefix}showRemovedItems`}
-          value="1"
-          defaultChecked={filters.showRemovedItems}
-          onChange={(event) => event.currentTarget.form?.requestSubmit()}
-          className="h-4 w-4 rounded border-gray-300"
-        />
-        Show removed items
-      </label>
       {filterable.has('importance') && <Select name={`${paramPrefix}importance`} label="Importance" value={filters.importance} options={[['all', 'All'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low']]} />}
       {filterable.has('risk') && <Select name={`${paramPrefix}risk`} label="Risk" value={filters.risk} options={[['all', 'All'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low']]} />}
       {filterable.has('stage') && <Select name={`${paramPrefix}stage`} label="Stage" value={filters.stage} options={[['all', 'All'], ...options.stages.map((option) => [option.id, option.label] as [string, string])]} />}
@@ -208,7 +197,22 @@ function WorkOrderFilters({
           ['job_number_desc', 'Job number desc'],
         ]}
       />
-      <div className="flex justify-end">
+      <div
+        role="group"
+        aria-label="Work Order filter utilities"
+        className="flex items-center justify-end gap-3 xl:col-start-8"
+      >
+        <label className="flex items-center gap-2 whitespace-nowrap text-sm text-gray-700">
+          <input
+            type="checkbox"
+            name={`${paramPrefix}showRemovedItems`}
+            value="1"
+            defaultChecked={filters.showRemovedItems}
+            onChange={(event) => event.currentTarget.form?.requestSubmit()}
+            className="h-4 w-4 rounded border-gray-300"
+          />
+          Show removed items
+        </label>
         <Link href={resetHref} className="rounded border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
           Reset
         </Link>
@@ -271,13 +275,15 @@ function WorkOrdersTable({
       )}
 
       <div className="divide-y divide-gray-200">
-        {rows.map((row) => {
+        {rows.map((row, rowIndex) => {
           const isExpanded = !collapsedWorkOrderIds.includes(row.id)
           const workOrderLabel = row.jobNumber ?? row.id
+          const jobTone = rowIndex % 2 === 0 ? 'white' : 'tint'
+          const jobHeaderTone = jobTone === 'tint' ? 'bg-[#E8EEF1]' : 'bg-white'
 
           return (
             <section key={row.id} role="group" aria-label={`Work Order ${workOrderLabel}`}>
-              <div className="flex flex-wrap items-start justify-between gap-3 bg-gray-50 px-4 py-3">
+              <div className={`flex flex-wrap items-start justify-between gap-3 px-4 py-3 ${jobHeaderTone}`}>
                 <div className="flex min-w-0 items-start gap-3">
                   {isAdmin && (
                     <input
@@ -325,6 +331,7 @@ function WorkOrdersTable({
                   showCount={false}
                   canManage={canManage}
                   fields={fields}
+                  tone={jobTone}
                 />
               )}
             </section>
@@ -339,7 +346,7 @@ function WorkOrdersTable({
 }
 
 function ParentSummaryFields({ row, fields }: { row: WorkOrderRow; fields: WorkOrderSummaryFieldConfig[] }) {
-  const parentContextFields = new Set(['client', 'jobNumber', 'jobAddress', 'leadScore'])
+  const parentContextFields = new Set(['client', 'jobNumber', 'jobAddress', 'leadScore', 'item'])
   const itemOperationalFields = new Set([
     'importance',
     'risk',

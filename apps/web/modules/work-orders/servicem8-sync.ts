@@ -1,5 +1,3 @@
-import { matchKeyForWorkOrder, type WorkOrderMatchKey } from './domain'
-
 export type ServiceM8WorkOrderJob = {
   uuid?: string | null
   active?: number | string | boolean | null
@@ -53,14 +51,14 @@ export type WorkOrderItemNormalizationResult = {
 }
 
 export type WorkOrderSyncInput = {
-  servicem8JobUuid: string | null
+  servicem8JobUuid: string
   servicem8CompanyUuid: string | null
   servicem8Status: string
   servicem8Active: boolean
   jobNumber: string | null
   jobAddress: string | null
   jobDescription: string | null
-  identityKind: Exclude<WorkOrderMatchKey['kind'], 'none'>
+  identityKind: 'servicem8_uuid'
   identityValue: string
   approximateDescription: string | null
   systemName: string | null
@@ -80,7 +78,7 @@ export function mapServiceM8JobsToWorkOrderInputs(jobs: ServiceM8WorkOrderJob[])
 
     const input = toWorkOrderSyncInput(job)
     if (!input) {
-      throw new Error(`ServiceM8 Work Order at row ${index + 1} is invalid: job UUID or job number is required.`)
+      throw new Error(`ServiceM8 Work Order at row ${index + 1} is invalid: job UUID is required.`)
     }
     return [input]
   })
@@ -212,10 +210,9 @@ function normalizeStatus(value: string | null | undefined): string {
 
 function toWorkOrderSyncInput(job: ServiceM8WorkOrderJob): WorkOrderSyncInput | null {
   const servicem8JobUuid = clean(job.uuid)
+  if (!servicem8JobUuid) return null
   const jobNumber = clean(job.generated_job_id)
   const jobAddress = clean(job.job_address)
-  const identity = matchKeyForWorkOrder({ servicem8JobUuid, jobNumber, jobAddress })
-  if (identity.kind === 'none') return null
 
   return {
     servicem8JobUuid,
@@ -225,8 +222,8 @@ function toWorkOrderSyncInput(job: ServiceM8WorkOrderJob): WorkOrderSyncInput | 
     jobNumber,
     jobAddress,
     jobDescription: clean(job.job_description),
-    identityKind: identity.kind,
-    identityValue: identity.value,
+    identityKind: 'servicem8_uuid',
+    identityValue: servicem8JobUuid,
     approximateDescription: clean(job.approximate_description),
     systemName: clean(job.system_name),
     length: clean(job.length),

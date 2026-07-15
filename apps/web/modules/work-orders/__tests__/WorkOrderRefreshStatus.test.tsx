@@ -1,7 +1,11 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 
 import { WorkOrderRefreshStatus } from '../WorkOrderRefreshStatus'
+
+beforeEach(() => {
+  window.localStorage.clear()
+})
 
 describe('WorkOrderRefreshStatus', () => {
   it('preserves last-success freshness and counts while showing the latest safe failure', () => {
@@ -48,6 +52,36 @@ describe('WorkOrderRefreshStatus', () => {
     fireEvent.click(within(failure).getByRole('button', { name: 'Close notification' }))
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Last successful sync')
+  })
+
+  it('keeps the same successful sync hidden after the page remounts', () => {
+    const status = {
+      lastSuccessfulAt: new Date('2026-07-14T16:28:00+12:00'),
+      lastSuccessfulJobCount: 51,
+      lastSuccessfulItemCount: 103,
+      lastSuccessfulExcludedLineCount: 35,
+      latestFailure: null,
+    }
+    const firstRender = render(<WorkOrderRefreshStatus status={status} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close notification' }))
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    firstRender.unmount()
+
+    const secondRender = render(<WorkOrderRefreshStatus status={status} />)
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+
+    secondRender.rerender(
+      <WorkOrderRefreshStatus
+        status={{
+          ...status,
+          lastSuccessfulAt: new Date('2026-07-14T16:30:00+12:00'),
+        }}
+      />,
+    )
+
     expect(screen.getByRole('status')).toHaveTextContent('Last successful sync')
   })
 })

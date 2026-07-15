@@ -21,7 +21,7 @@ export async function generateWorkOrderItemLabel(
   const apiKey = process.env.OPENAI_API_KEY?.trim()
   if (!apiKey) throw new Error('OPENAI_API_KEY is not configured')
 
-  const response = await request('https://api.openai.com/v1/responses', {
+  const response = await request(openAIResponsesUrl(), {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -41,6 +41,21 @@ export async function generateWorkOrderItemLabel(
 
   const payload = await response.json() as OpenAIResponsesPayload
   return validateWorkOrderItemLabel(extractResponseText(payload))
+}
+
+function openAIResponsesUrl() {
+  const configuredUrl = process.env.OPENAI_RESPONSES_URL?.trim()
+  if (!configuredUrl) return 'https://api.openai.com/v1/responses'
+
+  const url = new URL(configuredUrl)
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    throw new Error('OPENAI_RESPONSES_URL must use HTTP or HTTPS.')
+  }
+  if (process.env.NODE_ENV === 'production' && url.protocol !== 'https:') {
+    throw new Error('OPENAI_RESPONSES_URL must use HTTPS in production.')
+  }
+
+  return configuredUrl
 }
 
 export function validateWorkOrderItemLabel(value: unknown): string {

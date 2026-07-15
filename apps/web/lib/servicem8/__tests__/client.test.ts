@@ -2,6 +2,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  createServiceM8RequestFromEnv,
   createServiceM8WriteRequestFromEnv,
   getCompanyContact,
   getJobConversationSnapshotHistory,
@@ -17,6 +18,45 @@ import {
   withServiceM8Retry,
   type ServiceM8FetchRequest,
 } from '../client'
+
+describe('createServiceM8RequestFromEnv', () => {
+  const originalApiKey = process.env.SERVICEM8_API_KEY
+  const originalBaseUrl = process.env.SERVICEM8_API_BASE_URL
+
+  afterEach(() => {
+    if (originalApiKey === undefined) delete process.env.SERVICEM8_API_KEY
+    else process.env.SERVICEM8_API_KEY = originalApiKey
+    if (originalBaseUrl === undefined) delete process.env.SERVICEM8_API_BASE_URL
+    else process.env.SERVICEM8_API_BASE_URL = originalBaseUrl
+    vi.unstubAllGlobals()
+  })
+
+  it('supports a controlled ServiceM8 adapter endpoint', async () => {
+    process.env.SERVICEM8_API_KEY = 'e2e-read-key'
+    process.env.SERVICEM8_API_BASE_URL = 'http://127.0.0.1:32199/api_1.0/'
+    const fetchMock = vi.fn(async () => Response.json([]))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await createServiceM8RequestFromEnv()('/job.json')
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:32199/api_1.0/job.json',
+      expect.objectContaining({ headers: expect.any(Headers) }),
+    )
+  })
+
+  it('preserves the ServiceM8 pagination cursor header', async () => {
+    process.env.SERVICEM8_API_KEY = 'e2e-read-key'
+    const fetchMock = vi.fn(async () => Response.json([], {
+      headers: { 'x-next-cursor': 'cursor-2' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const response = await createServiceM8RequestFromEnv()('/job.json?cursor=-1')
+
+    expect(response.headers?.get('x-next-cursor')).toBe('cursor-2')
+  })
+})
 
 describe('withServiceM8Retry', () => {
   it('retries a throttled request and returns the eventual success', async () => {

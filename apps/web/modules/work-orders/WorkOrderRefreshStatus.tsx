@@ -17,7 +17,11 @@ export function WorkOrderRefreshStatus({ status }: { status: WorkOrderRefreshSta
   return (
     <div className="space-y-2">
       {status.lastSuccessfulAt && (
-        <DismissibleNotice tone="success" noticeKey={status.lastSuccessfulAt.toISOString()}>
+        <DismissibleNotice
+          tone="success"
+          noticeKey={status.lastSuccessfulAt.toISOString()}
+          dismissalStorageKey="work-orders:last-successful-sync"
+        >
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className="font-medium">Last successful sync: {formatDateTime(status.lastSuccessfulAt)}</span>
             <span>{status.lastSuccessfulJobCount} jobs</span>

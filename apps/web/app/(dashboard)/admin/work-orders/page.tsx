@@ -1,4 +1,5 @@
 import { requireModule } from '@/lib/guard'
+import { DismissibleNotice } from '@/modules/ui/DismissibleNotice'
 import {
   createWorkOrderHardwareStatusAction,
   createWorkOrderInstallerAction,
@@ -14,8 +15,13 @@ import { getWorkOrderConfigLists } from '@/modules/work-orders/queries'
 import { SummaryFieldsEditor } from '@/modules/work-orders/SummaryFieldsEditor'
 import { getWorkOrderSummaryConfig } from '@/modules/work-orders/summary-config'
 
-export default async function WorkOrderConfigurationPage() {
+export default async function WorkOrderConfigurationPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ summarySaved?: string }>
+}) {
   await requireModule('admin/work-orders')
+  const params = searchParams ? await searchParams : undefined
   const [{ installers, stages, hardwareStatuses }, summaryFields, billingExclusions] = await Promise.all([
     getWorkOrderConfigLists(),
     getWorkOrderSummaryConfig(),
@@ -24,6 +30,12 @@ export default async function WorkOrderConfigurationPage() {
 
   return (
     <div className="space-y-5">
+      {params?.summarySaved === '1' && (
+        <DismissibleNotice tone="success" noticeKey="work-order-summary-fields-saved">
+          Work Order summary fields saved.
+        </DismissibleNotice>
+      )}
+
       <div>
         <h1 className="text-2xl font-semibold text-gray-950">Work Order Configuration</h1>
         <p className="mt-1 text-sm text-gray-500">Controlled installer, stage, and hardware status lists.</p>

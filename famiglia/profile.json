@@ -1,0 +1,7 @@
+{
+  "stack": {
+    "value": "node",
+    "detectedAt": "2026-07-15T13:57:38.3221627+12:00",
+    "detectedBy": "marker:package.json"
+  }
+}

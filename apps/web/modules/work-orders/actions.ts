@@ -1,6 +1,6 @@
 'use server'
 
-import { eq, inArray, notInArray, or, sql } from 'drizzle-orm'
+import { and, eq, inArray, notInArray, or, sql } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { auth } from '@/lib/auth'
@@ -44,6 +44,7 @@ import {
   WORK_ORDER_SUMMARY_CONFIG_KEY,
   type WorkOrderSummaryFieldId,
 } from './summary-config'
+import { updateActiveWorkOrderItem } from './active-item-write'
 import { canConfigureSummaryFieldAsEditable } from './summary-field-policy'
 import {
   fingerprintSourceDescription,
@@ -115,6 +116,8 @@ export async function refreshWorkOrdersFromServiceM8(
   request: ServiceM8FetchRequest = createServiceM8RequestFromEnv(),
   generateLabel: WorkOrderItemLabelGenerator = generateWorkOrderItemLabel,
 ) {
+  await assertCurrentUserCanManageWorkOrders()
+
   let jobRows: ServiceM8WorkOrderJob[]
   let companyRows: ServiceM8Company[]
   let jobMaterialRows: ServiceM8JobMaterial[]
@@ -352,31 +355,44 @@ export async function updateWorkOrderItemLabelAction(itemId: string, formData: F
   const label = parseManualWorkOrderItemLabel(formData.get('label'))
   await assertSummaryFieldEditingEnabled('item')
   const session = await auth()
-  const item = await getWorkOrderItemLabelRecord(itemId)
+  const result = await db.transaction(async (tx) => {
+    const item = await getWorkOrderItemLabelRecord(itemId, tx)
+    if (!item.isActive) throw new Error(`Work Order Item ${itemId} is removed and cannot be edited.`)
+    const previousLabel = item.manualLabelOverride ?? item.generatedLabel
 
-  await db
-    .update(workOrderItems)
-    .set({
+    await updateActiveWorkOrderItem(tx, itemId, {
       manualLabelOverride: label,
       labelStatus: 'manual',
       sourceDescriptionFingerprint: fingerprintSourceDescription(item.originalDescription),
       updatedAt: new Date(),
     })
-    .where(eq(workOrderItems.id, itemId))
 
-  await logAudit({
-    actorId: session?.user?.id ?? null,
-    entityType: 'work_order_item',
-    action: 'work_order_item.label_manually_updated',
-    targetId: itemId,
-    detail: {
+    await tx.insert(workOrderEvents).values({
       workOrderId: item.workOrderId,
-      previousLabel: item.manualLabelOverride ?? item.generatedLabel,
-      newLabel: label,
-    },
+      workOrderItemId: item.id,
+      actorId: session?.user?.id ?? null,
+      fieldName: 'item_label_manually_updated',
+      previousValue: previousLabel,
+      newValue: label,
+      isClientVisibleCandidate: false,
+    })
+
+    await logAudit({
+      actorId: session?.user?.id ?? null,
+      entityType: 'work_order_item',
+      action: 'work_order_item.label_manually_updated',
+      targetId: itemId,
+      detail: {
+        workOrderId: item.workOrderId,
+        previousLabel,
+        newLabel: label,
+      },
+    }, tx)
+
+    return { workOrderId: item.workOrderId }
   })
 
-  revalidateWorkOrderItemPaths(item.workOrderId)
+  revalidateWorkOrderItemPaths(result.workOrderId)
 }
 
 export async function updateWorkOrderItemOperationalFieldAction(
@@ -410,16 +426,17 @@ export async function updateWorkOrderItemOperationalFieldAction(
 
     if (!item) throw new Error(`Work Order Item ${itemId} was not found.`)
     if (!item.isActive) throw new Error(`Work Order Item ${itemId} is removed and cannot be edited.`)
+    await assertActiveWorkOrderItemOption(tx, field, normalizedValue)
     const previousValue = readWorkOrderItemOperationalValue(item, field)
 
     if (previousValue === normalizedValue) {
       return { workOrderId: item.workOrderId, value: normalizedValue }
     }
 
-    await tx
-      .update(workOrderItems)
-      .set({ ...workOrderItemOperationalUpdate(field, normalizedValue), updatedAt: new Date() })
-      .where(eq(workOrderItems.id, itemId))
+    await updateActiveWorkOrderItem(tx, itemId, {
+      ...workOrderItemOperationalUpdate(field, normalizedValue),
+      updatedAt: new Date(),
+    })
 
     await tx.insert(workOrderEvents).values({
       workOrderId: item.workOrderId,
@@ -443,32 +460,48 @@ export async function regenerateWorkOrderItemLabelAction(itemId: string) {
   await assertSummaryFieldEditingEnabled('item')
   const session = await auth()
   const item = await getWorkOrderItemLabelRecord(itemId)
+  if (!item.isActive) throw new Error(`Work Order Item ${itemId} is removed and cannot be edited.`)
   const label = await generateWorkOrderItemLabel(item.originalDescription)
 
-  await db
-    .update(workOrderItems)
-    .set({
+  const result = await db.transaction(async (tx) => {
+    const currentItem = await getWorkOrderItemLabelRecord(itemId, tx)
+    if (!currentItem.isActive) throw new Error(`Work Order Item ${itemId} is removed and cannot be edited.`)
+    const previousLabel = currentItem.manualLabelOverride ?? currentItem.generatedLabel
+
+    await updateActiveWorkOrderItem(tx, itemId, {
       generatedLabel: label,
       manualLabelOverride: null,
       labelStatus: 'generated',
       sourceDescriptionFingerprint: fingerprintSourceDescription(item.originalDescription),
       updatedAt: new Date(),
     })
-    .where(eq(workOrderItems.id, itemId))
 
-  await logAudit({
-    actorId: session?.user?.id ?? null,
-    entityType: 'work_order_item',
-    action: 'work_order_item.label_regenerated',
-    targetId: itemId,
-    detail: {
-      workOrderId: item.workOrderId,
-      previousLabel: item.manualLabelOverride ?? item.generatedLabel,
-      newLabel: label,
-    },
+    await tx.insert(workOrderEvents).values({
+      workOrderId: currentItem.workOrderId,
+      workOrderItemId: currentItem.id,
+      actorId: session?.user?.id ?? null,
+      fieldName: 'item_label_regenerated',
+      previousValue: previousLabel,
+      newValue: label,
+      isClientVisibleCandidate: false,
+    })
+
+    await logAudit({
+      actorId: session?.user?.id ?? null,
+      entityType: 'work_order_item',
+      action: 'work_order_item.label_regenerated',
+      targetId: itemId,
+      detail: {
+        workOrderId: currentItem.workOrderId,
+        previousLabel,
+        newLabel: label,
+      },
+    }, tx)
+
+    return { workOrderId: currentItem.workOrderId }
   })
 
-  revalidateWorkOrderItemPaths(item.workOrderId)
+  revalidateWorkOrderItemPaths(result.workOrderId)
 }
 
 async function assertSummaryFieldEditingEnabled(fieldId: WorkOrderSummaryFieldId) {
@@ -480,14 +513,15 @@ async function assertSummaryFieldEditingEnabled(fieldId: WorkOrderSummaryFieldId
   throw new Error(`${label} editing is disabled in Work Order Summary Configuration.`)
 }
 
-async function getWorkOrderItemLabelRecord(itemId: string) {
-  const [item] = await db
+async function getWorkOrderItemLabelRecord(itemId: string, database: Pick<typeof db, 'select'> = db) {
+  const [item] = await database
     .select({
       id: workOrderItems.id,
       workOrderId: workOrderItems.workOrderId,
       originalDescription: workOrderItems.originalDescription,
       generatedLabel: workOrderItems.generatedLabel,
       manualLabelOverride: workOrderItems.manualLabelOverride,
+      isActive: workOrderItems.isActive,
     })
     .from(workOrderItems)
     .where(eq(workOrderItems.id, itemId))
@@ -495,6 +529,43 @@ async function getWorkOrderItemLabelRecord(itemId: string) {
 
   if (!item) throw new Error(`Work Order Item ${itemId} was not found.`)
   return item
+}
+
+async function assertActiveWorkOrderItemOption(
+  database: Pick<Parameters<Parameters<typeof db.transaction>[0]>[0], 'select'>,
+  field: WorkOrderItemOperationalField,
+  value: ReturnType<typeof parseWorkOrderItemOperationalValue>,
+) {
+  if (typeof value !== 'string') return
+
+  if (field === 'installer') {
+    const [option] = await database
+      .select({ id: workOrderInstallers.id })
+      .from(workOrderInstallers)
+      .where(and(eq(workOrderInstallers.id, value), eq(workOrderInstallers.isActive, true)))
+      .limit(1)
+    if (!option) throw new Error(`Installer option ${value} does not exist or is inactive.`)
+    return
+  }
+
+  if (field === 'stage') {
+    const [option] = await database
+      .select({ id: workOrderStageOptions.id })
+      .from(workOrderStageOptions)
+      .where(and(eq(workOrderStageOptions.id, value), eq(workOrderStageOptions.isActive, true)))
+      .limit(1)
+    if (!option) throw new Error(`Stage option ${value} does not exist or is inactive.`)
+    return
+  }
+
+  if (field === 'hardware') {
+    const [option] = await database
+      .select({ id: workOrderHardwareStatusOptions.id })
+      .from(workOrderHardwareStatusOptions)
+      .where(and(eq(workOrderHardwareStatusOptions.id, value), eq(workOrderHardwareStatusOptions.isActive, true)))
+      .limit(1)
+    if (!option) throw new Error(`Hardware option ${value} does not exist or is inactive.`)
+  }
 }
 
 function parseManualWorkOrderItemLabel(value: FormDataEntryValue | null) {
@@ -626,6 +697,7 @@ export async function saveWorkOrderSummaryConfigAction(formData: FormData) {
 
   revalidatePath('/admin/work-orders')
   revalidatePath('/work-orders')
+  redirect('/admin/work-orders?summarySaved=1')
 }
 
 export async function saveWorkOrderBillingExclusionsAction(formData: FormData) {
@@ -860,17 +932,39 @@ async function readServiceM8Array<T>(
   path: string,
   datasetName: string,
 ): Promise<T[]> {
-  const res = await request(path)
-  if (!res.ok) throw new Error(`ServiceM8 request failed with HTTP ${res.status}`)
-  const rows = await res.json()
-  if (!Array.isArray(rows)) {
-    throw new Error(`ServiceM8 ${datasetName} response was invalid: expected an array.`)
+  const completeRows: T[] = []
+  const requestedCursors = new Set<string>()
+  let cursor: string | null = '-1'
+
+  while (cursor) {
+    if (requestedCursors.has(cursor)) {
+      throw new Error(`ServiceM8 ${datasetName} pagination was invalid: cursor ${cursor} repeated.`)
+    }
+    requestedCursors.add(cursor)
+
+    const response = await request(serviceM8CursorPath(path, cursor))
+    if (!response.ok) throw new Error(`ServiceM8 request failed with HTTP ${response.status}`)
+    const pageRows = await response.json()
+    if (!Array.isArray(pageRows)) {
+      throw new Error(`ServiceM8 ${datasetName} response was invalid: expected an array.`)
+    }
+    const invalidRowIndex = pageRows.findIndex((row) => !row || typeof row !== 'object' || Array.isArray(row))
+    if (invalidRowIndex >= 0) {
+      throw new Error(
+        `ServiceM8 ${datasetName} response was invalid: row ${completeRows.length + invalidRowIndex + 1} must be an object.`,
+      )
+    }
+
+    completeRows.push(...pageRows as T[])
+    cursor = response.headers?.get('x-next-cursor')?.trim() || null
   }
-  const invalidRowIndex = rows.findIndex((row) => !row || typeof row !== 'object' || Array.isArray(row))
-  if (invalidRowIndex >= 0) {
-    throw new Error(`ServiceM8 ${datasetName} response was invalid: row ${invalidRowIndex + 1} must be an object.`)
-  }
-  return rows as T[]
+
+  return completeRows
+}
+
+function serviceM8CursorPath(path: string, cursor: string): string {
+  const separator = path.includes('?') ? '&' : '?'
+  return `${path}${separator}cursor=${encodeURIComponent(cursor)}`
 }
 
 function odataFilter(expr: string): string {

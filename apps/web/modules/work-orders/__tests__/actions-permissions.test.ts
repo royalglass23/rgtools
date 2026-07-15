@@ -58,8 +58,10 @@ import {
   generateWorkOrderAiSuggestionAction,
   markWorkOrderEventClientVisibleCandidateAction,
   refreshWorkOrdersAction,
+  refreshWorkOrdersFromServiceM8,
   regenerateWorkOrderItemLabelAction,
   saveWorkOrderBillingExclusionsAction,
+  saveWorkOrderSummaryConfigAction,
   updateWorkOrderItemOperationalFieldAction,
   updateWorkOrderItemLabelAction,
 } from '../actions'
@@ -119,6 +121,17 @@ describe('work order action permissions', () => {
     expect(mockRevalidatePath).not.toHaveBeenCalled()
   })
 
+  it('requires manage access at the directly callable full-refresh boundary', async () => {
+    mockAssertCanManage.mockRejectedValue(new Error('Forbidden: Work Orders manage access is required.'))
+    const request = vi.fn()
+
+    await expect(refreshWorkOrdersFromServiceM8(request)).rejects.toThrow(
+      'Forbidden: Work Orders manage access is required.',
+    )
+    expect(request).not.toHaveBeenCalled()
+    expect(mockTransaction).not.toHaveBeenCalled()
+  })
+
   it('requires manage access before updating an operational Work Order Item field', async () => {
     mockAssertCanManage.mockRejectedValue(new Error('Forbidden: Work Orders manage access is required.'))
 
@@ -130,7 +143,8 @@ describe('work order action permissions', () => {
   })
 
   it('updates one Work Order Item field and records its item-level audit event', async () => {
-    const updateSet = vi.fn(() => ({ where: vi.fn(async () => []) }))
+    const returning = vi.fn(async () => [{ id: 'item-1' }])
+    const updateSet = vi.fn(() => ({ where: vi.fn(() => ({ returning })) }))
     const insertValues = vi.fn(async () => [])
     mockTransaction.mockImplementationOnce(async (callback: (tx: unknown) => Promise<void>) => callback({
       select: vi.fn(() => ({
@@ -173,6 +187,153 @@ describe('work order action permissions', () => {
     }))
   })
 
+  it('rejects an operational edit when refresh removes the item between read and write', async () => {
+    const returning = vi.fn(async () => [])
+    const insertValues = vi.fn(async () => [])
+    mockTransaction.mockImplementationOnce(async (callback: (tx: unknown) => Promise<void>) => callback({
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn(async () => [{
+              id: 'item-1',
+              workOrderId: 'work-order-1',
+              isActive: true,
+              riskLevelOverride: null,
+            }]),
+          })),
+        })),
+      })),
+      update: vi.fn(() => ({
+        set: vi.fn(() => ({ where: vi.fn(() => ({ returning })) })),
+      })),
+      insert: vi.fn(() => ({ values: insertValues })),
+    }))
+
+    await expect(updateWorkOrderItemOperationalFieldAction('item-1', 'risk', 'high')).rejects.toThrow(
+      'Work Order Item item-1 is removed and cannot be edited.',
+    )
+
+    expect(returning).toHaveBeenCalledOnce()
+    expect(insertValues).not.toHaveBeenCalled()
+  })
+
+  it('rejects an installer ID that does not identify an active configured option', async () => {
+    const updateSet = vi.fn(() => ({ where: vi.fn(async () => []) }))
+    const insertValues = vi.fn(async () => [])
+    const select = vi.fn()
+      .mockReturnValueOnce({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn(async () => [{
+              id: 'item-1',
+              workOrderId: 'work-order-1',
+              isActive: true,
+              installerId: null,
+            }]),
+          })),
+        })),
+      })
+      .mockReturnValueOnce({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({ limit: vi.fn(async () => []) })),
+        })),
+      })
+    mockTransaction.mockImplementationOnce(async (callback: (tx: unknown) => Promise<void>) => callback({
+      select,
+      update: vi.fn(() => ({ set: updateSet })),
+      insert: vi.fn(() => ({ values: insertValues })),
+    }))
+
+    await expect(updateWorkOrderItemOperationalFieldAction(
+      'item-1',
+      'installer',
+      '22222222-2222-4222-8222-222222222222',
+    )).rejects.toThrow(
+      'Installer option 22222222-2222-4222-8222-222222222222 does not exist or is inactive.',
+    )
+
+    expect(updateSet).not.toHaveBeenCalled()
+    expect(insertValues).not.toHaveBeenCalled()
+  })
+
+  it('rejects a stage ID that does not identify an active configured option', async () => {
+    const updateSet = vi.fn(() => ({ where: vi.fn(async () => []) }))
+    const insertValues = vi.fn(async () => [])
+    const select = vi.fn()
+      .mockReturnValueOnce({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn(async () => [{
+              id: 'item-1',
+              workOrderId: 'work-order-1',
+              isActive: true,
+              stageOptionId: null,
+            }]),
+          })),
+        })),
+      })
+      .mockReturnValueOnce({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({ limit: vi.fn(async () => []) })),
+        })),
+      })
+    mockTransaction.mockImplementationOnce(async (callback: (tx: unknown) => Promise<void>) => callback({
+      select,
+      update: vi.fn(() => ({ set: updateSet })),
+      insert: vi.fn(() => ({ values: insertValues })),
+    }))
+
+    await expect(updateWorkOrderItemOperationalFieldAction(
+      'item-1',
+      'stage',
+      '33333333-3333-4333-8333-333333333333',
+    )).rejects.toThrow(
+      'Stage option 33333333-3333-4333-8333-333333333333 does not exist or is inactive.',
+    )
+
+    expect(updateSet).not.toHaveBeenCalled()
+    expect(insertValues).not.toHaveBeenCalled()
+  })
+
+  it('rejects a hardware ID that does not identify an active configured option', async () => {
+    const updateSet = vi.fn(() => ({ where: vi.fn(async () => []) }))
+    const insertValues = vi.fn(async () => [])
+    const select = vi.fn()
+      .mockReturnValueOnce({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn(async () => [{
+              id: 'item-1',
+              workOrderId: 'work-order-1',
+              isActive: true,
+              hardwareStatusOptionId: null,
+            }]),
+          })),
+        })),
+      })
+      .mockReturnValueOnce({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({ limit: vi.fn(async () => []) })),
+        })),
+      })
+    mockTransaction.mockImplementationOnce(async (callback: (tx: unknown) => Promise<void>) => callback({
+      select,
+      update: vi.fn(() => ({ set: updateSet })),
+      insert: vi.fn(() => ({ values: insertValues })),
+    }))
+
+    await expect(updateWorkOrderItemOperationalFieldAction(
+      'item-1',
+      'hardware',
+      '44444444-4444-4444-8444-444444444444',
+    )).rejects.toThrow(
+      'Hardware option 44444444-4444-4444-8444-444444444444 does not exist or is inactive.',
+    )
+
+    expect(updateSet).not.toHaveBeenCalled()
+    expect(insertValues).not.toHaveBeenCalled()
+  })
+
   it('rejects an invalid Work Order Item date before starting a write transaction', async () => {
     await expect(
       updateWorkOrderItemOperationalFieldAction('item-1', 'installDate', '14/07/2026'),
@@ -207,21 +368,28 @@ describe('work order action permissions', () => {
   })
 
   it('lets an authorised user replace only the Work Order Item short label', async () => {
-    const set = vi.fn(() => ({ where: vi.fn(async () => []) }))
-    mockUpdate.mockReturnValue({ set })
-    mockSelect.mockReturnValue({
-      from: vi.fn(() => ({
-        where: vi.fn(() => ({
-          limit: vi.fn(async () => [{
-            id: 'item-1',
-            workOrderId: 'work-order-1',
-            originalDescription: 'Immutable ServiceM8 source description',
-            generatedLabel: 'Generated label',
-            manualLabelOverride: null,
-          }]),
+    const returning = vi.fn(async () => [{ id: 'item-1' }])
+    const set = vi.fn(() => ({ where: vi.fn(() => ({ returning })) }))
+    const insertValues = vi.fn(async () => [])
+    const transactionDb = {
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn(async () => [{
+              id: 'item-1',
+              workOrderId: 'work-order-1',
+              originalDescription: 'Immutable ServiceM8 source description',
+              generatedLabel: 'Generated label',
+              manualLabelOverride: null,
+              isActive: true,
+            }]),
+          })),
         })),
       })),
-    })
+      update: vi.fn(() => ({ set })),
+      insert: vi.fn(() => ({ values: insertValues })),
+    }
+    mockTransaction.mockImplementationOnce(async (callback: (tx: unknown) => Promise<void>) => callback(transactionDb))
     const formData = new FormData()
     formData.set('label', 'Staff corrected label')
 
@@ -237,12 +405,89 @@ describe('work order action permissions', () => {
       itemCode: expect.anything(),
       quantity: expect.anything(),
     }))
+    expect(insertValues).toHaveBeenCalledWith(expect.objectContaining({
+      workOrderId: 'work-order-1',
+      workOrderItemId: 'item-1',
+      actorId: 'user-1',
+      fieldName: 'item_label_manually_updated',
+      previousValue: 'Generated label',
+      newValue: 'Staff corrected label',
+      isClientVisibleCandidate: false,
+    }))
     expect(mockLogAudit).toHaveBeenCalledWith(expect.objectContaining({
       actorId: 'user-1',
       entityType: 'work_order_item',
       action: 'work_order_item.label_manually_updated',
       targetId: 'item-1',
+    }), transactionDb)
+  })
+
+  it('rejects a manual label change for a removed Work Order Item', async () => {
+    const txUpdate = vi.fn()
+    const txInsert = vi.fn()
+    mockTransaction.mockImplementationOnce(async (callback: (tx: unknown) => Promise<void>) => callback({
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn(async () => [{
+              id: 'item-1',
+              workOrderId: 'work-order-1',
+              originalDescription: 'Archived ServiceM8 description',
+              generatedLabel: 'Archived label',
+              manualLabelOverride: null,
+              isActive: false,
+            }]),
+          })),
+        })),
+      })),
+      update: txUpdate,
+      insert: txInsert,
     }))
+    const formData = new FormData()
+    formData.set('label', 'Forged archived label')
+
+    await expect(updateWorkOrderItemLabelAction('item-1', formData)).rejects.toThrow(
+      'Work Order Item item-1 is removed and cannot be edited.',
+    )
+
+    expect(txUpdate).not.toHaveBeenCalled()
+    expect(txInsert).not.toHaveBeenCalled()
+    expect(mockLogAudit).not.toHaveBeenCalled()
+  })
+
+  it('rejects a manual label change when refresh removes the item between read and write', async () => {
+    const returning = vi.fn(async () => [])
+    const where = vi.fn(() => ({ returning }))
+    const insertValues = vi.fn(async () => [])
+    const transactionDb = {
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn(async () => [{
+              id: 'item-1',
+              workOrderId: 'work-order-1',
+              originalDescription: 'Current ServiceM8 description',
+              generatedLabel: 'Current label',
+              manualLabelOverride: null,
+              isActive: true,
+            }]),
+          })),
+        })),
+      })),
+      update: vi.fn(() => ({ set: vi.fn(() => ({ where })) })),
+      insert: vi.fn(() => ({ values: insertValues })),
+    }
+    mockTransaction.mockImplementationOnce(async (callback: (tx: unknown) => Promise<void>) => callback(transactionDb))
+    const formData = new FormData()
+    formData.set('label', 'Too-late label')
+
+    await expect(updateWorkOrderItemLabelAction('item-1', formData)).rejects.toThrow(
+      'Work Order Item item-1 is removed and cannot be edited.',
+    )
+
+    expect(returning).toHaveBeenCalledOnce()
+    expect(insertValues).not.toHaveBeenCalled()
+    expect(mockLogAudit).not.toHaveBeenCalled()
   })
 
   it('requires manage access before manually changing a Work Order Item label', async () => {
@@ -286,21 +531,34 @@ describe('work order action permissions', () => {
   })
 
   it('deliberately replaces a manual label when an authorised user regenerates with AI', async () => {
-    const set = vi.fn(() => ({ where: vi.fn(async () => []) }))
-    mockUpdate.mockReturnValue({ set })
+    const returning = vi.fn(async () => [{ id: 'item-1' }])
+    const set = vi.fn(() => ({ where: vi.fn(() => ({ returning })) }))
+    const insertValues = vi.fn(async () => [])
+    const activeItem = {
+      id: 'item-1',
+      workOrderId: 'work-order-1',
+      originalDescription: 'Current immutable ServiceM8 description',
+      generatedLabel: 'Old generated label',
+      manualLabelOverride: 'Staff-approved label',
+      isActive: true,
+    }
     mockSelect.mockReturnValue({
       from: vi.fn(() => ({
         where: vi.fn(() => ({
-          limit: vi.fn(async () => [{
-            id: 'item-1',
-            workOrderId: 'work-order-1',
-            originalDescription: 'Current immutable ServiceM8 description',
-            generatedLabel: 'Old generated label',
-            manualLabelOverride: 'Staff-approved label',
-          }]),
+          limit: vi.fn(async () => [activeItem]),
         })),
       })),
     })
+    const transactionDb = {
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({ limit: vi.fn(async () => [activeItem]) })),
+        })),
+      })),
+      update: vi.fn(() => ({ set })),
+      insert: vi.fn(() => ({ values: insertValues })),
+    }
+    mockTransaction.mockImplementationOnce(async (callback: (tx: unknown) => Promise<void>) => callback(transactionDb))
 
     await regenerateWorkOrderItemLabelAction('item-1')
 
@@ -311,13 +569,120 @@ describe('work order action permissions', () => {
       labelStatus: 'generated',
       sourceDescriptionFingerprint: expect.any(String),
     }))
+    expect(insertValues).toHaveBeenCalledWith(expect.objectContaining({
+      workOrderId: 'work-order-1',
+      workOrderItemId: 'item-1',
+      actorId: 'user-1',
+      fieldName: 'item_label_regenerated',
+      previousValue: 'Staff-approved label',
+      newValue: 'Regenerated production label',
+      isClientVisibleCandidate: false,
+    }))
     expect(mockLogAudit).toHaveBeenCalledWith(expect.objectContaining({
       action: 'work_order_item.label_regenerated',
       detail: expect.objectContaining({
         previousLabel: 'Staff-approved label',
         newLabel: 'Regenerated production label',
       }),
+    }), transactionDb)
+  })
+
+  it('rejects AI label regeneration for a removed Work Order Item before calling OpenAI', async () => {
+    mockSelect.mockReturnValue({
+      from: vi.fn(() => ({
+        where: vi.fn(() => ({
+          limit: vi.fn(async () => [{
+            id: 'item-1',
+            workOrderId: 'work-order-1',
+            originalDescription: 'Archived ServiceM8 description',
+            generatedLabel: 'Archived label',
+            manualLabelOverride: null,
+            isActive: false,
+          }]),
+        })),
+      })),
+    })
+
+    await expect(regenerateWorkOrderItemLabelAction('item-1')).rejects.toThrow(
+      'Work Order Item item-1 is removed and cannot be edited.',
+    )
+
+    expect(mockGenerateWorkOrderItemLabel).not.toHaveBeenCalled()
+    expect(mockTransaction).not.toHaveBeenCalled()
+  })
+
+  it('rejects AI label regeneration when the Work Order Item is removed during generation', async () => {
+    const initialItem = {
+      id: 'item-1',
+      workOrderId: 'work-order-1',
+      originalDescription: 'Current ServiceM8 description',
+      generatedLabel: 'Current label',
+      manualLabelOverride: null,
+      isActive: true,
+    }
+    mockSelect.mockReturnValue({
+      from: vi.fn(() => ({
+        where: vi.fn(() => ({ limit: vi.fn(async () => [initialItem]) })),
+      })),
+    })
+    const update = vi.fn()
+    const insert = vi.fn()
+    mockTransaction.mockImplementationOnce(async (callback: (tx: unknown) => Promise<void>) => callback({
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({ limit: vi.fn(async () => [{ ...initialItem, isActive: false }]) })),
+        })),
+      })),
+      update,
+      insert,
     }))
+
+    await expect(regenerateWorkOrderItemLabelAction('item-1')).rejects.toThrow(
+      'Work Order Item item-1 is removed and cannot be edited.',
+    )
+
+    expect(mockGenerateWorkOrderItemLabel).toHaveBeenCalledOnce()
+    expect(update).not.toHaveBeenCalled()
+    expect(insert).not.toHaveBeenCalled()
+  })
+
+  it('rejects AI label regeneration when refresh removes the item between transaction read and write', async () => {
+    const activeItem = {
+      id: 'item-1',
+      workOrderId: 'work-order-1',
+      originalDescription: 'Current ServiceM8 description',
+      generatedLabel: 'Current label',
+      manualLabelOverride: null,
+      isActive: true,
+    }
+    mockSelect.mockReturnValue({
+      from: vi.fn(() => ({
+        where: vi.fn(() => ({ limit: vi.fn(async () => [activeItem]) })),
+      })),
+    })
+    const returning = vi.fn(async () => [])
+    const insertValues = vi.fn(async () => [])
+    const transactionDb = {
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({ limit: vi.fn(async () => [activeItem]) })),
+        })),
+      })),
+      update: vi.fn(() => ({
+        set: vi.fn(() => ({ where: vi.fn(() => ({ returning })) })),
+      })),
+      insert: vi.fn(() => ({ values: insertValues })),
+    }
+    mockTransaction.mockImplementationOnce(async (callback: (tx: unknown) => Promise<void>) => callback(transactionDb))
+
+    await expect(regenerateWorkOrderItemLabelAction('item-1')).rejects.toThrow(
+      'Work Order Item item-1 is removed and cannot be edited.',
+    )
+
+    expect(mockGenerateWorkOrderItemLabel).toHaveBeenCalledOnce()
+    expect(returning).toHaveBeenCalledOnce()
+    expect(insertValues).not.toHaveBeenCalled()
+    expect(mockLogAudit).not.toHaveBeenCalled()
   })
 
   it('requires manage access before regenerating a Work Order Item label', async () => {
@@ -437,6 +802,24 @@ describe('work order action permissions', () => {
     )
     expect(mockInsert).not.toHaveBeenCalled()
     expect(mockRevalidatePath).not.toHaveBeenCalled()
+  })
+
+  it('redirects back with saved feedback after persisting Editable choices', async () => {
+    const onConflictDoUpdate = vi.fn(async () => [])
+    const values = vi.fn((input: { value: string }) => {
+      void input
+      return { onConflictDoUpdate }
+    })
+    mockInsert.mockReturnValue({ values })
+    const formData = new FormData()
+    formData.set('editable:item', 'on')
+
+    await saveWorkOrderSummaryConfigAction(formData)
+
+    const saved = JSON.parse(values.mock.calls[0][0].value) as Array<{ id: string; editable: boolean }>
+    expect(saved.find((field) => field.id === 'item')?.editable).toBe(true)
+    expect(saved.find((field) => field.id === 'risk')?.editable).toBe(false)
+    expect(mockRedirect).toHaveBeenCalledWith('/admin/work-orders?summarySaved=1')
   })
 
   it('prevents duplicate option names by normalized-name comparison instead of silently reusing them', async () => {

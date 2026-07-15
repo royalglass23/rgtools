@@ -5,6 +5,14 @@ import type { WorkOrderSummaryFieldConfig } from './summary-config'
 import { canConfigureSummaryFieldAsEditable } from './summary-field-policy'
 
 export function SummaryFieldsEditor({ fields }: { fields: WorkOrderSummaryFieldConfig[] }) {
+  const savedConfigKey = fields
+    .map((field) => `${field.id}:${field.visible}:${field.filterable}:${field.editable}:${field.order}`)
+    .join('|')
+
+  return <SummaryFieldsEditorState key={savedConfigKey} fields={fields} />
+}
+
+function SummaryFieldsEditorState({ fields }: { fields: WorkOrderSummaryFieldConfig[] }) {
   const [orderedFields, setOrderedFields] = useState(fields)
   const [draggingId, setDraggingId] = useState<string | null>(null)
 

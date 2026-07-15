@@ -35,6 +35,19 @@ describe('generateWorkOrderItemLabel', () => {
       input: expect.stringContaining('Supply and install frameless shower screen'),
     }))
   })
+
+  it('supports a controlled OpenAI adapter endpoint', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'e2e-openai-key')
+    vi.stubEnv('OPENAI_RESPONSES_URL', 'http://127.0.0.1:32199/v1/responses')
+    const request = vi.fn(async () => Response.json({ output_text: 'Controlled label' }))
+
+    await expect(generateWorkOrderItemLabel('Controlled item', request)).resolves.toBe('Controlled label')
+
+    expect(request).toHaveBeenCalledWith(
+      'http://127.0.0.1:32199/v1/responses',
+      expect.objectContaining({ method: 'POST' }),
+    )
+  })
 })
 
 describe('validateWorkOrderItemLabel', () => {

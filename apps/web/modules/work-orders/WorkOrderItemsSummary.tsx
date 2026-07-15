@@ -48,12 +48,14 @@ export function WorkOrderItemsSummary({
   canManage = false,
   options = EMPTY_OPTIONS,
   fields,
+  tone = 'white',
 }: {
   items: WorkOrderItemSummaryRow[]
   showCount?: boolean
   canManage?: boolean
   options?: WorkOrderItemOptions
   fields?: ItemFieldConfig[]
+  tone?: 'white' | 'tint'
 }) {
   if (items.length === 0) {
     return (
@@ -68,12 +70,20 @@ export function WorkOrderItemsSummary({
 
   const activeItemCount = items.filter((item) => item.isActive).length
   const visibleFields = configuredItemFields(fields)
+  const itemField = visibleFields.find((field) => field.id === 'item')
+  const operationalFields = visibleFields.flatMap((field) => {
+    const operationalField = OPERATIONAL_FIELD_BY_SUMMARY_ID[field.id]
+    return operationalField ? [{ config: field, field: operationalField }] : []
+  })
+  const activeTone = tone === 'tint'
+    ? 'border-[#142B3A]/25 bg-[#E8EEF1]'
+    : 'border-[#142B3A]/20 bg-white'
 
   return (
     <section aria-label="Work Order items" className="space-y-2 px-4 py-3">
       {showCount && <ItemCount count={activeItemCount} />}
       <div className="grid gap-2">
-        {items.map((item, itemIndex) => {
+        {items.map((item) => {
           const lineTotal = item.lineTotalExcludingGst
             ? `$${item.lineTotalExcludingGst}`
             : 'Not available'
@@ -84,37 +94,34 @@ export function WorkOrderItemsSummary({
               key={item.id}
               title={hoverDetail}
               role="row"
-              className={`grid gap-3 rounded border px-3 py-2 text-sm sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 ${item.isActive
-                ? itemIndex % 2 === 0
-                  ? 'border-[#142B3A]/20 bg-white'
-                  : 'border-[#142B3A]/25 bg-[#E8EEF1]'
+              className={`space-y-3 rounded border px-3 py-2 text-sm ${item.isActive
+                ? activeTone
                 : 'border-amber-200 bg-amber-50'}`}
             >
-              {visibleFields.map((field) => {
-                if (field.id === 'item') {
-                  return (
-                    <ItemCompositeField
-                      key={field.id}
+              {itemField && (
+                <ItemCompositeField
+                  item={item}
+                  hoverDetail={hoverDetail}
+                  canEdit={canManage && itemField.editable && item.isActive}
+                />
+              )}
+              {operationalFields.length > 0 && (
+                <div
+                  role="group"
+                  aria-label="Work Order item controls"
+                  className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8"
+                >
+                  {operationalFields.map(({ config, field }) => (
+                    <ItemOperationalField
+                      key={config.id}
                       item={item}
-                      hoverDetail={hoverDetail}
-                      canEdit={canManage && field.editable && item.isActive}
-                      rowTone={itemIndex % 2 === 0 ? 'bg-white' : 'bg-[#E8EEF1]'}
+                      options={options}
+                      field={field}
+                      canEdit={canManage && config.editable && item.isActive}
                     />
-                  )
-                }
-
-                const operationalField = OPERATIONAL_FIELD_BY_SUMMARY_ID[field.id]
-                if (!operationalField) return null
-                return (
-                  <ItemOperationalField
-                    key={field.id}
-                    item={item}
-                    options={options}
-                    field={operationalField}
-                    canEdit={canManage && field.editable && item.isActive}
-                  />
-                )
-              })}
+                  ))}
+                </div>
+              )}
               {!item.isActive && !visibleFields.some((field) => field.id === 'item') && (
                 <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">Removed</span>
               )}
@@ -130,30 +137,62 @@ function ItemCompositeField({
   item,
   hoverDetail,
   canEdit,
-  rowTone,
 }: {
   item: WorkOrderItemSummaryRow
   hoverDetail: string
   canEdit: boolean
-  rowTone: string
 }) {
   const effectiveLabel = item.manualLabelOverride ?? item.generatedLabel ?? truncateDescription(item.originalDescription)
   const isLabelPending = !item.manualLabelOverride
     && !item.generatedLabel
     && (item.labelStatus === 'pending' || item.labelStatus === 'failed')
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [retryLabel, setRetryLabel] = useState<string | null>(null)
+
+  async function saveLabel(label: string) {
+    setSaveStatus('saving')
+    setSaveError(null)
+
+    const formData = new FormData()
+    formData.set('label', label)
+
+    try {
+      await updateWorkOrderItemLabelAction(item.id, formData)
+      setRetryLabel(null)
+      setSaveStatus('saved')
+    } catch (error) {
+      setRetryLabel(label)
+      setSaveError(error instanceof Error ? error.message : 'Label could not be saved.')
+      setSaveStatus('error')
+    }
+  }
 
   return (
-    <div className="space-y-1 sm:col-span-2" role="cell">
-      <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">Item</p>
-      <div className={`flex flex-wrap items-center gap-2 ${rowTone}`}>
+    <div className="space-y-1" role="cell">
+      <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium text-gray-700">Qty {formatQuantity(item.quantity)}</span>
-        <span className="font-mono text-xs text-gray-600">{item.itemCode ?? 'No item code'}</span>
+        {item.itemCode ? (
+          <span className="inline-flex items-center rounded bg-[#142B3A] px-2 py-0.5 font-mono text-sm font-semibold tracking-wide text-white shadow-sm">
+            {item.itemCode}
+          </span>
+        ) : (
+          <span className="rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">No item code</span>
+        )}
       </div>
       <div title={hoverDetail} className="flex flex-wrap items-center gap-2 text-gray-950">
         {canEdit ? (
           <>
-            <form action={updateWorkOrderItemLabelAction.bind(null, item.id)} className="flex min-w-[260px] flex-1 gap-2">
+            <form
+              className="flex min-w-[260px] flex-1 gap-2"
+              onSubmit={(event) => {
+                event.preventDefault()
+                const formData = new FormData(event.currentTarget)
+                void saveLabel(String(formData.get('label') ?? ''))
+              }}
+            >
               <input
+                key={effectiveLabel}
                 aria-label={`Short label for ${item.itemCode ?? 'item'}`}
                 name="label"
                 defaultValue={effectiveLabel}
@@ -161,7 +200,11 @@ function ItemCompositeField({
                 maxLength={160}
                 className="min-w-0 flex-1 rounded border border-gray-300 bg-white px-2 py-1 text-sm text-gray-950"
               />
-              <button type="submit" className="rounded border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100">
+              <button
+                type="submit"
+                disabled={saveStatus === 'saving'}
+                className="rounded border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:cursor-wait disabled:opacity-60"
+              >
                 Save label
               </button>
             </form>
@@ -177,6 +220,11 @@ function ItemCompositeField({
                 Regenerate with AI
               </button>
             </form>
+            <SaveStatus
+              status={saveStatus}
+              errorMessage={saveError}
+              onRetry={retryLabel === null ? null : () => void saveLabel(retryLabel)}
+            />
           </>
         ) : (
           <span>{effectiveLabel}</span>
