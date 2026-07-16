@@ -7,7 +7,10 @@ import { drizzle } from 'drizzle-orm/neon-serverless'
 import * as coreSchema from '@rgtools/db/schema'
 import * as workOrderSchema from '@rgtools/db/schema-workorders'
 import { workOrderItems, workOrders } from '@rgtools/db/schema-workorders'
-import { verifyWorkOrderAcceptanceDatabase } from '@/tests/e2e/work-order-acceptance-safety'
+import {
+  readWorkOrderAcceptanceDatabaseProof,
+  verifyWorkOrderAcceptanceDatabase,
+} from '@/tests/e2e/work-order-acceptance-safety'
 import { updateActiveWorkOrderItem } from '../active-item-write'
 
 const isolatedDatabaseUrl = process.env.E2E_DATABASE_URL
@@ -30,14 +33,8 @@ describeWithIsolatedDatabase('active Work Order Item write integration', () => {
 
     await verifyWorkOrderAcceptanceDatabase({
       expectedSentinel: expectedDatabaseSentinel,
-      readProof: async () => {
-        const proof = await pool?.query<{ databaseName: string; sentinel: string | null }>(`
-          SELECT
-            current_database() AS "databaseName",
-            current_setting('rgtools.e2e_database_sentinel', true) AS sentinel
-        `)
-        return proof?.rows[0] ?? { databaseName: 'unknown', sentinel: null }
-      },
+      readProof: () => readWorkOrderAcceptanceDatabaseProof((statement) =>
+        pool!.query<{ databaseName: string; sentinel: string | null }>(statement)),
     })
 
     await database.insert(workOrders).values({

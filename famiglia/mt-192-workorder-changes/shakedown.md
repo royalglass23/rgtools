@@ -9,7 +9,7 @@
 
 1. **Acceptance database isolation**
    - Mutating Work Orders E2E now requires a 32+ character `E2E_DATABASE_SENTINEL`.
-   - The value must exactly match the target database setting `rgtools.e2e_database_sentinel`.
+   - The value must exactly match the single row in the isolated-only `rgtools_e2e.database_sentinel` table.
    - Cleanup is scoped to test-owned records and configuration/module state is restored.
 2. **CSV formula injection**
    - Export cells that could be interpreted as formulas are neutralized, including leading whitespace and tab/newline variants.
@@ -52,14 +52,20 @@
 
 ## Intentionally not run
 
-The mutating Playwright journey was not executed because no dedicated migrated E2E database is configured. Before verify can exercise it, configure the isolated database with a secret sentinel, for example:
+The mutating Playwright journey was not executed because no dedicated migrated E2E database is configured. Neon does not allow the custom database parameter originally proposed here. Before verify can exercise the journey, run `apps/web/tests/e2e/setup-isolated-database-sentinel.sql` against the dedicated database after replacing its placeholder with the secret sentinel. The equivalent SQL is:
 
 ```sql
-ALTER DATABASE your_isolated_database
-SET rgtools.e2e_database_sentinel = 'a-random-secret-value-at-least-32-characters';
+CREATE SCHEMA IF NOT EXISTS rgtools_e2e;
+CREATE TABLE IF NOT EXISTS rgtools_e2e.database_sentinel (
+  id smallint PRIMARY KEY CHECK (id = 1),
+  sentinel text NOT NULL CHECK (length(sentinel) >= 32)
+);
+INSERT INTO rgtools_e2e.database_sentinel (id, sentinel)
+VALUES (1, 'a-random-secret-value-at-least-32-characters')
+ON CONFLICT (id) DO UPDATE SET sentinel = EXCLUDED.sentinel;
 ```
 
-Set the exact same value in `E2E_DATABASE_SENTINEL`. Never point this test at dev, staging, or production.
+Set the exact same value in `E2E_DATABASE_SENTINEL`. This proof table is intentionally not migration-managed and must never be created in dev, staging, or production.
 
 ## Next gate
 
@@ -157,3 +163,122 @@ This Soldato invocation completed one approved slice only. The remaining P0 is t
 ### Deliberate gaps
 
 The database-capable concurrency test was authored but not executed because the required isolated sentinel database is not configured. The broader MT-199 Playwright journey remains blocked for the same reason. Historical verify, security, review, and gate artifacts still show the pre-repair findings until the verify phase reruns them.
+
+## Soldato slice - bound ServiceM8 pagination
+
+- Date: 2026-07-15
+- Scope: one P1 provider-boundary control: fail-closed maximum page traversal for Work Order ServiceM8 refreshes
+- Verdict: **PASS**
+
+### RED
+
+The new regression supplies an endless sequence of valid-looking pages with unique continuation cursors. Against the pre-slice refresh implementation, traversal had no bound and the test safety stop would be reached instead of a useful refresh error. The test requires the refresh to stop at the configured limit, record failure, and never start reconciliation.
+
+### GREEN
+
+- Work Order ServiceM8 pagination now enforces a 25-page maximum per dataset.
+- The guard runs before issuing the next provider request, so the 26th page is never fetched.
+- Exceeding the budget raises `ServiceM8 <dataset> pagination exceeded the 25-page refresh limit.`; the existing refresh failure record is written and no transaction begins.
+- Focused refresh suite: **12 tests passed**.
+- Combined ServiceM8 client/refresh matrix: **43 tests passed**.
+- Complete web regression: **135 files and 811 tests passed; 3 files and 17 tests skipped; 0 failures**.
+- Web TypeScript: **PASS**.
+- Focused ESLint: **PASS**.
+- App-scoped Next production build: **PASS**, 35 pages generated, with the existing workspace-root and NFT trace warnings only.
+- Focused `git diff --check`: **PASS**, with the existing line-ending warning only.
+
+### Deliberate gaps
+
+This slice bounds pagination but does not add provider abort timeouts, refresh single-flight/throttling, AI throttling, or export size/streaming limits. Those remain separate P1 backlog items. Sentinel-protected database/browser execution remains unavailable in this environment.
+
+## Soldato slice - abort stalled ServiceM8 requests
+
+- Date: 2026-07-15
+- Scope: one P1 provider-boundary control: abort a ServiceM8 request after the configured timeout
+- Verdict: **PASS**
+
+### RED
+
+The new client regression held a ServiceM8 fetch open indefinitely. Before the change, the request never received an abort signal and the test timed out without a typed provider failure.
+
+### GREEN
+
+- The ServiceM8 adapter now applies a 30-second timeout to read and write requests by default and accepts a smaller timeout for deterministic tests.
+- Timed-out fetches abort through `AbortController`, raise `ServiceM8TimeoutError` with the request path and timeout, and are not retried as generic network failures.
+- Combined ServiceM8 client/refresh matrix: **44 tests passed**.
+- Complete web regression: **135 files passed and 3 skipped; 812 tests passed and 17 skipped; 0 failures**.
+- Web TypeScript: **PASS**.
+- Focused ESLint: **PASS**.
+- App-scoped Next production build: **PASS**, 35 pages generated; existing workspace-root and NFT trace warnings remain.
+- `git diff --check`: **PASS**, with the existing line-ending warning only.
+
+### Deliberate gaps
+
+This slice does not add refresh single-flight/throttling, AI throttling, or export size/streaming limits. Sentinel-protected database/browser execution remains unavailable. The next step is a full Omerta rerun, not a release claim.
+
+## Soldato slice - share concurrent Work Order refreshes
+
+- Date: 2026-07-15
+- Scope: one P1 refresh-control seam: share an in-flight Work Order refresh within the running application process
+- Verdict: **PASS with deployment residual**
+
+### RED
+
+The concurrency regression started one refresh, held its provider request open, then invoked the public refresh boundary again. Before the change, the second call used its own request adapter and started another refresh.
+
+### GREEN
+
+- `refreshWorkOrdersFromServiceM8` now keeps one in-flight promise after its own Manage authorization and returns that promise to concurrent callers.
+- The shared promise clears on success or failure, so a later refresh can retry after the first run finishes.
+- The regression proves the duplicate request adapter is never called and only one reconciliation transaction runs.
+- ServiceM8/refresh matrix: **45 tests passed**.
+- Complete web regression: **135 files passed and 3 skipped; 813 tests passed and 17 skipped; 0 failures**.
+- Web TypeScript: **PASS**.
+- Focused ESLint: **PASS**.
+- App-scoped Next production build: **PASS**, 35 pages generated; existing workspace-root and NFT trace warnings remain.
+- `git diff --check`: **PASS**, with the existing line-ending warning only.
+
+### Deliberate gaps
+
+This historical slice was process-local at the time it was recorded. The current verification delta supersedes that residual: durable refresh/label leases, per-user refresh/AI windows, export bounds, OpenAI/direct-attachment timeouts, raw snapshot minimization, and refresh attribution are now implemented. Dedicated DB/browser runtime evidence, retention approval, dependency decisions, and representative performance evidence remain open.
+
+## 2026-07-16 verification rerun
+
+- Focused repair tests: **54 passed**.
+- Full web suite: **135 files passed, 3 skipped; 819 tests passed, 17 skipped**.
+- Web and DB typechecks: **PASS**.
+- Lint: **PASS**, 0 errors and 6 pre-existing warnings.
+- App-scoped production build: **PASS**, 35 pages generated; existing workspace-root/NFT trace warnings remain.
+- Migration consistency: **PASS**, `drizzle-kit check`.
+- Playwright discovery: **PASS**, 1 MT-199 test listed; execution blocked without the dedicated migrated sentinel DB.
+- Security/review: code seams hardened; strict sign-off and gate remain **FAIL/RED** for retention, dependency, isolated runtime evidence, and performance/accessibility evidence; separate Work Order enrichment planning remains excluded from MT-192 staging.
+
+## Soldato slice - repair disabled Work Orders pagination contrast
+
+- Date: 2026-07-16
+- Scope: one accessibility regression at `WorkOrdersTableControls.tsx:444`
+- Verdict: **REPAIR COMPLETE; READY FOR ENFORCER**
+
+### RED
+
+The authenticated MT-199 axe scan reported one serious WCAG 1.4.3 `color-contrast` violation across the disabled Previous and Next labels. Computed gray-400 text on the gray-50 page background was 2.48:1 for 14px normal text; WCAG AA requires 4.5:1.
+
+### GREEN
+
+- Changed only the disabled pagination text token from `text-gray-400` to `text-gray-600`; active pagination remains `text-gray-700`.
+- Kept the axe scan scope and WCAG tags unchanged.
+- Authenticated axe result: **0 violations**.
+- Complete MT-199 journey: **1 passed**; refresh 3.880s, 3.796s, 2.436s; export 5.587s.
+- Full web: **137 files passed, 3 skipped; 826 tests passed, 17 skipped**.
+- Workspace: **2 files and 4 tests passed**.
+- Lint: **0 errors and 6 unrelated existing warnings**.
+- Web and database TypeScript: **PASS**.
+- Production build: **PASS**, 36 routes/pages.
+- Production dependency audit: **0 advisories at every severity**.
+- `pnpm peers check` reports the existing optional NextAuth/Nodemailer range mismatch; RGTools uses credential auth and direct Nodemailer for ServiceM8 email. This slice did not change those dependencies.
+
+### Deliberate boundaries
+
+- No unrelated shared pagination components were changed.
+- No axe rule, tag, selector, or assertion was disabled or weakened.
+- No branch, commit, push, merge, deployment, migration, shared database mutation, or production mutation was performed.

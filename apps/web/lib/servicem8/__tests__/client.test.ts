@@ -12,6 +12,7 @@ import {
   getJobQuoteMeta,
   resolveJobUuid,
   ServiceM8RateLimitError,
+  ServiceM8AttachmentTimeoutError,
   setJobLeadCardFields,
   setJobLeadsQuality,
   stripEmailNoise,
@@ -29,6 +30,7 @@ describe('createServiceM8RequestFromEnv', () => {
     if (originalBaseUrl === undefined) delete process.env.SERVICEM8_API_BASE_URL
     else process.env.SERVICEM8_API_BASE_URL = originalBaseUrl
     vi.unstubAllGlobals()
+    vi.useRealTimers()
   })
 
   it('supports a controlled ServiceM8 adapter endpoint', async () => {
@@ -55,6 +57,49 @@ describe('createServiceM8RequestFromEnv', () => {
     const response = await createServiceM8RequestFromEnv()('/job.json?cursor=-1')
 
     expect(response.headers?.get('x-next-cursor')).toBe('cursor-2')
+  })
+
+  it('aborts a ServiceM8 request when the provider exceeds its timeout', async () => {
+    process.env.SERVICEM8_API_KEY = 'e2e-read-key'
+    vi.useFakeTimers()
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => {
+        reject(Object.assign(new Error('request aborted'), { name: 'AbortError' }))
+      })
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const request = createServiceM8RequestFromEnv({ timeoutMs: 10, retry: { maxAttempts: 1 } })
+    const result = request('/job.json')
+    const rejection = expect(result).rejects.toMatchObject({
+      name: 'ServiceM8TimeoutError',
+      details: { path: '/job.json', timeoutMs: 10 },
+    })
+    await vi.advanceTimersByTimeAsync(10)
+
+    await rejection
+    expect(fetchMock).toHaveBeenCalledOnce()
+  })
+
+  it('aborts a direct attachment download when the provider exceeds its timeout', async () => {
+    vi.useFakeTimers()
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new Error('download aborted')))
+    }))
+
+    const { downloadAttachmentFile } = await import('../client')
+    const result = downloadAttachmentFile('attachment-1', 'e2e-read-key', {
+      timeoutMs: 10,
+      fetchImplementation: fetchMock,
+    })
+    const rejection = expect(result).rejects.toMatchObject({
+      name: 'ServiceM8AttachmentTimeoutError',
+      details: { attachmentUuid: 'attachment-1', timeoutMs: 10 },
+    } satisfies Partial<ServiceM8AttachmentTimeoutError>)
+    await vi.advanceTimersByTimeAsync(10)
+
+    await rejection
+    expect(fetchMock).toHaveBeenCalledOnce()
   })
 })
 

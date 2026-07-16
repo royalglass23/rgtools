@@ -179,7 +179,7 @@ vi.mock('@/lib/db', () => ({
   },
 }))
 
-import { getWorkOrderDetail, listWorkOrders, listWorkOrdersForExport } from '../queries'
+import { getWorkOrderDetail, listWorkOrders, listWorkOrdersForExport, WORK_ORDER_EXPORT_MAX_ROWS } from '../queries'
 import type { WorkOrderBaseRow } from '../queries'
 import type { WorkOrderListFilters } from '../list-filters'
 import type { WorkOrderItemSummaryRow } from '../work-order-items'
@@ -326,7 +326,7 @@ describe('listWorkOrders', () => {
       type: 'sql',
       text: 'lower(?) asc nulls last',
     }))
-    expect(limitCalls).toEqual([])
+    expect(limitCalls).toEqual([WORK_ORDER_EXPORT_MAX_ROWS + 1])
     expect(offsetCalls).toEqual([])
   })
 
@@ -365,6 +365,16 @@ describe('listWorkOrders', () => {
       { ...workOrder, item: firstItem },
       { ...workOrder, item: secondItem },
     ])
+  })
+
+  it('rejects an export that exceeds the bounded Work Order parent set', async () => {
+    selectResults.push(Array.from({ length: WORK_ORDER_EXPORT_MAX_ROWS + 1 }, (_, index) => (
+      workOrderRow({ id: `work-order-${index}` })
+    )))
+
+    await expect(listWorkOrdersForExport(filters)).rejects.toThrow(
+      `Work Order export exceeds the ${WORK_ORDER_EXPORT_MAX_ROWS}-row limit. Narrow the filters and try again.`,
+    )
   })
 
   it('keeps a zero-item Work Order in the export with a blank item', async () => {

@@ -11,16 +11,24 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url)
   const filters = parseWorkOrderListFilters(Object.fromEntries(url.searchParams.entries()))
-  const [rows, fields] = await Promise.all([
-    listWorkOrdersForExport(filters),
-    getWorkOrderSummaryConfig(),
-  ])
-  const body = rowsToCsv(buildWorkOrderExportTable(rows, fields))
+  try {
+    const [rows, fields] = await Promise.all([
+      listWorkOrdersForExport(filters),
+      getWorkOrderSummaryConfig(),
+    ])
+    const body = rowsToCsv(buildWorkOrderExportTable(rows, fields))
 
-  return new NextResponse(body, {
-    headers: {
-      'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': `attachment; filename="work-orders-${new Date().toISOString().slice(0, 10)}.csv"`,
-    },
-  })
+    return new NextResponse(body, {
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="work-orders-${new Date().toISOString().slice(0, 10)}.csv"`,
+      },
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : ''
+    if (message.startsWith('Work Order export exceeds')) {
+      return NextResponse.json({ error: message }, { status: 413 })
+    }
+    throw error
+  }
 }

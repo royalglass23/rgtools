@@ -46,6 +46,7 @@ import {
 } from './summary-config'
 import { updateActiveWorkOrderItem } from './active-item-write'
 import { canConfigureSummaryFieldAsEditable } from './summary-field-policy'
+import { acquireWorkOrderRateLimit, withWorkOrderItemLabelLock, withWorkOrderRefreshLock } from './refresh-lock'
 import {
   fingerprintSourceDescription,
   refreshWorkOrderItemLabels,
@@ -68,9 +69,18 @@ type ServiceM8Company = {
 
 const WORK_ORDER_FILTER = "active eq 1 and status eq 'Work Order'"
 const ACTIVE_FILTER = 'active eq 1'
+const WORK_ORDER_SERVICEM8_MAX_PAGES = 25
+
+type WorkOrderRefreshResult = {
+  synced: number
+  itemsSynced: number
+  excludedLineCount: number
+}
+
+let inFlightWorkOrderRefresh: Promise<WorkOrderRefreshResult> | null = null
 
 export async function refreshWorkOrdersAction() {
-  await assertCurrentUserCanManageWorkOrders()
+  await assertRefreshManageAccessWithAudit()
 
   try {
     await refreshWorkOrdersFromServiceM8()
@@ -115,8 +125,30 @@ export async function batchDeleteWorkOrdersAction(formData: FormData): Promise<v
 export async function refreshWorkOrdersFromServiceM8(
   request: ServiceM8FetchRequest = createServiceM8RequestFromEnv(),
   generateLabel: WorkOrderItemLabelGenerator = generateWorkOrderItemLabel,
-) {
-  await assertCurrentUserCanManageWorkOrders()
+): Promise<WorkOrderRefreshResult> {
+  const actorId = await assertRefreshManageAccessWithAudit()
+
+  if (inFlightWorkOrderRefresh) return inFlightWorkOrderRefresh
+
+  if (actorId && !(await acquireWorkOrderRateLimit('refresh', actorId))) {
+    throw new Error('Work Orders refresh was requested too recently. Please wait a minute before trying again.')
+  }
+
+  const refreshPromise = withWorkOrderRefreshLock(() => performWorkOrderRefresh(request, generateLabel, actorId))
+  inFlightWorkOrderRefresh = refreshPromise
+
+  try {
+    return await refreshPromise
+  } finally {
+    if (inFlightWorkOrderRefresh === refreshPromise) inFlightWorkOrderRefresh = null
+  }
+}
+
+async function performWorkOrderRefresh(
+  request: ServiceM8FetchRequest,
+  generateLabel: WorkOrderItemLabelGenerator,
+  actorId: string | null,
+): Promise<WorkOrderRefreshResult> {
 
   let jobRows: ServiceM8WorkOrderJob[]
   let companyRows: ServiceM8Company[]
@@ -133,7 +165,7 @@ export async function refreshWorkOrdersFromServiceM8(
       getWorkOrderBillingExclusions(),
     ])
   } catch (error) {
-    await recordRefreshFailure(error)
+    await recordRefreshFailure(error, actorId)
     throw error
   }
 
@@ -165,7 +197,7 @@ export async function refreshWorkOrdersFromServiceM8(
       excludedLineCount: normalizedItems.excludedLineCount,
     }
   } catch (error) {
-    await recordRefreshFailure(error)
+    await recordRefreshFailure(error, actorId)
     throw error
   }
 
@@ -330,6 +362,7 @@ export async function refreshWorkOrdersFromServiceM8(
         )
 
       await tx.insert(workOrderRefreshRuns).values({
+        actorId,
         status: 'success',
         syncedCount: inputs.length,
         itemSyncedCount: itemsSynced,
@@ -337,7 +370,7 @@ export async function refreshWorkOrdersFromServiceM8(
       })
     })
   } catch (error) {
-    await recordRefreshFailure(error)
+    await recordRefreshFailure(error, actorId)
     throw error
   }
 
@@ -461,7 +494,11 @@ export async function regenerateWorkOrderItemLabelAction(itemId: string) {
   const session = await auth()
   const item = await getWorkOrderItemLabelRecord(itemId)
   if (!item.isActive) throw new Error(`Work Order Item ${itemId} is removed and cannot be edited.`)
-  const label = await generateWorkOrderItemLabel(item.originalDescription)
+  const actorId = session?.user?.id ?? null
+  if (actorId && !(await acquireWorkOrderRateLimit('ai-label', actorId))) {
+    throw new Error('Work Order AI label generation was requested too recently. Please wait a minute before trying again.')
+  }
+  const label = await withWorkOrderItemLabelLock(itemId, () => generateWorkOrderItemLabel(item.originalDescription))
 
   const result = await db.transaction(async (tx) => {
     const currentItem = await getWorkOrderItemLabelRecord(itemId, tx)
@@ -616,7 +653,9 @@ async function refreshPersistedWorkOrderItemLabels(generateLabel: WorkOrderItemL
     }),
   }
 
-  return refreshWorkOrderItemLabels(items, store, generateLabel)
+  return refreshWorkOrderItemLabels(items, store, generateLabel, (itemId, description) => (
+    withWorkOrderItemLabelLock(itemId, () => generateLabel(description))
+  ))
 }
 
 async function updateWorkOrderItemLabelState(
@@ -920,11 +959,33 @@ async function findLinkedQuote(input: {
   return quote ?? null
 }
 
-async function recordRefreshFailure(error: unknown) {
+async function recordRefreshFailure(error: unknown, actorId: string | null = null) {
   await db.insert(workOrderRefreshRuns).values({
+    actorId,
     status: 'failed',
     errorMessage: safeRefreshErrorMessage(error),
   })
+}
+
+async function assertRefreshManageAccessWithAudit(): Promise<string | null> {
+  const session = await auth()
+  try {
+    await assertCurrentUserCanManageWorkOrders()
+  } catch (error) {
+    try {
+      await logAudit({
+        actorId: session?.user?.id ?? null,
+        entityType: 'work_order',
+        action: 'work_order.refresh.denied',
+        detail: { reason: 'manage_access_required' },
+      })
+    } catch (auditError) {
+      console.warn('Work Order refresh denial audit failed.', auditError)
+    }
+    throw error
+  }
+
+  return session?.user?.id ?? null
 }
 
 async function readServiceM8Array<T>(
@@ -937,6 +998,11 @@ async function readServiceM8Array<T>(
   let cursor: string | null = '-1'
 
   while (cursor) {
+    if (requestedCursors.size >= WORK_ORDER_SERVICEM8_MAX_PAGES) {
+      throw new Error(
+        `ServiceM8 ${datasetName} pagination exceeded the ${WORK_ORDER_SERVICEM8_MAX_PAGES}-page refresh limit.`,
+      )
+    }
     if (requestedCursors.has(cursor)) {
       throw new Error(`ServiceM8 ${datasetName} pagination was invalid: cursor ${cursor} repeated.`)
     }

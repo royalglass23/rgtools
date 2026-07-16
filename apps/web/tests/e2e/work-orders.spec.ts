@@ -1,9 +1,11 @@
 import { createServer, type Server } from 'node:http'
+import AxeBuilder from '@axe-core/playwright'
 import { hash } from 'bcryptjs'
 import { neon } from '@neondatabase/serverless'
 import { expect, test, type Download, type Page } from '@playwright/test'
 import {
   createWorkOrderAcceptanceCredentials,
+  readWorkOrderAcceptanceDatabaseProof,
   verifyWorkOrderAcceptanceDatabase,
 } from './work-order-acceptance-safety'
 
@@ -44,25 +46,20 @@ let previousModuleStates: Array<{
 }> = []
 const createdRefreshRunIds = new Set<string>()
 const knownRefreshRunIds = new Set<string>()
+let refreshMeasurementNumber = 0
 
 test.describe('MT-199 Work Order Items release acceptance', () => {
   test.skip(!isolatedDatabaseUrl, 'Set a dedicated E2E_DATABASE_URL to run the mutating Work Orders acceptance journey.')
   test.describe.configure({ mode: 'serial' })
+  test.setTimeout(180_000)
 
   test.beforeAll(async () => {
     if (!isolatedDatabaseUrl) return
     const sql = neon(isolatedDatabaseUrl)
     await verifyWorkOrderAcceptanceDatabase({
       expectedSentinel: expectedDatabaseSentinel,
-      readProof: async () => {
-        const [proof] = await sql`
-          SELECT
-            current_database() AS "databaseName",
-            current_setting('rgtools.e2e_database_sentinel', true) AS sentinel
-        ` as Array<{ databaseName: string; sentinel: string | null }>
-
-        return proof ?? { databaseName: 'unknown', sentinel: null }
-      },
+      readProof: () => readWorkOrderAcceptanceDatabaseProof((statement) =>
+        sql.query(statement) as Promise<Array<{ databaseName: string; sentinel: string | null }>>),
     })
     databaseVerified = true
     const existingRefreshRuns = await sql`SELECT id FROM work_order_refresh_runs` as Array<{ id: string }>
@@ -159,6 +156,10 @@ test.describe('MT-199 Work Order Items release acceptance', () => {
         WHERE slug = ${previous.slug}
       `
     }
+    await sql`
+      DELETE FROM work_order_refresh_locks
+      WHERE lock_name = ${`work-order-rate:refresh:${userId}`}
+    `
     await sql`DELETE FROM users WHERE id = ${userId}::uuid`
   })
 
@@ -166,6 +167,18 @@ test.describe('MT-199 Work Order Items release acceptance', () => {
     await login(page)
     await page.goto('/work-orders')
     await refreshWorkOrders(page)
+
+    await expect(page.getByRole('heading', { name: 'Work Orders' })).toBeVisible()
+    await expect(page.getByRole('group', { name: 'Work Order filter utilities' })).toBeVisible()
+    const accessibilityScan = await new AxeBuilder({ page })
+      .include('main')
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .analyze()
+    console.log(`MT199_A11Y violations=${accessibilityScan.violations.length}`)
+    expect(
+      accessibilityScan.violations,
+      JSON.stringify(accessibilityScan.violations, null, 2),
+    ).toEqual([])
 
     const primaryGroup = page.getByRole('group', { name: `Work Order ${primaryJobNumber}` })
     const secondaryGroup = page.getByRole('group', { name: `Work Order ${secondaryJobNumber}` })
@@ -193,13 +206,21 @@ test.describe('MT-199 Work Order Items release acceptance', () => {
     await expect(primaryGroup.getByLabel('Short label for SHOWER-001')).toHaveValue(manualLabel)
     await expect(primaryGroup.getByLabel('Risk for SHOWER-001')).toHaveValue('high')
 
-    await primaryGroup.getByRole('link', { name: primaryJobNumber }).click()
-    await expect(page.getByText('Item Label Manually Updated')).toBeVisible()
+    const detailLink = primaryGroup.getByRole('link', { name: primaryJobNumber })
+    await detailLink.focus()
+    await expect(detailLink).toBeFocused()
+    const detailHref = await detailLink.getAttribute('href')
+    expect(detailHref).toMatch(/^\/work-orders\/[0-9a-f-]+$/)
+    const detailWarmup = await page.request.get(detailHref!)
+    expect(detailWarmup.ok()).toBe(true)
+    await detailLink.click()
+    await expect(page).toHaveURL(/\/work-orders\/[0-9a-f-]+$/, { timeout: 30_000 })
+    await expect(page.getByText('Item Label Manually Updated')).toBeVisible({ timeout: 30_000 })
     await expect(page.getByText('Item Risk Changed')).toBeVisible()
-    await expect(page.getByText(`Affected item: SHOWER-001 - ${manualLabel}`)).toBeVisible()
+    await expect(page.getByText(`Affected item: SHOWER-001 - ${manualLabel}`)).toHaveCount(2)
     await page.goto('/work-orders')
 
-    await page.getByRole('combobox', { name: 'Risk' }).selectOption('high')
+    await page.getByLabel('Risk', { exact: true }).selectOption('high')
     await expect(page).toHaveURL(/risk=high/)
     await expect(primaryGroup).toContainText('1 of 2 active items')
     await expect(primaryGroup.getByRole('row')).toHaveCount(1)
@@ -207,9 +228,13 @@ test.describe('MT-199 Work Order Items release acceptance', () => {
     await expect(primaryGroup.getByRole('row')).toHaveCount(2)
     await expect(primaryGroup.getByText('Apply to all active items')).toHaveCount(0)
 
+    const exportStartedAt = Date.now()
     const downloadPromise = page.waitForEvent('download')
     await page.getByRole('link', { name: 'Export CSV' }).click()
     const csv = await readDownload(await downloadPromise)
+    const exportDurationMs = Date.now() - exportStartedAt
+    console.log(`MT199_PERF export_csv_ms=${exportDurationMs}`)
+    expect(exportDurationMs).toBeLessThan(10_000)
     expect(csv).toContain(`"${primaryJobNumber}"`)
     expect(csv).toContain(`"${manualLabel}"`)
     expect(csv.match(new RegExp(primaryJobNumber, 'g'))).toHaveLength(2)
@@ -236,8 +261,9 @@ async function login(page: Page) {
 }
 
 async function refreshWorkOrders(page: Page) {
+  const refreshStartedAt = Date.now()
   await page.getByRole('button', { name: 'Refresh from ServiceM8' }).click()
-  await expect(page.getByRole('status')).toContainText('Last successful sync')
+  await expect(page.getByRole('status').filter({ hasText: 'Last successful sync' })).toBeVisible()
 
   if (!isolatedDatabaseUrl) return
   const sql = neon(isolatedDatabaseUrl)
@@ -254,6 +280,14 @@ async function refreshWorkOrders(page: Page) {
     knownRefreshRunIds.add(refreshRunId)
     createdRefreshRunIds.add(refreshRunId)
   }
+  await sql`
+    DELETE FROM work_order_refresh_locks
+    WHERE lock_name = ${`work-order-rate:refresh:${userId}`}
+  `
+  const refreshDurationMs = Date.now() - refreshStartedAt
+  refreshMeasurementNumber += 1
+  console.log(`MT199_PERF refresh_${refreshMeasurementNumber}_ms=${refreshDurationMs}`)
+  expect(refreshDurationMs).toBeLessThan(30_000)
 }
 
 async function readDownload(download: Download) {

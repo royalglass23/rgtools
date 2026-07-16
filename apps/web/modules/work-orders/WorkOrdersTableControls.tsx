@@ -441,7 +441,7 @@ function PageLink({
   paramPrefix: string
   children: React.ReactNode
 }) {
-  if (disabled) return <span className="rounded border border-gray-200 px-3 py-1.5 text-gray-400">{children}</span>
+  if (disabled) return <span className="rounded border border-gray-200 px-3 py-1.5 text-gray-600">{children}</span>
   const params = paramsFor(filters, paramPrefix)
   params.set(`${paramPrefix}page`, String(page))
   return <Link href={`${basePath}?${params}`} className="rounded border border-gray-300 px-3 py-1.5 text-gray-700 hover:bg-gray-50">{children}</Link>

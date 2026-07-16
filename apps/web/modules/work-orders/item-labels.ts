@@ -8,6 +8,8 @@ type OpenAIResponsesPayload = {
   }>
 }
 
+const WORK_ORDER_OPENAI_TIMEOUT_MS = 30000
+
 export type WorkOrderItemLabelGenerator = (originalDescription: string) => Promise<string>
 
 const LABEL_INSTRUCTIONS = `Create exactly one concise production label for one Royal Glass work-order item.
@@ -21,22 +23,35 @@ export async function generateWorkOrderItemLabel(
   const apiKey = process.env.OPENAI_API_KEY?.trim()
   if (!apiKey) throw new Error('OPENAI_API_KEY is not configured')
 
-  const response = await request(openAIResponsesUrl(), {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: process.env.OPENAI_MODEL ?? 'gpt-5.4-mini',
-      instructions: LABEL_INSTRUCTIONS,
-      input: originalDescription,
-    }),
-  })
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), WORK_ORDER_OPENAI_TIMEOUT_MS)
+
+  let response: Response
+  try {
+    response = await request(openAIResponsesUrl(), {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: process.env.OPENAI_MODEL ?? 'gpt-5.4-mini',
+        instructions: LABEL_INSTRUCTIONS,
+        input: originalDescription,
+      }),
+      signal: controller.signal,
+    })
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error('OpenAI Work Order label generation timed out.')
+    }
+    throw error
+  } finally {
+    clearTimeout(timeout)
+  }
 
   if (!response.ok) {
-    const body = await response.text().catch(() => '')
-    throw new Error(`OpenAI Work Order label generation failed with HTTP ${response.status}${body ? `: ${body}` : ''}`)
+    throw new Error(`OpenAI Work Order label generation failed with HTTP ${response.status}.`)
   }
 
   const payload = await response.json() as OpenAIResponsesPayload

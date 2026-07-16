@@ -123,6 +123,7 @@ export const workOrders = pgTable('work_orders', {
   index('work_orders_client_idx').on(table.clientId),
   index('work_orders_lead_idx').on(table.leadId),
   index('work_orders_quote_idx').on(table.quoteId),
+  index('work_orders_retention_idx').on(table.isCurrent, table.servicem8Active, table.dateCompleted, table.updatedAt),
 ])
 
 export const workOrderItems = pgTable('work_order_items', {
@@ -160,6 +161,7 @@ export const workOrderItems = pgTable('work_order_items', {
 
 export const workOrderRefreshRuns = pgTable('work_order_refresh_runs', {
   id: uuid('id').primaryKey().defaultRandom(),
+  actorId: uuid('actor_id').references(() => users.id, { onDelete: 'set null' }),
   status: text('status').notNull(),
   syncedCount: integer('synced_count').default(0).notNull(),
   itemSyncedCount: integer('item_synced_count').default(0).notNull(),
@@ -170,6 +172,13 @@ export const workOrderRefreshRuns = pgTable('work_order_refresh_runs', {
   index('work_order_refresh_runs_created_at_idx').on(table.createdAt),
   index('work_order_refresh_runs_status_idx').on(table.status),
 ])
+
+export const workOrderRefreshLocks = pgTable('work_order_refresh_locks', {
+  lockName: text('lock_name').primaryKey(),
+  ownerId: text('owner_id').notNull(),
+  leaseExpiresAt: timestamp('lease_expires_at', { withTimezone: true }).notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+})
 
 export const workOrderEvents = pgTable('work_order_events', {
   id: uuid('id').primaryKey().defaultRandom(),

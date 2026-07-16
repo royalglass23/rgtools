@@ -7,6 +7,7 @@ const transactionValues = vi.hoisted(() => [] as Array<{ table: string; values: 
 const transactionUpdates = vi.hoisted(() => [] as Array<{ table: string; values: Record<string, unknown> }>)
 const transactionConflictSets = vi.hoisted(() => [] as Array<{ table: string; values: Record<string, unknown> }>)
 const mockTransaction = vi.hoisted(() => vi.fn())
+const mockExecute = vi.hoisted(() => vi.fn(async () => ({ rows: [{}] })))
 const mockSelect = vi.hoisted(() => vi.fn())
 const mockUpdate = vi.hoisted(() => vi.fn())
 const mockRecordRefreshInsert = vi.hoisted(() => vi.fn())
@@ -17,6 +18,7 @@ const mockGetWorkOrderBillingExclusions = vi.hoisted(() => vi.fn())
 
 vi.mock('@/lib/db', () => ({
   db: {
+    execute: mockExecute,
     insert: mockRecordRefreshInsert,
     select: mockSelect,
     update: mockUpdate,
@@ -120,6 +122,40 @@ beforeEach(() => {
 })
 
 describe('refreshWorkOrdersFromServiceM8', () => {
+  it('shares one in-flight refresh across concurrent callers', async () => {
+    let releaseRequest!: () => void
+    let markRequestStarted!: () => void
+    const requestStarted = new Promise<void>((resolve) => {
+      markRequestStarted = resolve
+    })
+    const requestGate = new Promise<void>((resolve) => {
+      releaseRequest = resolve
+    })
+    let requestCount = 0
+    const request = vi.fn(async () => {
+      requestCount += 1
+      if (requestCount === 1) {
+        markRequestStarted()
+        await requestGate
+      }
+      return Response.json([])
+    })
+    const duplicateRequest = vi.fn(async () => Response.json([]))
+
+    const firstRefresh = refreshWorkOrdersFromServiceM8(request)
+    await requestStarted
+    const secondRefresh = refreshWorkOrdersFromServiceM8(duplicateRequest)
+
+    releaseRequest()
+
+    await expect(Promise.all([firstRefresh, secondRefresh])).resolves.toEqual([
+      { synced: 0, itemsSynced: 0, excludedLineCount: 0 },
+      { synced: 0, itemsSynced: 0, excludedLineCount: 0 },
+    ])
+    expect(duplicateRequest).not.toHaveBeenCalled()
+    expect(mockTransaction).toHaveBeenCalledOnce()
+  })
+
   it('does not start reconciliation when a required ServiceM8 dataset is invalid', async () => {
     const request = vi.fn(async (path: string) => {
       if (path.startsWith('/jobmaterial.json')) return Response.json({ rows: [] })
@@ -203,6 +239,27 @@ describe('refreshWorkOrdersFromServiceM8', () => {
       'ServiceM8 job pagination was invalid: cursor cursor-loop repeated.',
     )
 
+    expect(mockTransaction).not.toHaveBeenCalled()
+    expect(refreshRunValues).toEqual([expect.objectContaining({ status: 'failed' })])
+  })
+
+  it('fails before reconciliation when ServiceM8 exceeds the page budget with unique cursors', async () => {
+    let jobRequestCount = 0
+    const request = vi.fn(async (path: string) => {
+      if (!path.startsWith('/job.json')) return Response.json([])
+      jobRequestCount += 1
+      if (jobRequestCount > 26) throw new Error('Test safety stop: pagination remained unbounded.')
+
+      return Response.json([], {
+        headers: { 'x-next-cursor': `cursor-${jobRequestCount}` },
+      })
+    })
+
+    await expect(refreshWorkOrdersFromServiceM8(request)).rejects.toThrow(
+      'ServiceM8 job pagination exceeded the 25-page refresh limit.',
+    )
+
+    expect(jobRequestCount).toBe(25)
     expect(mockTransaction).not.toHaveBeenCalled()
     expect(refreshRunValues).toEqual([expect.objectContaining({ status: 'failed' })])
   })

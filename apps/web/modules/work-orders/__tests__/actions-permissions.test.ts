@@ -8,6 +8,7 @@ const mockInsert = vi.hoisted(() => vi.fn())
 const mockUpdate = vi.hoisted(() => vi.fn())
 const mockSelect = vi.hoisted(() => vi.fn())
 const mockDelete = vi.hoisted(() => vi.fn())
+const mockExecute = vi.hoisted(() => vi.fn(async () => ({ rows: [{}] })))
 const mockTransaction = vi.hoisted(() => vi.fn())
 const mockAuth = vi.hoisted(() => vi.fn())
 const mockLogAudit = vi.hoisted(() => vi.fn())
@@ -28,6 +29,7 @@ vi.mock('@/lib/db', () => ({
     update: mockUpdate,
     select: mockSelect,
     delete: mockDelete,
+    execute: mockExecute,
     transaction: mockTransaction,
   },
 }))
@@ -117,6 +119,10 @@ describe('work order action permissions', () => {
     mockAssertCanManage.mockRejectedValue(new Error('Forbidden: Work Orders manage access is required.'))
 
     await expect(refreshWorkOrdersAction()).rejects.toThrow('Forbidden: Work Orders manage access is required.')
+    expect(mockLogAudit).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'work_order.refresh.denied',
+      actorId: 'user-1',
+    }))
     expect(mockInsert).not.toHaveBeenCalled()
     expect(mockRevalidatePath).not.toHaveBeenCalled()
   })
@@ -130,6 +136,10 @@ describe('work order action permissions', () => {
     )
     expect(request).not.toHaveBeenCalled()
     expect(mockTransaction).not.toHaveBeenCalled()
+    expect(mockLogAudit).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'work_order.refresh.denied',
+      actorId: 'user-1',
+    }))
   })
 
   it('requires manage access before updating an operational Work Order Item field', async () => {

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
   createWorkOrderAcceptanceCredentials,
+  readWorkOrderAcceptanceDatabaseProof,
   verifyWorkOrderAcceptanceDatabase,
 } from '../../tests/e2e/work-order-acceptance-safety'
 
@@ -63,5 +64,24 @@ describe('verifyWorkOrderAcceptanceDatabase', () => {
       expectedSentinel: sentinel,
       readProof: async () => ({ databaseName: 'rgtools_mt199_test', sentinel }),
     })).resolves.toEqual({ databaseName: 'rgtools_mt199_test', sentinel })
+  })
+})
+
+describe('readWorkOrderAcceptanceDatabaseProof', () => {
+  it('reads the sentinel from the isolated-only proof table without a custom database parameter', async () => {
+    const query = vi.fn(async (statement: string) => {
+      expect(statement).toContain('rgtools_e2e.database_sentinel')
+      expect(statement).not.toContain('current_setting')
+      return [{
+        databaseName: 'rgtools_mt199_test',
+        sentinel: 'isolated-mt199-marker-with-32-characters',
+      }]
+    })
+
+    await expect(readWorkOrderAcceptanceDatabaseProof(query)).resolves.toEqual({
+      databaseName: 'rgtools_mt199_test',
+      sentinel: 'isolated-mt199-marker-with-32-characters',
+    })
+    expect(query).toHaveBeenCalledOnce()
   })
 })
