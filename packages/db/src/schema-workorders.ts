@@ -23,6 +23,10 @@ export const workOrderItemLabelStatusEnum = pgEnum('work_order_item_label_status
   'failed',
   'source_changed',
 ])
+export const workOrderProductionSpecificationStatusEnum = pgEnum('work_order_production_specification_status', [
+  'needs_review',
+  'confirmed',
+])
 
 export const workOrderInstallers = pgTable('work_order_installers', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -157,6 +161,61 @@ export const workOrderItems = pgTable('work_order_items', {
   uniqueIndex('work_order_items_servicem8_item_uuid_uq').on(table.servicem8ItemUuid),
   index('work_order_items_work_order_active_idx').on(table.workOrderId, table.isActive),
   index('work_order_items_servicem8_job_uuid_idx').on(table.servicem8JobUuid),
+])
+
+export const workOrderSpecificationCatalogueOptions = pgTable('work_order_specification_catalogue_options', {
+  id: text('id').primaryKey(),
+  fieldName: text('field_name').notNull(),
+  displayLabel: text('display_label').notNull(),
+  productionLabel: text('production_label').notNull(),
+  aliases: jsonb('aliases').$type<string[]>().default([]).notNull(),
+  psCategorySlug: text('ps_category_slug'),
+  psOptionSlug: text('ps_option_slug'),
+  ps1Applicable: boolean('ps1_applicable').default(false).notNull(),
+  ps3Applicable: boolean('ps3_applicable').default(false).notNull(),
+  isActive: boolean('is_active').default(true).notNull(),
+  sortOrder: integer('sort_order').default(0).notNull(),
+  createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('work_order_specification_catalogue_field_active_idx').on(table.fieldName, table.isActive, table.sortOrder),
+  uniqueIndex('work_order_specification_catalogue_ps_mapping_uq').on(table.psCategorySlug, table.psOptionSlug),
+])
+
+export const workOrderItemProductionSpecifications = pgTable('work_order_item_production_specifications', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workOrderItemId: uuid('work_order_item_id').notNull().references(() => workOrderItems.id, { onDelete: 'cascade' }),
+  status: workOrderProductionSpecificationStatusEnum('status').default('needs_review').notNull(),
+  schemaVersion: integer('schema_version').default(1).notNull(),
+  draftData: jsonb('draft_data').$type<Record<string, unknown>>(),
+  confirmedData: jsonb('confirmed_data').$type<Record<string, unknown>>(),
+  productionLabel: text('production_label'),
+  draftUpdatedBy: uuid('draft_updated_by').references(() => users.id, { onDelete: 'set null' }),
+  draftUpdatedAt: timestamp('draft_updated_at', { withTimezone: true }),
+  confirmedBy: uuid('confirmed_by').references(() => users.id, { onDelete: 'set null' }),
+  confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('work_order_item_production_specifications_item_uq').on(table.workOrderItemId),
+  index('work_order_item_production_specifications_status_idx').on(table.status),
+])
+
+export const workOrderItemProductionSpecificationRevisions = pgTable('work_order_item_production_specification_revisions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  specificationId: uuid('specification_id').notNull().references(() => workOrderItemProductionSpecifications.id, { onDelete: 'cascade' }),
+  workOrderItemId: uuid('work_order_item_id').notNull().references(() => workOrderItems.id, { onDelete: 'cascade' }),
+  actorId: uuid('actor_id').references(() => users.id, { onDelete: 'set null' }),
+  revisionType: text('revision_type').notNull(),
+  previousSnapshot: jsonb('previous_snapshot').$type<Record<string, unknown>>(),
+  newSnapshot: jsonb('new_snapshot').$type<Record<string, unknown>>().notNull(),
+  reasonCode: text('reason_code'),
+  note: text('note'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('work_order_item_specification_revisions_item_created_idx').on(table.workOrderItemId, table.createdAt),
+  index('work_order_item_specification_revisions_specification_idx').on(table.specificationId),
 ])
 
 export const workOrderRefreshRuns = pgTable('work_order_refresh_runs', {

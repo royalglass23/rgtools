@@ -1,0 +1,401 @@
+export const PRODUCTION_SPECIFICATION_SCHEMA_VERSION = 1 as const
+
+const SPECIFICATION_FIELD_NAMES = [
+  'system',
+  'structureMaterial',
+  'structureType',
+  'locationEnvironment',
+  'locationDetail',
+  'structureBuilt',
+  'glassConstruction',
+  'glassAppearance',
+  'thickness',
+  'gateRequired',
+  'doorOpeningType',
+  'fixingMethod',
+  'hardwareFinish',
+  'systemFinish',
+  'interlinkingRail',
+  'deliveryScope',
+] as const
+
+export type ProductionSpecificationFieldName = typeof SPECIFICATION_FIELD_NAMES[number]
+
+const SPECIFICATION_CHANGE_LABELS: Record<ProductionSpecificationFieldName, string> = {
+  system: 'System',
+  structureMaterial: 'Structure Material/Substrate',
+  structureType: 'Structure Type',
+  locationEnvironment: 'Location Environment',
+  locationDetail: 'Location Detail/Area',
+  structureBuilt: 'Structure Built',
+  glassConstruction: 'Glass Construction',
+  glassAppearance: 'Glass Appearance',
+  thickness: 'Thickness',
+  gateRequired: 'Gate Required',
+  doorOpeningType: 'Door/Opening Type',
+  fixingMethod: 'Fixing Method',
+  hardwareFinish: 'Hardware/Fittings Finish',
+  systemFinish: 'System/Channel Finish',
+  interlinkingRail: 'Interlinking Rail',
+  deliveryScope: 'Delivery Scope',
+}
+
+export type ProductionSpecificationValue =
+  | { state: 'selected'; catalogueId: string }
+  | { state: 'tbc' }
+  | { state: 'unmapped'; raw: string }
+
+export type ProductionSpecificationMeasurement = {
+  kind: 'quantity' | 'length' | 'width' | 'height' | 'diameter' | 'other'
+  value: string
+  unit: 'mm' | 'm' | 'each' | 'other'
+  label?: string
+}
+
+export type ProductionSpecificationComponent = {
+  name: string
+  quantity?: string
+  dimensions?: string
+  material?: string
+  finish?: string
+  notes?: string
+}
+
+export type ProductionSpecificationRequirement = {
+  kind: 'standard' | 'design_constraint' | 'inclusion' | 'exclusion' | 'template' | 'drawing' | 'other'
+  detail: string
+}
+
+export type ProductionSpecification = {
+  schemaVersion: typeof PRODUCTION_SPECIFICATION_SCHEMA_VERSION
+  system: ProductionSpecificationValue
+  structureMaterial: ProductionSpecificationValue
+  structureType: ProductionSpecificationValue
+  locationEnvironment: ProductionSpecificationValue
+  locationDetail: ProductionSpecificationValue
+  structureBuilt: ProductionSpecificationValue
+  glassConstruction: ProductionSpecificationValue
+  glassAppearance: ProductionSpecificationValue
+  thickness: ProductionSpecificationValue
+  gateRequired: ProductionSpecificationValue
+  doorOpeningType: ProductionSpecificationValue
+  fixingMethod: ProductionSpecificationValue
+  hardwareFinish: ProductionSpecificationValue
+  systemFinish: ProductionSpecificationValue
+  interlinkingRail: ProductionSpecificationValue
+  deliveryScope: ProductionSpecificationValue
+  measurements: ProductionSpecificationMeasurement[]
+  additionalComponents: ProductionSpecificationComponent[]
+  specialRequirements: ProductionSpecificationRequirement[]
+}
+
+export type ProductionSpecificationCatalogueOption = {
+  id: string
+  field: ProductionSpecificationFieldName
+  displayLabel: string
+  productionLabel: string
+  psCategorySlug?: string
+  psOptionSlug?: string
+}
+
+export const INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE: readonly ProductionSpecificationCatalogueOption[] = [
+  option('system.double-disc', 'system', 'Double Disc', 'Double Disc', 'system', 'double-disc'),
+  option('system.frameless-spigot', 'system', 'Frameless Spigot', 'Frameless Spigot', 'system', 'frameless-spigot'),
+  option('system.shower-glass', 'system', 'Shower Glass', 'Shower Glass'),
+  option('system.shower-screen', 'system', 'Shower Screen', 'Shower Screen'),
+  option('system.glass-pool-fence', 'system', 'Glass Pool Fence', 'Glass Pool Fence'),
+  option('system.handrail', 'system', 'Handrail', 'Handrail'),
+  option('structure_material.timber', 'structureMaterial', 'Timber', 'Timber', 'structure_material', 'timber'),
+  option('structure_material.concrete', 'structureMaterial', 'Concrete', 'Concrete', 'structure_material', 'concrete'),
+  option('structure_material.steel', 'structureMaterial', 'Steel', 'Steel', 'structure_material', 'steel'),
+  option('structure_type.deck', 'structureType', 'Deck', 'Deck', 'structure_type', 'deck'),
+  option('structure_type.balcony', 'structureType', 'Balcony', 'Balcony', 'structure_type', 'balcony'),
+  option('structure_type.pool', 'structureType', 'Pool Area', 'Pool Area', 'structure_type', 'pool'),
+  option('structure_type.stair', 'structureType', 'Stair Area', 'Stair Area', 'structure_type', 'stair'),
+  option('structure_type.landing', 'structureType', 'Landing', 'Landing', 'structure_type', 'landing'),
+  option('structure_type.stair-and-landing', 'structureType', 'Stair and Landing', 'Stair & Landing', 'structure_type', 'stair-and-landing'),
+  option('structure_type.stair-and-balcony', 'structureType', 'Stair and Balcony Area', 'Stair & Balcony', 'structure_type', 'stair-and-balcony'),
+  option('location.internal', 'locationEnvironment', 'Internal', 'Int', 'location', 'internal'),
+  option('location.external', 'locationEnvironment', 'External', 'Ext', 'location', 'external'),
+  option('location.both', 'locationEnvironment', 'Internal and External', 'Int/Ext', 'location', 'both'),
+  option('location_detail.bathroom', 'locationDetail', 'Bathroom', 'Bathroom'),
+  option('location_detail.balcony', 'locationDetail', 'Balcony', 'Balcony'),
+  option('location_detail.pool-area', 'locationDetail', 'Pool Area', 'Pool Area'),
+  option('location_detail.stair-area', 'locationDetail', 'Stair Area', 'Stair Area'),
+  option('location_detail.landing', 'locationDetail', 'Landing', 'Landing'),
+  option('location_detail.deck', 'locationDetail', 'Deck', 'Deck'),
+  option('structure_built.new', 'structureBuilt', 'New', 'New', 'structure_built', 'new'),
+  option('structure_built.existing', 'structureBuilt', 'Existing', 'Existing', 'structure_built', 'existing'),
+  option('glass_construction.toughened', 'glassConstruction', 'Toughened', 'Toughened', 'glass_type', 'toughened'),
+  option('glass_construction.laminated', 'glassConstruction', 'Laminated', 'Laminated', 'glass_type', 'laminated'),
+  option('glass_appearance.clear', 'glassAppearance', 'Clear', 'Clear'),
+  option('glass_appearance.tinted', 'glassAppearance', 'Tinted', 'Tinted'),
+  option('glass_appearance.frosted', 'glassAppearance', 'Frosted', 'Frosted'),
+  option('glass_appearance.ultra-clear', 'glassAppearance', 'Ultra-Clear', 'Ultra-Clear'),
+  option('thickness.10mm', 'thickness', '10mm', '10 mm'),
+  option('thickness.12mm', 'thickness', '12mm', '12 mm', 'thickness', '12mm'),
+  option('thickness.15mm', 'thickness', '15mm', '15 mm', 'thickness', '15mm'),
+  option('thickness.17-52mm', 'thickness', '17.52mm', '17.52 mm', 'thickness', '17-52mm'),
+  option('gate_required.no', 'gateRequired', 'No', 'No Gate', 'gate_required', 'no'),
+  option('gate_required.yes', 'gateRequired', 'Yes', 'Gate', 'gate_required', 'yes'),
+  option('door_opening_type.hinged', 'doorOpeningType', 'Hinged', 'Hinged'),
+  option('door_opening_type.sliding', 'doorOpeningType', 'Sliding', 'Sliding'),
+  option('door_opening_type.fixed-panel', 'doorOpeningType', 'Fixed Panel', 'Fixed Panel'),
+  option('door_opening_type.gate', 'doorOpeningType', 'Gate', 'Gate'),
+  option('door_opening_type.none', 'doorOpeningType', 'No Door/Opening', 'No Door'),
+  option('fixing_method.double-disc', 'fixingMethod', 'Double Disc', 'Double Disc'),
+  option('fixing_method.top-mounted-channel', 'fixingMethod', 'Top-Mounted Base Channel', 'Top-Mounted Channel'),
+  option('finish.chrome', 'hardwareFinish', 'Chrome', 'Chrome'),
+  option('finish.matte-black', 'hardwareFinish', 'Matte Black', 'Matte Black'),
+  option('finish.brushed-nickel', 'hardwareFinish', 'Brushed Nickel', 'Brushed Nickel'),
+  option('system_finish.ironsand', 'systemFinish', 'Ironsand', 'Ironsand'),
+  option('interlinking_rail.21x25mm', 'interlinkingRail', '21 x 25mm Interlinking Rail', 'IL Rail 21 x 25 mm'),
+  option('delivery_scope.supply-only', 'deliveryScope', 'Supply Only', 'Supply Only'),
+  option('delivery_scope.supply-install', 'deliveryScope', 'Supply and Install', 'Supply & Install'),
+  option('delivery_scope.install-only', 'deliveryScope', 'Install Only', 'Install Only'),
+]
+
+const CATALOGUE_BY_ID = new Map(INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE.map((entry) => [entry.id, entry]))
+
+export function parseProductionSpecification(input: unknown): ProductionSpecification {
+  const record = objectValue(input, 'Production specification')
+  if (record.schemaVersion !== PRODUCTION_SPECIFICATION_SCHEMA_VERSION) {
+    throw new Error(`Production specification schemaVersion must be ${PRODUCTION_SPECIFICATION_SCHEMA_VERSION}.`)
+  }
+
+  const specification = { schemaVersion: PRODUCTION_SPECIFICATION_SCHEMA_VERSION } as ProductionSpecification
+  for (const field of SPECIFICATION_FIELD_NAMES) {
+    specification[field] = parseSpecificationValue(record[field], field)
+  }
+  specification.measurements = arrayValue(record.measurements, 'measurements').map(parseMeasurement)
+  specification.additionalComponents = arrayValue(record.additionalComponents, 'additionalComponents').map(parseComponent)
+  specification.specialRequirements = arrayValue(record.specialRequirements, 'specialRequirements').map(parseRequirement)
+  return specification
+}
+
+export function createEmptyProductionSpecification(): ProductionSpecification {
+  return {
+    schemaVersion: PRODUCTION_SPECIFICATION_SCHEMA_VERSION,
+    system: { state: 'tbc' },
+    structureMaterial: { state: 'tbc' },
+    structureType: { state: 'tbc' },
+    locationEnvironment: { state: 'tbc' },
+    locationDetail: { state: 'tbc' },
+    structureBuilt: { state: 'tbc' },
+    glassConstruction: { state: 'tbc' },
+    glassAppearance: { state: 'tbc' },
+    thickness: { state: 'tbc' },
+    gateRequired: { state: 'tbc' },
+    doorOpeningType: { state: 'tbc' },
+    fixingMethod: { state: 'tbc' },
+    hardwareFinish: { state: 'tbc' },
+    systemFinish: { state: 'tbc' },
+    interlinkingRail: { state: 'tbc' },
+    deliveryScope: { state: 'tbc' },
+    measurements: [],
+    additionalComponents: [],
+    specialRequirements: [],
+  }
+}
+
+export function buildProductionLabel(specification: ProductionSpecification): string {
+  const system = selectedLabel(specification.system)
+  const location = buildLocationLabel(specification)
+  const measurements = specification.measurements.map(formatMeasurement).join(', ')
+  const glass = [
+    selectedLabel(specification.thickness),
+    selectedLabel(specification.glassConstruction),
+    selectedLabel(specification.glassAppearance),
+  ].filter(Boolean).join(' ')
+  const material = selectedLabel(specification.structureMaterial)
+  const fixing = selectedLabel(specification.fixingMethod)
+  const fixingAndMaterial = [material, fixing && fixing !== system ? fixing : ''].filter(Boolean).join(' / ')
+  const doorOpening = selectedLabel(specification.doorOpeningType)
+  const finishes = uniqueLabels([
+    selectedLabel(specification.hardwareFinish),
+    selectedLabel(specification.systemFinish),
+  ]).join(' / ')
+  const extras = [
+    selectedLabel(specification.interlinkingRail),
+    selectedLabel(specification.gateRequired) === 'Gate' ? 'Gate' : '',
+  ].filter(Boolean).join(' / ')
+  const scope = selectedLabel(specification.deliveryScope)
+
+  return [system, location, measurements, glass, doorOpening, fixingAndMaterial, finishes, extras, scope]
+    .filter(Boolean)
+    .join(' | ')
+}
+
+export function productionSpecificationValueLabel(value: ProductionSpecificationValue) {
+  if (value.state === 'tbc') return 'TBC'
+  if (value.state === 'unmapped') return `Unmapped - ${value.raw}`
+  return CATALOGUE_BY_ID.get(value.catalogueId)?.displayLabel ?? 'Unmapped - Needs Review'
+}
+
+export function confirmProductionSpecificationDraft(input: {
+  specificationId: string
+  workOrderItemId: string
+  draft: ProductionSpecification
+  previousConfirmed: ProductionSpecification | null
+  actorId: string | null
+  confirmedAt: Date
+}) {
+  const confirmedData = parseProductionSpecification(input.draft)
+  const productionLabel = buildProductionLabel(confirmedData)
+  if (!productionLabel) throw new Error('Production specification cannot be confirmed without a production label.')
+  const automaticChangeNote = input.previousConfirmed
+    ? summarizeProductionSpecificationChanges(input.previousConfirmed, confirmedData)
+    : null
+
+  return {
+    specification: {
+      status: 'confirmed' as const,
+      draftData: null,
+      confirmedData,
+      schemaVersion: PRODUCTION_SPECIFICATION_SCHEMA_VERSION,
+      productionLabel,
+      confirmedBy: input.actorId,
+      confirmedAt: input.confirmedAt,
+      updatedAt: input.confirmedAt,
+    },
+    revision: {
+      specificationId: input.specificationId,
+      workOrderItemId: input.workOrderItemId,
+      actorId: input.actorId,
+      revisionType: input.previousConfirmed ? 'draft_confirmed' : 'baseline_confirmed',
+      previousSnapshot: input.previousConfirmed,
+      newSnapshot: confirmedData,
+      reasonCode: null,
+      note: automaticChangeNote,
+      createdAt: input.confirmedAt,
+    },
+  }
+}
+
+export function summarizeProductionSpecificationChanges(
+  previous: ProductionSpecification,
+  next: ProductionSpecification,
+) {
+  const changes = SPECIFICATION_FIELD_NAMES.flatMap((field) => {
+    if (JSON.stringify(previous[field]) === JSON.stringify(next[field])) return []
+    return [`${SPECIFICATION_CHANGE_LABELS[field]}: ${productionSpecificationValueLabel(previous[field])} -> ${productionSpecificationValueLabel(next[field])}`]
+  })
+  if (JSON.stringify(previous.measurements) !== JSON.stringify(next.measurements)) changes.push('Measurements updated')
+  if (JSON.stringify(previous.additionalComponents) !== JSON.stringify(next.additionalComponents)) changes.push('Additional Components updated')
+  if (JSON.stringify(previous.specialRequirements) !== JSON.stringify(next.specialRequirements)) changes.push('Special Requirements updated')
+  return changes.length > 0 ? changes.join('; ') : 'Confirmed with no specification changes'
+}
+
+function option(
+  id: string,
+  field: ProductionSpecificationFieldName,
+  displayLabel: string,
+  productionLabel: string,
+  psCategorySlug?: string,
+  psOptionSlug?: string,
+): ProductionSpecificationCatalogueOption {
+  return { id, field, displayLabel, productionLabel, psCategorySlug, psOptionSlug }
+}
+
+function parseSpecificationValue(input: unknown, field: ProductionSpecificationFieldName): ProductionSpecificationValue {
+  const value = objectValue(input, field)
+  if (value.state === 'tbc') return { state: 'tbc' }
+  if (value.state === 'unmapped') return { state: 'unmapped', raw: requiredText(value.raw, `${field}.raw`, 240) }
+  if (value.state !== 'selected') throw new Error(`${field}.state is invalid.`)
+
+  const catalogueId = requiredText(value.catalogueId, `${field}.catalogueId`, 120)
+  const catalogueOption = CATALOGUE_BY_ID.get(catalogueId)
+  if (!catalogueOption || catalogueOption.field !== field) {
+    throw new Error(`${catalogueId} is not an approved ${field} catalogue option.`)
+  }
+  return { state: 'selected', catalogueId }
+}
+
+function parseMeasurement(input: unknown): ProductionSpecificationMeasurement {
+  const value = objectValue(input, 'measurement')
+  const kind = enumValue(value.kind, 'measurement.kind', ['quantity', 'length', 'width', 'height', 'diameter', 'other'] as const)
+  const unit = enumValue(value.unit, 'measurement.unit', ['mm', 'm', 'each', 'other'] as const)
+  return {
+    kind,
+    value: requiredText(value.value, 'measurement.value', 40),
+    unit,
+    ...(value.label === undefined ? {} : { label: requiredText(value.label, 'measurement.label', 80) }),
+  }
+}
+
+function parseComponent(input: unknown): ProductionSpecificationComponent {
+  const value = objectValue(input, 'component')
+  return {
+    name: requiredText(value.name, 'component.name', 160),
+    ...optionalTextProperty(value, 'quantity', 40),
+    ...optionalTextProperty(value, 'dimensions', 120),
+    ...optionalTextProperty(value, 'material', 120),
+    ...optionalTextProperty(value, 'finish', 120),
+    ...optionalTextProperty(value, 'notes', 500),
+  }
+}
+
+function parseRequirement(input: unknown): ProductionSpecificationRequirement {
+  const value = objectValue(input, 'requirement')
+  return {
+    kind: enumValue(value.kind, 'requirement.kind', [
+      'standard', 'design_constraint', 'inclusion', 'exclusion', 'template', 'drawing', 'other',
+    ] as const),
+    detail: requiredText(value.detail, 'requirement.detail', 1_000),
+  }
+}
+
+function buildLocationLabel(specification: ProductionSpecification) {
+  if (specification.locationEnvironment.state !== 'selected') return 'Location TBC'
+  return [
+    selectedLabel(specification.locationEnvironment),
+    selectedLabel(specification.structureType),
+    selectedLabel(specification.locationDetail),
+  ].filter(Boolean).join(' ')
+}
+
+function selectedLabel(value: ProductionSpecificationValue) {
+  if (value.state !== 'selected') return ''
+  return CATALOGUE_BY_ID.get(value.catalogueId)?.productionLabel ?? ''
+}
+
+function formatMeasurement(measurement: ProductionSpecificationMeasurement) {
+  const value = `${measurement.value} ${measurement.unit === 'other' ? '' : measurement.unit}`.trim()
+  return measurement.label ? `${measurement.label} ${value}` : value
+}
+
+function uniqueLabels(values: string[]) {
+  return [...new Set(values.filter(Boolean))]
+}
+
+function objectValue(input: unknown, label: string): Record<string, unknown> {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error(`${label} must be an object.`)
+  return input as Record<string, unknown>
+}
+
+function arrayValue(input: unknown, label: string): unknown[] {
+  if (!Array.isArray(input)) throw new Error(`${label} must be an array.`)
+  if (input.length > 100) throw new Error(`${label} has too many entries.`)
+  return input
+}
+
+function requiredText(input: unknown, label: string, maxLength: number) {
+  if (typeof input !== 'string' || !input.trim()) throw new Error(`${label} is required.`)
+  const value = input.trim()
+  if (value.length > maxLength) throw new Error(`${label} must be ${maxLength} characters or fewer.`)
+  return value
+}
+
+function optionalTextProperty(
+  record: Record<string, unknown>,
+  key: keyof ProductionSpecificationComponent,
+  maxLength: number,
+) {
+  if (record[key] === undefined || record[key] === null || record[key] === '') return {}
+  return { [key]: requiredText(record[key], `component.${key}`, maxLength) }
+}
+
+function enumValue<const T extends readonly string[]>(input: unknown, label: string, allowed: T): T[number] {
+  if (typeof input !== 'string' || !allowed.includes(input)) throw new Error(`${label} is invalid.`)
+  return input as T[number]
+}

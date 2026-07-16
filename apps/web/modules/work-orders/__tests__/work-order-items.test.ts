@@ -84,6 +84,45 @@ describe('attachActiveItemsToWorkOrders', () => {
     expect(workOrder.activeItemCount).toBe(1)
     expect(workOrder.items).toHaveLength(2)
   })
+
+  it('keeps a removed item linked to its confirmed Production Specification and immutable history', () => {
+    const productionSpecification = {
+      id: 'specification-1',
+      status: 'confirmed' as const,
+      draftData: null,
+      confirmedData: { schemaVersion: 1 },
+      productionLabel: '10 mm Toughened Clear Shower Glass',
+      confirmedAt: new Date('2026-07-16T03:30:00.000Z'),
+      history: [{
+        id: 'revision-1',
+        revisionType: 'baseline_confirmed',
+        actorUsername: 'installer@example.com',
+        previousSnapshot: null,
+        newSnapshot: { schemaVersion: 1 },
+        reasonCode: null,
+        note: null,
+        createdAt: new Date('2026-07-16T03:30:00.000Z'),
+      }],
+    }
+    const [workOrder] = attachActiveItemsToWorkOrders(
+      [{ id: 'work-order-1' }],
+      [{
+        ...itemOperationalDefaults(),
+        id: 'item-removed',
+        workOrderId: 'work-order-1',
+        itemCode: 'GLASS-001',
+        quantity: '1.000',
+        originalDescription: 'Original ServiceM8 description',
+        lineTotalExcludingGst: '900.00',
+        generatedLabel: 'Legacy short label',
+        manualLabelOverride: null,
+        isActive: false,
+        productionSpecification,
+      }],
+    )
+
+    expect(workOrder.items[0].productionSpecification).toEqual(productionSpecification)
+  })
 })
 
 describe('applyWorkOrderItemListFilters', () => {

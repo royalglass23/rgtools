@@ -5,6 +5,8 @@ import { clientContacts, clients, leads } from '@rgtools/db/schema-leads'
 import {
   workOrderHardwareStatusOptions,
   workOrderEvents,
+  workOrderItemProductionSpecificationRevisions,
+  workOrderItemProductionSpecifications,
   workOrderInstallers,
   workOrderItems,
   workOrderRefreshRuns,
@@ -140,6 +142,38 @@ const workOrderItemSummarySelection = {
   dateCompleted: workOrderItems.dateCompleted,
   riskLevel: sql<WorkOrderLevel | null>`coalesce(${workOrderItems.riskLevelOverride}, ${workOrderItems.aiRiskLevel})`,
   importance: sql<WorkOrderLevel | null>`coalesce(${workOrderItems.importanceOverride}, ${workOrderItems.aiImportance})`,
+  productionSpecification: {
+    id: workOrderItemProductionSpecifications.id,
+    status: workOrderItemProductionSpecifications.status,
+    draftData: workOrderItemProductionSpecifications.draftData,
+    confirmedData: workOrderItemProductionSpecifications.confirmedData,
+    productionLabel: workOrderItemProductionSpecifications.productionLabel,
+    confirmedAt: workOrderItemProductionSpecifications.confirmedAt,
+    history: sql<Array<{
+      id: string
+      revisionType: string
+      actorUsername: string | null
+      previousSnapshot: unknown
+      newSnapshot: unknown
+      reasonCode: string | null
+      note: string | null
+      createdAt: Date
+    }>>`coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', ${workOrderItemProductionSpecificationRevisions.id},
+        'revisionType', ${workOrderItemProductionSpecificationRevisions.revisionType},
+        'actorUsername', ${users.username},
+        'previousSnapshot', ${workOrderItemProductionSpecificationRevisions.previousSnapshot},
+        'newSnapshot', ${workOrderItemProductionSpecificationRevisions.newSnapshot},
+        'reasonCode', ${workOrderItemProductionSpecificationRevisions.reasonCode},
+        'note', ${workOrderItemProductionSpecificationRevisions.note},
+        'createdAt', ${workOrderItemProductionSpecificationRevisions.createdAt}
+      ) order by ${workOrderItemProductionSpecificationRevisions.createdAt} asc)
+      from ${workOrderItemProductionSpecificationRevisions}
+      left join ${users} on ${users.id} = ${workOrderItemProductionSpecificationRevisions.actorId}
+      where ${workOrderItemProductionSpecificationRevisions.workOrderItemId} = ${workOrderItems.id}
+    ), '[]'::jsonb)`,
+  },
 }
 
 export async function listWorkOrders(filters: WorkOrderListFilters) {
@@ -243,6 +277,10 @@ async function listWorkOrderSummaryItems(
     .leftJoin(workOrderInstallers, eq(workOrderItems.installerId, workOrderInstallers.id))
     .leftJoin(workOrderStageOptions, eq(workOrderItems.stageOptionId, workOrderStageOptions.id))
     .leftJoin(workOrderHardwareStatusOptions, eq(workOrderItems.hardwareStatusOptionId, workOrderHardwareStatusOptions.id))
+    .leftJoin(
+      workOrderItemProductionSpecifications,
+      eq(workOrderItems.id, workOrderItemProductionSpecifications.workOrderItemId),
+    )
     .where(showRemovedItems
       ? inArray(workOrderItems.workOrderId, workOrderIds)
       : and(
@@ -251,7 +289,16 @@ async function listWorkOrderSummaryItems(
       ))
     .orderBy(asc(workOrderItems.workOrderId), asc(workOrderItems.sortOrder), asc(workOrderItems.id))
 
-  return limit === undefined ? query : query.limit(limit)
+  const rows = await (limit === undefined ? query : query.limit(limit))
+  return rows.map((row) => {
+    if (!('productionSpecification' in row)) return row
+    return {
+      ...row,
+      productionSpecification: row.productionSpecification?.id
+        ? row.productionSpecification
+        : null,
+    }
+  })
 }
 
 export async function getWorkOrderFilterOptions() {

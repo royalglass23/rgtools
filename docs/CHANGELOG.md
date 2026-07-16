@@ -25,6 +25,7 @@ All notable changes to rgtools are recorded here, grouped by release.
 - Dashboard KPI cards now focus on active tracked quotes: tracked quote value, active tracked quote count, hot/warm quote count, and viewed quote count.
 
 ### Added
+- **Work Order Production Specifications** - Work Order items can now store a versioned, item-level production specification with controlled catalogue choices, explicit TBC/unmapped states, repeatable measurements/components/requirements, deterministic two-line production labels, Manage-only draft confirmation, and attributable immutable revision history. Existing short labels remain available behind the reversible feature flag.
 - **Work Order Item label lifecycle** - new ServiceM8 item lines receive concise OpenAI production labels after reconciliation; failed generation falls back safely, Manage users can correct or deliberately regenerate labels, and manual wording is preserved when source descriptions change.
 - **Work Order retention operations** - approved 7-year Work Order/event and 2-year refresh-run cleanup now has a protected weekly Vercel Cron route, deployment runbook, monitoring checks, and rollback guidance.
 - **Admin-only Clients v1 cleanup release** - ServiceM8 company/client import, canonical/source client identity metadata, aliases, cleanup filters, dashboard editing, duplicate dismissal/merge, grouped client detail sections, recent activity, audit/error logging, and release rollback notes for MT-176.

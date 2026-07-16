@@ -23,6 +23,26 @@ export type WorkOrderItemSummaryRow = {
   dateCompleted: string | null
   riskLevel: 'low' | 'medium' | 'high' | null
   importance: 'low' | 'medium' | 'high' | null
+  productionSpecification?: WorkOrderItemProductionSpecificationSummary | null
+}
+
+export type WorkOrderItemProductionSpecificationSummary = {
+  id: string
+  status: 'needs_review' | 'confirmed'
+  draftData: unknown
+  confirmedData: unknown
+  productionLabel: string | null
+  confirmedAt: Date | null
+  history: Array<{
+    id: string
+    revisionType: string
+    actorUsername: string | null
+    previousSnapshot: unknown
+    newSnapshot: unknown
+    reasonCode: string | null
+    note: string | null
+    createdAt: Date
+  }>
 }
 
 export type PersistedWorkOrderItemSummaryRow = WorkOrderItemSummaryRow
@@ -58,6 +78,7 @@ export function attachActiveItemsToWorkOrders<T extends { id: string }>(
       dateCompleted: item.dateCompleted,
       riskLevel: item.riskLevel,
       importance: item.importance,
+      productionSpecification: item.productionSpecification,
     }
     groupedItems.push(summaryItem)
     itemsByWorkOrderId.set(item.workOrderId, groupedItems)
