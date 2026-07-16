@@ -7,6 +7,7 @@ const whereCalls = vi.hoisted(() => [] as unknown[])
 const limitCalls = vi.hoisted(() => [] as unknown[])
 const offsetCalls = vi.hoisted(() => [] as unknown[])
 const selectResults = vi.hoisted(() => [] as unknown[])
+const selectShapes = vi.hoisted(() => [] as Array<Record<string, unknown>>)
 
 vi.mock('drizzle-orm', () => {
   function columnName(column: { name?: string }) {
@@ -94,6 +95,26 @@ vi.mock('@rgtools/db/schema-workorders', () => ({
     aiImportance: { name: 'work_order_items.ai_importance' },
     sortOrder: { name: 'work_order_items.sort_order' },
   },
+  workOrderItemProductionSpecifications: {
+    id: { name: 'work_order_item_production_specifications.id' },
+    workOrderItemId: { name: 'work_order_item_production_specifications.work_order_item_id' },
+    status: { name: 'work_order_item_production_specifications.status' },
+    draftData: { name: 'work_order_item_production_specifications.draft_data' },
+    confirmedData: { name: 'work_order_item_production_specifications.confirmed_data' },
+    productionLabel: { name: 'work_order_item_production_specifications.production_label' },
+    confirmedAt: { name: 'work_order_item_production_specifications.confirmed_at' },
+  },
+  workOrderItemProductionSpecificationRevisions: {
+    id: { name: 'work_order_item_production_specification_revisions.id' },
+    workOrderItemId: { name: 'work_order_item_production_specification_revisions.work_order_item_id' },
+    actorId: { name: 'work_order_item_production_specification_revisions.actor_id' },
+    revisionType: { name: 'work_order_item_production_specification_revisions.revision_type' },
+    previousSnapshot: { name: 'work_order_item_production_specification_revisions.previous_snapshot' },
+    newSnapshot: { name: 'work_order_item_production_specification_revisions.new_snapshot' },
+    reasonCode: { name: 'work_order_item_production_specification_revisions.reason_code' },
+    note: { name: 'work_order_item_production_specification_revisions.note' },
+    createdAt: { name: 'work_order_item_production_specification_revisions.created_at' },
+  },
   workOrderInstallers: {
     id: { name: 'installers.id' },
     displayName: { name: 'installers.display_name' },
@@ -170,11 +191,14 @@ function queryBuilder(result: unknown) {
 vi.mock('@/lib/db', () => ({
   db: {
     select: vi.fn((shape: Record<string, unknown>) => ({
-      from: vi.fn(() => queryBuilder(
+      from: vi.fn(() => {
+        selectShapes.push(shape)
+        return queryBuilder(
         selectResults.length > 0
           ? selectResults.shift()
           : ('total' in shape ? [{ total: 0 }] : []),
-      )),
+        )
+      }),
     })),
   },
 }))
@@ -205,9 +229,29 @@ beforeEach(() => {
   limitCalls.length = 0
   offsetCalls.length = 0
   selectResults.length = 0
+  selectShapes.length = 0
 })
 
 describe('listWorkOrders', () => {
+  it('selects the current Production Specification and immutable history with each item row', async () => {
+    const workOrder = workOrderRow({ id: 'work-order-with-specification' })
+    selectResults.push([{ total: 1 }], [workOrder], [])
+
+    await listWorkOrders(filters)
+
+    expect(selectShapes[2]).toEqual(expect.objectContaining({
+      productionSpecification: expect.objectContaining({
+        id: expect.anything(),
+        status: expect.anything(),
+        draftData: expect.anything(),
+        confirmedData: expect.anything(),
+        productionLabel: expect.anything(),
+        confirmedAt: expect.anything(),
+        history: expect.objectContaining({ type: 'sql' }),
+      }),
+    }))
+  })
+
   it('excludes non-current records by default without narrowing to one ServiceM8 status', async () => {
     await listWorkOrders(filters)
 

@@ -3,11 +3,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockUpdateOperationalField = vi.hoisted(() => vi.fn())
 const mockUpdateLabel = vi.hoisted(() => vi.fn())
+const mockSaveSpecificationDraft = vi.hoisted(() => vi.fn())
+const mockConfirmSpecification = vi.hoisted(() => vi.fn())
 
 vi.mock('../actions', () => ({
   updateWorkOrderItemLabelAction: mockUpdateLabel,
   regenerateWorkOrderItemLabelAction: vi.fn(),
   updateWorkOrderItemOperationalFieldAction: mockUpdateOperationalField,
+}))
+vi.mock('../production-specification-actions', () => ({
+  saveWorkOrderItemProductionSpecificationDraftAction: mockSaveSpecificationDraft,
+  confirmWorkOrderItemProductionSpecificationAction: mockConfirmSpecification,
 }))
 
 import { WorkOrderItemsSummary } from '../WorkOrderItemsSummary'
@@ -55,6 +61,263 @@ beforeEach(() => {
 })
 
 describe('WorkOrderItemsSummary', () => {
+  it('shows a confirmed Production Label and accessible read-only specification history to a viewer', () => {
+    render(<WorkOrderItemsSummary items={[workOrderItem({
+      id: 'item-production-specification',
+      itemCode: 'GLASS-SPEC',
+      quantity: '1.000',
+      originalDescription: 'Original noisy ServiceM8 description with pricing and compliance wording',
+      lineTotalExcludingGst: '1200.00',
+      generatedLabel: 'Legacy short label',
+      manualLabelOverride: null,
+      isActive: true,
+      productionSpecification: {
+        id: 'specification-1',
+        status: 'confirmed',
+        draftData: null,
+        confirmedData: confirmedSpecificationDocument(),
+        productionLabel: 'Double Disc | Ext Balcony | 12 mm Toughened Clear | Timber | Chrome | Supply & Install',
+        confirmedAt: new Date('2026-07-16T03:30:00.000Z'),
+        history: [{
+          id: 'revision-1',
+          revisionType: 'baseline_confirmed',
+          actorUsername: 'installer@example.com',
+          previousSnapshot: null,
+          newSnapshot: confirmedSpecificationDocument(),
+          reasonCode: null,
+          note: null,
+          createdAt: new Date('2026-07-16T03:30:00.000Z'),
+        }],
+      },
+    })]} />)
+
+    expect(screen.getByText('Double Disc | Ext Balcony | 12 mm Toughened Clear | Timber | Chrome | Supply & Install')).toHaveClass('line-clamp-2')
+    expect(screen.getByText('Confirmed')).toBeInTheDocument()
+    const disclosure = screen.getByText('View specification')
+    expect(disclosure.closest('details')).toBeInTheDocument()
+    fireEvent.click(disclosure)
+    expect(screen.getByText('Original noisy ServiceM8 description with pricing and compliance wording')).toBeInTheDocument()
+    expect(screen.getByText(/Pool gate hardware/)).toBeInTheDocument()
+    expect(screen.getByText('Custom design to avoid toe hold')).toBeInTheDocument()
+    expect(screen.getByText(/Baseline confirmed by installer@example.com/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save draft' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Confirm specification' })).not.toBeInTheDocument()
+  })
+
+  it('falls back to the existing short label when Production Specifications are disabled', () => {
+    render(<WorkOrderItemsSummary productionSpecificationsEnabled={false} items={[workOrderItem({
+      id: 'item-disabled-specification',
+      itemCode: 'GLASS-FALLBACK',
+      quantity: '1.000',
+      originalDescription: 'Original ServiceM8 description',
+      lineTotalExcludingGst: '1200.00',
+      generatedLabel: 'Existing short label',
+      manualLabelOverride: null,
+      isActive: true,
+      productionSpecification: {
+        id: 'specification-1',
+        status: 'confirmed',
+        draftData: null,
+        confirmedData: confirmedSpecificationDocument(),
+        productionLabel: 'Production label hidden by flag',
+        confirmedAt: new Date('2026-07-16T03:30:00.000Z'),
+        history: [],
+      },
+    })]} />)
+
+    expect(screen.getByText('Existing short label')).toBeInTheDocument()
+    expect(screen.queryByText('Production label hidden by flag')).not.toBeInTheDocument()
+    expect(screen.queryByText('View specification')).not.toBeInTheDocument()
+  })
+
+  it('lets a Manage user reopen a confirmed specification for a later client change', async () => {
+    const confirmed = confirmedSpecificationDocument()
+    mockSaveSpecificationDraft.mockResolvedValue({
+      id: 'specification-1',
+      status: 'needs_review',
+      draftData: confirmed,
+    })
+    render(<WorkOrderItemsSummary canManage items={[workOrderItem({
+      id: 'item-client-change',
+      itemCode: 'GLASS-CHANGE',
+      quantity: '1.000',
+      originalDescription: 'Original ServiceM8 description',
+      lineTotalExcludingGst: '1200.00',
+      generatedLabel: 'Existing short label',
+      manualLabelOverride: null,
+      isActive: true,
+      productionSpecification: {
+        id: 'specification-1',
+        status: 'confirmed',
+        draftData: null,
+        confirmedData: confirmed,
+        productionLabel: 'Double Disc | Ext Balcony | 12 mm Toughened Clear | Timber | Chrome | Supply & Install',
+        confirmedAt: new Date('2026-07-16T03:30:00.000Z'),
+        history: [],
+      },
+    })]} />)
+
+    fireEvent.click(screen.getByText('View specification'))
+    fireEvent.click(screen.getByRole('button', { name: 'Change specification' }))
+
+    await waitFor(() => expect(mockSaveSpecificationDraft).toHaveBeenCalledWith('item-client-change', confirmed))
+    expect(await screen.findByText('Review and correct draft')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Confirm specification' })).toBeInTheDocument()
+  })
+
+  it('lets a Manage user correct a Needs Review draft and confirm it without entering a change reason', async () => {
+    mockSaveSpecificationDraft.mockResolvedValue({ id: 'specification-1', status: 'needs_review' })
+    mockConfirmSpecification.mockResolvedValue({ status: 'confirmed', productionLabel: 'Updated production label' })
+    render(<WorkOrderItemsSummary canManage items={[workOrderItem({
+      id: 'item-draft',
+      itemCode: 'GLASS-DRAFT',
+      quantity: '1.000',
+      originalDescription: 'Original ServiceM8 description',
+      lineTotalExcludingGst: '1200.00',
+      generatedLabel: 'Legacy short label',
+      manualLabelOverride: null,
+      isActive: true,
+      productionSpecification: {
+        id: 'specification-1',
+        status: 'needs_review',
+        draftData: {
+          ...confirmedSpecificationDocument(),
+          measurements: [],
+          additionalComponents: [],
+          specialRequirements: [],
+        },
+        confirmedData: null,
+        productionLabel: null,
+        confirmedAt: null,
+        history: [],
+      },
+    })]} />)
+
+    fireEvent.click(screen.getByText('View specification'))
+    fireEvent.change(screen.getByLabelText('Hardware/Fittings Finish for GLASS-DRAFT'), {
+      target: { value: 'finish.matte-black' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
+
+    await waitFor(() => expect(mockSaveSpecificationDraft).toHaveBeenCalledWith(
+      'item-draft',
+      expect.objectContaining({
+        hardwareFinish: { state: 'selected', catalogueId: 'finish.matte-black' },
+      }),
+    ))
+    expect(screen.getByText('Draft saved')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm specification' }))
+    await waitFor(() => expect(mockConfirmSpecification).toHaveBeenCalledWith('item-draft'))
+    expect(screen.queryByLabelText(/Change reason/)).not.toBeInTheDocument()
+  })
+
+  it('lets a Manage user add structured measurements, components, and special requirements to a draft', async () => {
+    mockSaveSpecificationDraft.mockResolvedValue({ id: 'specification-1', status: 'needs_review' })
+    render(<WorkOrderItemsSummary canManage items={[workOrderItem({
+      id: 'item-repeatable-details',
+      itemCode: 'GLASS-DETAILS',
+      quantity: '1.000',
+      originalDescription: 'Original ServiceM8 description',
+      lineTotalExcludingGst: '1200.00',
+      generatedLabel: 'Legacy short label',
+      manualLabelOverride: null,
+      isActive: true,
+      productionSpecification: {
+        id: 'specification-1',
+        status: 'needs_review',
+        draftData: {
+          ...confirmedSpecificationDocument(),
+          measurements: [],
+          additionalComponents: [],
+          specialRequirements: [],
+        },
+        confirmedData: null,
+        productionLabel: null,
+        confirmedAt: null,
+        history: [],
+      },
+    })]} />)
+
+    fireEvent.click(screen.getByText('View specification'))
+    fireEvent.click(screen.getByRole('button', { name: 'Add measurement' }))
+    fireEvent.change(screen.getByLabelText('Measurement value 1'), { target: { value: '14900' } })
+    fireEvent.change(screen.getByLabelText('Measurement unit 1'), { target: { value: 'mm' } })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add component' }))
+    fireEvent.change(screen.getByLabelText('Component name 1'), { target: { value: 'Pool gate hardware' } })
+    fireEvent.change(screen.getByLabelText('Component quantity 1'), { target: { value: '1 set' } })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add special requirement' }))
+    fireEvent.change(screen.getByLabelText('Special requirement detail 1'), {
+      target: { value: 'Custom design to avoid toe hold' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
+
+    await waitFor(() => expect(mockSaveSpecificationDraft).toHaveBeenCalledWith(
+      'item-repeatable-details',
+      expect.objectContaining({
+        measurements: [expect.objectContaining({ kind: 'other', value: '14900', unit: 'mm' })],
+        additionalComponents: [expect.objectContaining({ name: 'Pool gate hardware', quantity: '1 set' })],
+        specialRequirements: [expect.objectContaining({
+          kind: 'other',
+          detail: 'Custom design to avoid toe hold',
+        })],
+      }),
+    ))
+  })
+
+  it('lets a Manage user create the first TBC draft when an item has not been enriched', async () => {
+    const emptyDraft = {
+      ...confirmedSpecificationDocument(),
+      system: { state: 'tbc' },
+      structureMaterial: { state: 'tbc' },
+      structureType: { state: 'tbc' },
+      locationEnvironment: { state: 'tbc' },
+      structureBuilt: { state: 'tbc' },
+      glassConstruction: { state: 'tbc' },
+      glassAppearance: { state: 'tbc' },
+      thickness: { state: 'tbc' },
+      gateRequired: { state: 'tbc' },
+      fixingMethod: { state: 'tbc' },
+      hardwareFinish: { state: 'tbc' },
+      deliveryScope: { state: 'tbc' },
+      additionalComponents: [],
+      specialRequirements: [],
+    }
+    mockSaveSpecificationDraft.mockResolvedValue({
+      id: 'specification-new',
+      status: 'needs_review',
+      draftData: emptyDraft,
+    })
+    render(<WorkOrderItemsSummary canManage items={[workOrderItem({
+      id: 'item-without-specification',
+      itemCode: 'GLASS-NEW',
+      quantity: '1.000',
+      originalDescription: 'Noisy ServiceM8 description',
+      lineTotalExcludingGst: '900.00',
+      generatedLabel: 'Legacy short label',
+      manualLabelOverride: null,
+      isActive: true,
+      productionSpecification: null,
+    })]} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create specification draft' }))
+
+    await waitFor(() => expect(mockSaveSpecificationDraft).toHaveBeenCalledWith(
+      'item-without-specification',
+      expect.objectContaining({
+        schemaVersion: 1,
+        system: { state: 'tbc' },
+        locationEnvironment: { state: 'tbc' },
+        additionalComponents: [],
+        specialRequirements: [],
+      }),
+    ))
+    expect(await screen.findByText('Needs Review')).toBeInTheDocument()
+    expect(screen.getByText('Legacy short label')).toBeInTheDocument()
+  })
+
   it('renders configured item fields in order and hides the composite Item cell as one field', () => {
     render(<WorkOrderItemsSummary
       fields={[
@@ -447,3 +710,28 @@ describe('WorkOrderItemsSummary', () => {
     expect(mockUpdateOperationalField).toHaveBeenCalledTimes(2)
   })
 })
+
+function confirmedSpecificationDocument() {
+  return {
+    schemaVersion: 1,
+    system: { state: 'selected', catalogueId: 'system.double-disc' },
+    structureMaterial: { state: 'selected', catalogueId: 'structure_material.timber' },
+    structureType: { state: 'selected', catalogueId: 'structure_type.balcony' },
+    locationEnvironment: { state: 'selected', catalogueId: 'location.external' },
+    locationDetail: { state: 'tbc' },
+    structureBuilt: { state: 'selected', catalogueId: 'structure_built.new' },
+    glassConstruction: { state: 'selected', catalogueId: 'glass_construction.toughened' },
+    glassAppearance: { state: 'selected', catalogueId: 'glass_appearance.clear' },
+    thickness: { state: 'selected', catalogueId: 'thickness.12mm' },
+    gateRequired: { state: 'selected', catalogueId: 'gate_required.no' },
+    doorOpeningType: { state: 'tbc' },
+    fixingMethod: { state: 'selected', catalogueId: 'fixing_method.double-disc' },
+    hardwareFinish: { state: 'selected', catalogueId: 'finish.chrome' },
+    systemFinish: { state: 'tbc' },
+    interlinkingRail: { state: 'tbc' },
+    deliveryScope: { state: 'selected', catalogueId: 'delivery_scope.supply-install' },
+    measurements: [],
+    additionalComponents: [{ name: 'Pool gate hardware', quantity: '1' }],
+    specialRequirements: [{ kind: 'design_constraint', detail: 'Custom design to avoid toe hold' }],
+  }
+}
