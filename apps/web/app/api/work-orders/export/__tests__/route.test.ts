@@ -50,6 +50,19 @@ describe('GET /api/work-orders/export', () => {
       '"R260199","Aroha Glass (Royal Homes)","19 Glass Lane","88","Manual balustrade label","Production"',
     ].join('\n'))
   })
+
+  it('returns a bounded-export error instead of materializing an oversized download', async () => {
+    listWorkOrdersForExportMock.mockRejectedValueOnce(new Error(
+      'Work Order export exceeds the 10000-row limit. Narrow the filters and try again.',
+    ))
+
+    const response = await GET(new Request('http://localhost/api/work-orders/export'))
+
+    expect(response.status).toBe(413)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Work Order export exceeds the 10000-row limit. Narrow the filters and try again.',
+    })
+  })
 })
 
 function summaryField(id: string, label: string, visible: boolean, order: number) {

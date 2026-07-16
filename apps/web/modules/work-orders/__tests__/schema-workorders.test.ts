@@ -1,7 +1,7 @@
 import { getTableConfig } from 'drizzle-orm/pg-core'
 import { describe, expect, it } from 'vitest'
 
-import { workOrderEvents, workOrderItems, workOrderRefreshRuns } from '@rgtools/db/schema-workorders'
+import { workOrderEvents, workOrderItems, workOrderRefreshLocks, workOrderRefreshRuns } from '@rgtools/db/schema-workorders'
 
 describe('Work Order Item persistence', () => {
   it('separates stable ServiceM8 source values from RG-owned item tracking', () => {
@@ -45,10 +45,22 @@ describe('Work Order refresh run persistence', () => {
     const columnNames = getTableConfig(workOrderRefreshRuns).columns.map((column) => column.name)
 
     expect(columnNames).toEqual(expect.arrayContaining([
+      'actor_id',
       'synced_count',
       'item_synced_count',
       'excluded_line_count',
       'error_message',
+    ]))
+  })
+
+  it('stores a lease for durable refresh coordination', () => {
+    const config = getTableConfig(workOrderRefreshLocks)
+
+    expect(config.columns.map((column) => column.name)).toEqual(expect.arrayContaining([
+      'lock_name',
+      'owner_id',
+      'lease_expires_at',
+      'updated_at',
     ]))
   })
 })

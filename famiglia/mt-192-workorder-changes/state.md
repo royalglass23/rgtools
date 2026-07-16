@@ -2,42 +2,58 @@
 
 - Mode: full
 - Entry: feature
-- Current phase: verify
-- Status: blocked
+- Current phase: release readiness
+- Status: validation/security GREEN; release readiness NO-GO on target configuration, recovery, staging, and monitoring
 - Repository contract: `CLAUDE.md`, `CONTEXT.md`, Linear `MT-192`, and `famiglia/work-order-items/contract.md`
 - Artifact root: `famiglia/mt-192-workorder-changes/`
-- Issue/contract: Linear `MT-192` with delivery slices `MT-193` through `MT-199`
-- Approval boundary: local implementation and verification of the recorded must-fix findings; no push, merge, deployment, shared database mutation, or production mutation
-- Base/target branch: `feature/workorder` -> `dev` -> `main`; `dev` is currently two merge commits ahead of the feature branch and already contains committed work through `MT-198`
-- Worktree: `D:/Royal Glass Dev/rgtools/.worktrees/feature-workorder`
-- Reviewed baseline: `e2c167aad9f7a77851c548afd3d33b5f7efd0224` plus the dirty `MT-199` working-tree delta
-
-## Quality routing
-
-| Track | Status | Reason |
-|---|---|---|
-| API and interface contracts | required | Work Orders export route and server actions changed |
-| User interface and accessibility | required | Grouped dashboard, inline controls, filters, notices, and admin configuration changed |
-| Data and migrations | required | Work Order Items schema, reconciliation, query, audit, and export behavior changed |
-| External systems and side effects | required | ServiceM8 and OpenAI adapters, database writes, and CSV download are in scope |
-| Performance | required | Parent pagination, child filtering, sorting, and item-row export affect a user-critical data path |
-| Operations and observability | required | Manual refresh status, safe errors, counts, and rollback behavior are production-facing |
+- Branch/worktree: `feature/workorder` / `D:/Royal Glass Dev/rgtools/.worktrees/feature-workorder`
+- Flow: `feature/workorder` -> `dev` -> `main`
+- Approval boundary: local implementation and verification only; no commit, push, merge, deployment, shared database mutation, or production mutation
 
 ## Pipeline
 
-| Stage | Skill | Status | Artifact or evidence |
-|---|---|---|---|
-| Contract reconstruction | godfather | done | Linear `MT-192` and `MT-193` through `MT-199`; local contract and shakedowns |
-| Deliberate tests | testing | done | Post-repair verification: workspace 4/4; focused repaired seams 77 passed / 1 DB-gated skip; full web 810 passed / 17 skipped; web and DB typechecks pass |
-| Execute repairs | soldato | done | `shakedown.md` - must-fix findings repaired test-first; 146/146 Work Orders and 9/9 auxiliary tests pass |
-| Refresh authorization repair | soldato | done | Direct callable refresh boundary now enforces Manage access; full web 804 passed / 16 skipped |
-| ServiceM8 completeness repair | soldato | done | All required datasets now exhaust cursor pagination before reconciliation; full web 807 passed / 16 skipped |
-| Active item write repair | soldato | done | Manual label, operational, and AI regeneration writes require an active row at UPDATE time; full web 810 passed / 17 skipped |
-| Visible runtime proof | testing / Playwright | blocked | The DB race and browser acceptance tests are discoverable and sentinel-protected, but no dedicated migrated E2E database or matching sentinel is configured; authenticated accessibility and representative performance proof are also absent |
-| Security review | omerta | done | `security/signoff.md` - FAIL with no High/Critical; Medium/Low abuse bounds, advisories, retention, logging, and provider-error gaps remain |
-| Exit review | enforcer | done | `review.md` - APPROVED; all three verify must-fixes are resolved and no new code-review must-fix was found |
-| Validation gate | enforcer gate | done | `gate.md` - RED; deterministic checks are green, but strict security, runtime evidence, dependency, and `.gitignore` scope checks remain blocked/failed |
+| Stage | Status | Evidence |
+|---|---|---|
+| Contract and implementation | done | MT-192 / MT-193 through MT-199 |
+| Deliberate tests | PASS | `verification.md`: zero axe violations and full regression/build pass |
+| Security | PASS | `security/signoff.md` |
+| Exit review | APPROVED | `review.md`: no unresolved must-fix |
+| Validation gate | GREEN | `gate.md`: independent Enforcer rerun passed |
+| Release readiness | NO-GO | `getaway.md`: automated accessibility scan, target configuration, PITR/recovery, staging proof, and monitoring ownership remain blocked |
 
-## Next phase
+The isolated E2E sentinel and migrations 0053-0056 are configured and verified. The DB race and MT-199 browser journey pass. Dependency audit, typechecks, lint, build, migration consistency, accessibility, and measured runtime budgets pass.
 
-Return to `/soldato mt-192-workorder-changes` for the first remaining security slice: bound expensive refresh/provider/export work with enforceable single-flight, timeout/page, and size controls. Then rerun Omerta and verify. Before release, also configure the dedicated migrated sentinel database, execute the DB/browser journeys, complete authenticated accessibility and representative performance proof, resolve or accept dependency advisories, and remove or separately justify the unrelated broad `.gitignore` additions.
+Separate `famiglia/workorder-enrichment/` files remain on this branch but outside the MT-192 staging scope. Do not create another branch for them.
+
+## Release-phase evidence
+
+- Fresh retention/cron regression: 2 files and 6 tests passed.
+- `git diff --check`: passed with the existing line-ending warning only.
+- Live remote tips: feature `73c3e843`, dev `95225825`, main `7c04148d`; feature matches its remote and is three commits behind dev.
+- No linked Vercel project/CLI or locally configured `CRON_SECRET` is available for target verification.
+
+## Testing-phase accessibility evidence
+
+- Added `@axe-core/playwright` 4.12.1 to the web test workspace.
+- Added a WCAG 2.0/2.1 A/AA scan to the authenticated MT-199 Work Orders journey.
+- Result: 1 serious `color-contrast` violation, 2 nodes, at `WorkOrdersTableControls.tsx:444`.
+- Disabled Previous/Next contrast is 2.48:1; required 4.5:1.
+- Test file ESLint and web TypeScript pass; production dependency audit remains clean.
+
+## Soldato contrast repair
+
+- Changed only the disabled pagination text token from gray-400 to gray-600; active links remain gray-700.
+- Unchanged authenticated axe scan: 0 violations.
+- MT-199 journey: 1 passed; refresh 3.880s/3.796s/2.436s, export 5.587s.
+- Full web: 137 files passed, 3 skipped; 826 passed, 17 skipped.
+- Workspace: 2 files, 4 tests passed.
+- Lint: 0 errors, 6 unrelated warnings; web/DB TypeScript and production build passed.
+- Existing peer follow-up: NextAuth's optional Nodemailer `^7` declaration versus app Nodemailer 9; not introduced or changed by this slice.
+
+## Enforcer evidence
+
+- Independent axe/MT-199 journey: PASS, 0 violations.
+- Deterministic full web: 137 files/826 tests passed, 3 files/17 tests skipped.
+- Workspace 4/4 and isolated DB race 1/1 passed.
+- Lint 0 errors, both typechecks, 36-route build, Drizzle consistency, production audit, secrets/debug/scope scans, and diff check passed.
+- Review APPROVED; formal validation gate GREEN.

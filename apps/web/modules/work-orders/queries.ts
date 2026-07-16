@@ -20,6 +20,8 @@ import {
 } from './work-order-items'
 import type { WorkOrderRefreshStatusValue } from './WorkOrderRefreshStatus'
 
+export const WORK_ORDER_EXPORT_MAX_ROWS = 10_000
+
 export type WorkOrderBaseRow = {
   id: string
   servicem8Status: string
@@ -188,15 +190,29 @@ export async function listWorkOrdersForExport(
     .leftJoin(workOrderHardwareStatusOptions, eq(workOrders.hardwareStatusOptionId, workOrderHardwareStatusOptions.id))
     .where(listWhere(filters))
     .orderBy(...listOrderBy(filters.sort))
+    .limit(WORK_ORDER_EXPORT_MAX_ROWS + 1)
+
+  if (rows.length > WORK_ORDER_EXPORT_MAX_ROWS) {
+    throw new Error(
+      `Work Order export exceeds the ${WORK_ORDER_EXPORT_MAX_ROWS}-row limit. Narrow the filters and try again.`,
+    )
+  }
 
   if (rows.length === 0) return []
 
   const items = await listWorkOrderSummaryItems(
     rows.map((row) => row.id),
     filters.showRemovedItems,
+    WORK_ORDER_EXPORT_MAX_ROWS + 1,
   )
 
-  return applyWorkOrderItemListFilters(attachActiveItemsToWorkOrders(rows, items), filters)
+  if (items.length > WORK_ORDER_EXPORT_MAX_ROWS) {
+    throw new Error(
+      `Work Order export exceeds the ${WORK_ORDER_EXPORT_MAX_ROWS}-row limit. Narrow the filters and try again.`,
+    )
+  }
+
+  const exportRows = applyWorkOrderItemListFilters(attachActiveItemsToWorkOrders(rows, items), filters)
     .flatMap<WorkOrderExportRow>(({ items: matchingItems, activeItemCount, matchingActiveItemCount, ...workOrder }) => {
       void activeItemCount
       void matchingActiveItemCount
@@ -204,12 +220,24 @@ export async function listWorkOrdersForExport(
         ? matchingItems.map((item) => ({ ...workOrder, item }))
         : [{ ...workOrder, item: null }]
     })
+
+  if (exportRows.length > WORK_ORDER_EXPORT_MAX_ROWS) {
+    throw new Error(
+      `Work Order export exceeds the ${WORK_ORDER_EXPORT_MAX_ROWS}-row limit. Narrow the filters and try again.`,
+    )
+  }
+
+  return exportRows
 }
 
-async function listWorkOrderSummaryItems(workOrderIds: string[], showRemovedItems: boolean) {
+async function listWorkOrderSummaryItems(
+  workOrderIds: string[],
+  showRemovedItems: boolean,
+  limit?: number,
+) {
   if (workOrderIds.length === 0) return []
 
-  return db
+  const query = db
     .select(workOrderItemSummarySelection)
     .from(workOrderItems)
     .leftJoin(workOrderInstallers, eq(workOrderItems.installerId, workOrderInstallers.id))
@@ -222,6 +250,8 @@ async function listWorkOrderSummaryItems(workOrderIds: string[], showRemovedItem
         eq(workOrderItems.isActive, true),
       ))
     .orderBy(asc(workOrderItems.workOrderId), asc(workOrderItems.sortOrder), asc(workOrderItems.id))
+
+  return limit === undefined ? query : query.limit(limit)
 }
 
 export async function getWorkOrderFilterOptions() {

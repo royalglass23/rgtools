@@ -5,6 +5,18 @@ export type WorkOrderAcceptanceDatabaseProof = {
   sentinel: string | null
 }
 
+type WorkOrderAcceptanceQueryResult =
+  | WorkOrderAcceptanceDatabaseProof[]
+  | { rows: WorkOrderAcceptanceDatabaseProof[] }
+
+const WORK_ORDER_ACCEPTANCE_SENTINEL_QUERY = `
+  SELECT
+    current_database() AS "databaseName",
+    sentinel
+  FROM rgtools_e2e.database_sentinel
+  WHERE id = 1
+`
+
 export function createWorkOrderAcceptanceCredentials() {
   return {
     username: `mt199-${randomUUID()}`,
@@ -32,4 +44,12 @@ export async function verifyWorkOrderAcceptanceDatabase({
   }
 
   return proof
+}
+
+export async function readWorkOrderAcceptanceDatabaseProof(
+  query: (statement: string) => Promise<WorkOrderAcceptanceQueryResult>,
+): Promise<WorkOrderAcceptanceDatabaseProof> {
+  const result = await query(WORK_ORDER_ACCEPTANCE_SENTINEL_QUERY)
+  const rows = Array.isArray(result) ? result : result.rows
+  return rows[0] ?? { databaseName: 'unknown', sentinel: null }
 }
