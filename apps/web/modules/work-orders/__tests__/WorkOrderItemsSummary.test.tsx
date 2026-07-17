@@ -5,6 +5,7 @@ const mockUpdateOperationalField = vi.hoisted(() => vi.fn())
 const mockUpdateLabel = vi.hoisted(() => vi.fn())
 const mockSaveSpecificationDraft = vi.hoisted(() => vi.fn())
 const mockConfirmSpecification = vi.hoisted(() => vi.fn())
+const mockRetryEnrichment = vi.hoisted(() => vi.fn())
 
 vi.mock('../actions', () => ({
   updateWorkOrderItemLabelAction: mockUpdateLabel,
@@ -14,9 +15,11 @@ vi.mock('../actions', () => ({
 vi.mock('../production-specification-actions', () => ({
   saveWorkOrderItemProductionSpecificationDraftAction: mockSaveSpecificationDraft,
   confirmWorkOrderItemProductionSpecificationAction: mockConfirmSpecification,
+  retryWorkOrderItemProductionSpecificationEnrichmentAction: mockRetryEnrichment,
 }))
 
 import { WorkOrderItemsSummary } from '../WorkOrderItemsSummary'
+import { INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE } from '../production-specifications'
 import type { WorkOrderItemSummaryRow } from '../work-order-items'
 import type { WorkOrderSummaryFieldConfig } from '../summary-config'
 
@@ -61,6 +64,58 @@ beforeEach(() => {
 })
 
 describe('WorkOrderItemsSummary', () => {
+  it('lets a Manage user retry a safely failed enrichment job', async () => {
+    mockRetryEnrichment.mockResolvedValue({ status: 'queued' })
+    render(<WorkOrderItemsSummary canManage items={[workOrderItem({
+      id: 'item-enrichment-failed',
+      itemCode: 'GLASS-FAIL',
+      quantity: '1.000',
+      originalDescription: 'Original ServiceM8 shower description remains visible',
+      lineTotalExcludingGst: '900.00',
+      generatedLabel: null,
+      manualLabelOverride: null,
+      isActive: true,
+      productionSpecification: null,
+      enrichmentStatus: {
+        status: 'failed',
+        lastSafeError: 'Enrichment failed. Retry is available.',
+      },
+    })]} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Enrichment failed - Retry' }))
+
+    await waitFor(() => expect(mockRetryEnrichment).toHaveBeenCalledWith('item-enrichment-failed'))
+    expect(await screen.findByText('Enrichment queued')).toBeInTheDocument()
+    expect(screen.getByText('Original ServiceM8 shower description remains visible')).toBeInTheDocument()
+  })
+
+  it('announces a safe failure without exposing retry controls to a viewer', () => {
+    render(<WorkOrderItemsSummary items={[workOrderItem({
+      id: 'item-enrichment-failed-viewer',
+      itemCode: 'GLASS-VIEW',
+      quantity: '1.000',
+      originalDescription: 'Original ServiceM8 description remains visible',
+      lineTotalExcludingGst: '900.00',
+      generatedLabel: null,
+      manualLabelOverride: null,
+      isActive: true,
+      productionSpecification: null,
+      enrichmentStatus: {
+        status: 'failed',
+        lastSafeError: 'Enrichment failed. Retry is available.',
+      },
+    })]} />)
+
+    const safeFailure = screen.getByText('Enrichment failed')
+    expect({
+      announced: safeFailure.closest('[role="status"]') !== null,
+      retryControl: screen.queryByRole('button', { name: 'Enrichment failed - Retry' }),
+    }).toEqual({
+      announced: true,
+      retryControl: null,
+    })
+  })
+
   it('shows a confirmed Production Label and accessible read-only specification history to a viewer', () => {
     render(<WorkOrderItemsSummary items={[workOrderItem({
       id: 'item-production-specification',
@@ -102,6 +157,31 @@ describe('WorkOrderItemsSummary', () => {
     expect(screen.getByText(/Baseline confirmed by installer@example.com/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save draft' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Confirm specification' })).not.toBeInTheDocument()
+  })
+
+  it('keeps an authorised manual label correction editable after enrichment', () => {
+    render(<WorkOrderItemsSummary canManage items={[workOrderItem({
+      id: 'item-enriched-label-correction',
+      itemCode: 'GLASS-CORRECTED',
+      quantity: '1.000',
+      originalDescription: 'Original ServiceM8 description',
+      lineTotalExcludingGst: '1200.00',
+      generatedLabel: 'Generated rail label',
+      manualLabelOverride: 'Staff corrected rail label',
+      isActive: true,
+      productionSpecification: {
+        id: 'specification-corrected-label',
+        status: 'confirmed',
+        draftData: null,
+        confirmedData: confirmedSpecificationDocument(),
+        productionLabel: 'Double Disc | Ext Balcony | 12 mm Toughened Clear',
+        confirmedAt: new Date('2026-07-16T03:30:00.000Z'),
+        history: [],
+      },
+    })]} />)
+
+    expect(screen.getByRole('textbox', { name: 'Short label for GLASS-CORRECTED' }))
+      .toHaveValue('Staff corrected rail label')
   })
 
   it('falls back to the existing short label when Production Specifications are disabled', () => {
@@ -212,6 +292,95 @@ describe('WorkOrderItemsSummary', () => {
     expect(screen.queryByLabelText(/Change reason/)).not.toBeInTheDocument()
   })
 
+  it('reviews a worker draft using an active database-only catalogue option', () => {
+    const catalogue = [
+      ...INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE,
+      {
+        id: 'system.custom-rail',
+        field: 'system' as const,
+        displayLabel: 'Custom Rail',
+        productionLabel: 'Custom Rail',
+        aliases: ['custom rail'],
+        isActive: true,
+      },
+    ]
+    render(<WorkOrderItemsSummary
+      canManage
+      catalogue={catalogue}
+      items={[workOrderItem({
+        id: 'item-database-catalogue',
+        itemCode: 'RAIL-CUSTOM',
+        quantity: '1.000',
+        originalDescription: 'Custom rail at balcony',
+        lineTotalExcludingGst: '1200.00',
+        generatedLabel: 'Custom Rail | Ext Balcony',
+        manualLabelOverride: null,
+        isActive: true,
+        productionSpecification: {
+          id: 'specification-database-catalogue',
+          status: 'needs_review',
+          draftData: {
+            ...confirmedSpecificationDocument(),
+            system: { state: 'selected', catalogueId: 'system.custom-rail' },
+          },
+          confirmedData: null,
+          productionLabel: null,
+          confirmedAt: null,
+          history: [],
+        },
+      })]}
+    />)
+
+    fireEvent.click(screen.getByText('View specification'))
+
+    expect(screen.getByLabelText('System for RAIL-CUSTOM')).toHaveValue('system.custom-rail')
+    expect(screen.getByRole('option', { name: 'Custom Rail' })).toBeInTheDocument()
+  })
+
+  it('keeps a confirmed specification readable after its catalogue option is deprecated', () => {
+    const catalogue = [
+      ...INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE,
+      {
+        id: 'system.retired-rail',
+        field: 'system' as const,
+        displayLabel: 'Retired Rail',
+        productionLabel: 'Retired Rail',
+        aliases: [],
+        isActive: false,
+      },
+    ]
+    render(<WorkOrderItemsSummary
+      catalogue={catalogue}
+      items={[workOrderItem({
+        id: 'item-retired-catalogue',
+        itemCode: 'RAIL-RETIRED',
+        quantity: '1.000',
+        originalDescription: 'Historical retired rail specification',
+        lineTotalExcludingGst: '1200.00',
+        generatedLabel: 'Legacy rail label',
+        manualLabelOverride: null,
+        isActive: true,
+        productionSpecification: {
+          id: 'specification-retired-catalogue',
+          status: 'confirmed',
+          draftData: null,
+          confirmedData: {
+            ...confirmedSpecificationDocument(),
+            system: { state: 'selected', catalogueId: 'system.retired-rail' },
+          },
+          productionLabel: 'Retired Rail | Ext Balcony',
+          confirmedAt: new Date('2026-07-16T00:00:00.000Z'),
+          history: [],
+        },
+      })]}
+    />)
+
+    fireEvent.click(screen.getByText('View specification'))
+
+    expect(screen.getByText('Retired Rail')).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Retired Rail' })).not.toBeInTheDocument()
+  })
+
   it('lets a Manage user add structured measurements, components, and special requirements to a draft', async () => {
     mockSaveSpecificationDraft.mockResolvedValue({ id: 'specification-1', status: 'needs_review' })
     render(<WorkOrderItemsSummary canManage items={[workOrderItem({
@@ -315,7 +484,8 @@ describe('WorkOrderItemsSummary', () => {
       }),
     ))
     expect(await screen.findByText('Needs Review')).toBeInTheDocument()
-    expect(screen.getByText('Legacy short label')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Short label for GLASS-NEW' }))
+      .toHaveValue('Legacy short label')
   })
 
   it('renders configured item fields in order and hides the composite Item cell as one field', () => {

@@ -21,6 +21,10 @@ const SPECIFICATION_FIELD_NAMES = [
 
 export type ProductionSpecificationFieldName = typeof SPECIFICATION_FIELD_NAMES[number]
 
+export function isProductionSpecificationFieldName(value: string): value is ProductionSpecificationFieldName {
+  return SPECIFICATION_FIELD_NAMES.includes(value as ProductionSpecificationFieldName)
+}
+
 const SPECIFICATION_CHANGE_LABELS: Record<ProductionSpecificationFieldName, string> = {
   system: 'System',
   structureMaterial: 'Structure Material/Substrate',
@@ -96,6 +100,8 @@ export type ProductionSpecificationCatalogueOption = {
   productionLabel: string
   psCategorySlug?: string
   psOptionSlug?: string
+  aliases?: readonly string[]
+  isActive?: boolean
 }
 
 export const INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE: readonly ProductionSpecificationCatalogueOption[] = [
@@ -105,6 +111,12 @@ export const INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE: readonly ProductionSpec
   option('system.shower-screen', 'system', 'Shower Screen', 'Shower Screen'),
   option('system.glass-pool-fence', 'system', 'Glass Pool Fence', 'Glass Pool Fence'),
   option('system.handrail', 'system', 'Handrail', 'Handrail'),
+  option('system.round-ss-rail', 'system', 'Round Stainless Steel Rail', 'Round SS Rail', undefined, undefined, ['round stainless rail', 'round ss rail']),
+  option('system.double-disc-balustrade', 'system', 'Double Disc Balustrade', 'Double Disc Balustrade', undefined, undefined, ['double disc balustrade']),
+  option('system.edgetec-posiglaze-pool-fence', 'system', 'EdgeTec PosiGlaze Pool Fence', 'EdgeTec PosiGlaze Pool Fence', undefined, undefined, ['edgetec posiglaze', 'posiglaze pool fence']),
+  option('system.handrail-brackets', 'system', 'Handrail Brackets', 'Handrail Brackets', undefined, undefined, ['hand rail brackets']),
+  option('system.pool-fence-variation', 'system', 'Pool Fence Variation', 'Pool Fence Variation', undefined, undefined, ['pool fence design change']),
+  option('system.shower-screens', 'system', 'Shower Screens', 'Shower Screens', undefined, undefined, ['multi screen shower']),
   option('structure_material.timber', 'structureMaterial', 'Timber', 'Timber', 'structure_material', 'timber'),
   option('structure_material.concrete', 'structureMaterial', 'Concrete', 'Concrete', 'structure_material', 'concrete'),
   option('structure_material.steel', 'structureMaterial', 'Steel', 'Steel', 'structure_material', 'steel'),
@@ -138,34 +150,85 @@ export const INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE: readonly ProductionSpec
   option('thickness.17-52mm', 'thickness', '17.52mm', '17.52 mm', 'thickness', '17-52mm'),
   option('gate_required.no', 'gateRequired', 'No', 'No Gate', 'gate_required', 'no'),
   option('gate_required.yes', 'gateRequired', 'Yes', 'Gate', 'gate_required', 'yes'),
+  option('gate_required.one', 'gateRequired', 'One Gate', '1 Gate', undefined, undefined, ['one gate', '1 gate']),
   option('door_opening_type.hinged', 'doorOpeningType', 'Hinged', 'Hinged'),
   option('door_opening_type.sliding', 'doorOpeningType', 'Sliding', 'Sliding'),
   option('door_opening_type.fixed-panel', 'doorOpeningType', 'Fixed Panel', 'Fixed Panel'),
   option('door_opening_type.gate', 'doorOpeningType', 'Gate', 'Gate'),
   option('door_opening_type.none', 'doorOpeningType', 'No Door/Opening', 'No Door'),
+  option('door_opening_type.hinged-fixed-panel', 'doorOpeningType', 'Hinged and Fixed Panel', 'Hinged + Fixed Panel', undefined, undefined, ['hinged plus fixed panel']),
+  option('door_opening_type.multi-screen', 'doorOpeningType', 'Two Single, Corner and Diamond', '2 Single + Corner + Diamond', undefined, undefined, ['two single corner diamond']),
   option('fixing_method.double-disc', 'fixingMethod', 'Double Disc', 'Double Disc'),
-  option('fixing_method.top-mounted-channel', 'fixingMethod', 'Top-Mounted Base Channel', 'Top-Mounted Channel'),
-  option('finish.chrome', 'hardwareFinish', 'Chrome', 'Chrome'),
+  option('fixing_method.top-mounted-channel', 'fixingMethod', 'Top-Mounted Base Channel', 'Top-Mounted Channel', undefined, undefined, ['base channel', 'posiglaze']),
+  option('fixing_method.timber-top-mount', 'fixingMethod', 'Timber Top-Mount', 'Timber Top-Mount', undefined, undefined, ['timber top mount']),
+  option('fixing_method.custom-anti-toe-hold', 'fixingMethod', 'Custom Anti-Toe-Hold Design', 'Custom Anti-Toe-Hold Design', undefined, undefined, ['anti toe hold']),
+  option('finish.chrome', 'hardwareFinish', 'Chrome', 'Chrome', undefined, undefined, ['polished chrome']),
   option('finish.matte-black', 'hardwareFinish', 'Matte Black', 'Matte Black'),
-  option('finish.brushed-nickel', 'hardwareFinish', 'Brushed Nickel', 'Brushed Nickel'),
-  option('system_finish.ironsand', 'systemFinish', 'Ironsand', 'Ironsand'),
-  option('interlinking_rail.21x25mm', 'interlinkingRail', '21 x 25mm Interlinking Rail', 'IL Rail 21 x 25 mm'),
+  option('finish.brushed-nickel', 'hardwareFinish', 'Brushed Nickel', 'Brushed Nickel', undefined, undefined, ['nickel']),
+  option('finish.black', 'hardwareFinish', 'Black', 'Black', undefined, undefined, ['black hardware']),
+  option('system_finish.ironsand', 'systemFinish', 'Ironsand', 'Ironsand', undefined, undefined, ['iron sand']),
+  option('system_finish.316-ss', 'systemFinish', '316 Stainless Steel', '316 SS', undefined, undefined, ['316 stainless', '316 ss']),
+  option('interlinking_rail.21x25mm', 'interlinkingRail', '21 x 25mm Interlinking Rail', 'IL Rail 21 x 25 mm', undefined, undefined, ['il rail', 'interlinking rail']),
   option('delivery_scope.supply-only', 'deliveryScope', 'Supply Only', 'Supply Only'),
-  option('delivery_scope.supply-install', 'deliveryScope', 'Supply and Install', 'Supply & Install'),
+  option('delivery_scope.supply-install', 'deliveryScope', 'Supply and Install', 'Supply & Install', undefined, undefined, ['supply & install']),
   option('delivery_scope.install-only', 'deliveryScope', 'Install Only', 'Install Only'),
+  option('delivery_scope.install-included', 'deliveryScope', 'Installation Included', 'Install Included', undefined, undefined, ['installation included']),
 ]
 
-const CATALOGUE_BY_ID = new Map(INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE.map((entry) => [entry.id, entry]))
+export function resolveProductionSpecificationAlias(
+  field: ProductionSpecificationFieldName,
+  rawValue: string,
+  catalogue: readonly ProductionSpecificationCatalogueOption[] = INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE,
+): string | null {
+  const normalizedValue = rawValue.trim().toLocaleLowerCase('en-NZ')
+  const directMatch = catalogue.find((option) => (
+    option.isActive !== false
+    && option.field === field
+    && [option.id, option.displayLabel, option.productionLabel, ...(option.aliases ?? [])]
+      .some((value) => value.toLocaleLowerCase('en-NZ') === normalizedValue)
+  ))
+  return directMatch?.id ?? null
+}
 
-export function parseProductionSpecification(input: unknown): ProductionSpecification {
+export function parseProductionSpecification(
+  input: unknown,
+  catalogue: readonly ProductionSpecificationCatalogueOption[] = INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE,
+): ProductionSpecification {
+  return parseProductionSpecificationDocument(input, catalogue, false)
+}
+
+export function parsePersistedProductionSpecification(
+  input: unknown,
+  catalogue: readonly ProductionSpecificationCatalogueOption[] = INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE,
+): ProductionSpecification {
+  return parseProductionSpecificationDocument(input, catalogue, true)
+}
+
+function parseProductionSpecificationDocument(
+  input: unknown,
+  catalogue: readonly ProductionSpecificationCatalogueOption[],
+  allowInactiveCatalogueOptions: boolean,
+): ProductionSpecification {
   const record = objectValue(input, 'Production specification')
+  exactKeys(record, [
+    'schemaVersion',
+    ...SPECIFICATION_FIELD_NAMES,
+    'measurements',
+    'additionalComponents',
+    'specialRequirements',
+  ], 'Production specification')
   if (record.schemaVersion !== PRODUCTION_SPECIFICATION_SCHEMA_VERSION) {
     throw new Error(`Production specification schemaVersion must be ${PRODUCTION_SPECIFICATION_SCHEMA_VERSION}.`)
   }
 
   const specification = { schemaVersion: PRODUCTION_SPECIFICATION_SCHEMA_VERSION } as ProductionSpecification
   for (const field of SPECIFICATION_FIELD_NAMES) {
-    specification[field] = parseSpecificationValue(record[field], field)
+    specification[field] = parseSpecificationValue(
+      record[field],
+      field,
+      catalogue,
+      allowInactiveCatalogueOptions,
+    )
   }
   specification.measurements = arrayValue(record.measurements, 'measurements').map(parseMeasurement)
   specification.additionalComponents = arrayValue(record.additionalComponents, 'additionalComponents').map(parseComponent)
@@ -198,38 +261,47 @@ export function createEmptyProductionSpecification(): ProductionSpecification {
   }
 }
 
-export function buildProductionLabel(specification: ProductionSpecification): string {
-  const system = selectedLabel(specification.system)
-  const location = buildLocationLabel(specification)
-  const measurements = specification.measurements.map(formatMeasurement).join(', ')
+export function buildProductionLabel(
+  specification: ProductionSpecification,
+  catalogue: readonly ProductionSpecificationCatalogueOption[] = INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE,
+): string {
+  const labelFor = (value: ProductionSpecificationValue) => selectedLabel(value, catalogue)
+  const system = labelFor(specification.system)
+  const location = buildLocationLabel(specification, catalogue)
+  const measurements = specification.measurements.map(formatMeasurement)
   const glass = [
-    selectedLabel(specification.thickness),
-    selectedLabel(specification.glassConstruction),
-    selectedLabel(specification.glassAppearance),
+    labelFor(specification.thickness),
+    labelFor(specification.glassConstruction),
+    labelFor(specification.glassAppearance),
   ].filter(Boolean).join(' ')
-  const material = selectedLabel(specification.structureMaterial)
-  const fixing = selectedLabel(specification.fixingMethod)
+  const material = labelFor(specification.structureMaterial)
+  const fixing = labelFor(specification.fixingMethod)
   const fixingAndMaterial = [material, fixing && fixing !== system ? fixing : ''].filter(Boolean).join(' / ')
-  const doorOpening = selectedLabel(specification.doorOpeningType)
+  const doorOpening = labelFor(specification.doorOpeningType)
   const finishes = uniqueLabels([
-    selectedLabel(specification.hardwareFinish),
-    selectedLabel(specification.systemFinish),
-  ]).join(' / ')
+    labelFor(specification.hardwareFinish),
+    labelFor(specification.systemFinish),
+  ]).join('/')
   const extras = [
-    selectedLabel(specification.interlinkingRail),
-    selectedLabel(specification.gateRequired) === 'Gate' ? 'Gate' : '',
+    labelFor(specification.interlinkingRail),
+    labelFor(specification.gateRequired) === 'No Gate' ? '' : labelFor(specification.gateRequired),
   ].filter(Boolean).join(' / ')
-  const scope = selectedLabel(specification.deliveryScope)
+  const scope = labelFor(specification.deliveryScope)
 
-  return [system, location, measurements, glass, doorOpening, fixingAndMaterial, finishes, extras, scope]
+  return [system, location, ...measurements, glass, doorOpening, fixingAndMaterial, finishes, extras, scope]
     .filter(Boolean)
     .join(' | ')
 }
 
-export function productionSpecificationValueLabel(value: ProductionSpecificationValue) {
+export function productionSpecificationValueLabel(
+  value: ProductionSpecificationValue,
+  catalogue: readonly ProductionSpecificationCatalogueOption[] = INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE,
+) {
   if (value.state === 'tbc') return 'TBC'
   if (value.state === 'unmapped') return `Unmapped - ${value.raw}`
-  return CATALOGUE_BY_ID.get(value.catalogueId)?.displayLabel ?? 'Unmapped - Needs Review'
+  return catalogue.find((option) => (
+    option.id === value.catalogueId
+  ))?.displayLabel ?? 'Unmapped - Needs Review'
 }
 
 export function confirmProductionSpecificationDraft(input: {
@@ -239,12 +311,14 @@ export function confirmProductionSpecificationDraft(input: {
   previousConfirmed: ProductionSpecification | null
   actorId: string | null
   confirmedAt: Date
+  catalogue?: readonly ProductionSpecificationCatalogueOption[]
 }) {
-  const confirmedData = parseProductionSpecification(input.draft)
-  const productionLabel = buildProductionLabel(confirmedData)
+  const catalogue = input.catalogue ?? INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE
+  const confirmedData = parseProductionSpecification(input.draft, catalogue)
+  const productionLabel = buildProductionLabel(confirmedData, catalogue)
   if (!productionLabel) throw new Error('Production specification cannot be confirmed without a production label.')
   const automaticChangeNote = input.previousConfirmed
-    ? summarizeProductionSpecificationChanges(input.previousConfirmed, confirmedData)
+    ? summarizeProductionSpecificationChanges(input.previousConfirmed, confirmedData, catalogue)
     : null
 
   return {
@@ -275,10 +349,11 @@ export function confirmProductionSpecificationDraft(input: {
 export function summarizeProductionSpecificationChanges(
   previous: ProductionSpecification,
   next: ProductionSpecification,
+  catalogue: readonly ProductionSpecificationCatalogueOption[] = INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE,
 ) {
   const changes = SPECIFICATION_FIELD_NAMES.flatMap((field) => {
     if (JSON.stringify(previous[field]) === JSON.stringify(next[field])) return []
-    return [`${SPECIFICATION_CHANGE_LABELS[field]}: ${productionSpecificationValueLabel(previous[field])} -> ${productionSpecificationValueLabel(next[field])}`]
+    return [`${SPECIFICATION_CHANGE_LABELS[field]}: ${productionSpecificationValueLabel(previous[field], catalogue)} -> ${productionSpecificationValueLabel(next[field], catalogue)}`]
   })
   if (JSON.stringify(previous.measurements) !== JSON.stringify(next.measurements)) changes.push('Measurements updated')
   if (JSON.stringify(previous.additionalComponents) !== JSON.stringify(next.additionalComponents)) changes.push('Additional Components updated')
@@ -293,19 +368,36 @@ function option(
   productionLabel: string,
   psCategorySlug?: string,
   psOptionSlug?: string,
+  aliases?: readonly string[],
 ): ProductionSpecificationCatalogueOption {
-  return { id, field, displayLabel, productionLabel, psCategorySlug, psOptionSlug }
+  return { id, field, displayLabel, productionLabel, psCategorySlug, psOptionSlug, aliases }
 }
 
-function parseSpecificationValue(input: unknown, field: ProductionSpecificationFieldName): ProductionSpecificationValue {
+function parseSpecificationValue(
+  input: unknown,
+  field: ProductionSpecificationFieldName,
+  catalogue: readonly ProductionSpecificationCatalogueOption[],
+  allowInactiveCatalogueOptions: boolean,
+): ProductionSpecificationValue {
   const value = objectValue(input, field)
-  if (value.state === 'tbc') return { state: 'tbc' }
-  if (value.state === 'unmapped') return { state: 'unmapped', raw: requiredText(value.raw, `${field}.raw`, 240) }
+  if (value.state === 'tbc') {
+    exactKeys(value, ['state'], field)
+    return { state: 'tbc' }
+  }
+  if (value.state === 'unmapped') {
+    exactKeys(value, ['state', 'raw'], field)
+    return { state: 'unmapped', raw: requiredText(value.raw, `${field}.raw`, 240) }
+  }
   if (value.state !== 'selected') throw new Error(`${field}.state is invalid.`)
+  exactKeys(value, ['state', 'catalogueId'], field)
 
   const catalogueId = requiredText(value.catalogueId, `${field}.catalogueId`, 120)
-  const catalogueOption = CATALOGUE_BY_ID.get(catalogueId)
-  if (!catalogueOption || catalogueOption.field !== field) {
+  const catalogueOption = catalogue.find((option) => option.id === catalogueId)
+  if (
+    !catalogueOption
+    || catalogueOption.field !== field
+    || (!allowInactiveCatalogueOptions && catalogueOption.isActive === false)
+  ) {
     throw new Error(`${catalogueId} is not an approved ${field} catalogue option.`)
   }
   return { state: 'selected', catalogueId }
@@ -313,6 +405,7 @@ function parseSpecificationValue(input: unknown, field: ProductionSpecificationF
 
 function parseMeasurement(input: unknown): ProductionSpecificationMeasurement {
   const value = objectValue(input, 'measurement')
+  exactKeys(value, ['kind', 'value', 'unit', 'label'], 'measurement')
   const kind = enumValue(value.kind, 'measurement.kind', ['quantity', 'length', 'width', 'height', 'diameter', 'other'] as const)
   const unit = enumValue(value.unit, 'measurement.unit', ['mm', 'm', 'each', 'other'] as const)
   return {
@@ -325,6 +418,7 @@ function parseMeasurement(input: unknown): ProductionSpecificationMeasurement {
 
 function parseComponent(input: unknown): ProductionSpecificationComponent {
   const value = objectValue(input, 'component')
+  exactKeys(value, ['name', 'quantity', 'dimensions', 'material', 'finish', 'notes'], 'component')
   return {
     name: requiredText(value.name, 'component.name', 160),
     ...optionalTextProperty(value, 'quantity', 40),
@@ -337,6 +431,7 @@ function parseComponent(input: unknown): ProductionSpecificationComponent {
 
 function parseRequirement(input: unknown): ProductionSpecificationRequirement {
   const value = objectValue(input, 'requirement')
+  exactKeys(value, ['kind', 'detail'], 'requirement')
   return {
     kind: enumValue(value.kind, 'requirement.kind', [
       'standard', 'design_constraint', 'inclusion', 'exclusion', 'template', 'drawing', 'other',
@@ -345,18 +440,27 @@ function parseRequirement(input: unknown): ProductionSpecificationRequirement {
   }
 }
 
-function buildLocationLabel(specification: ProductionSpecification) {
-  if (specification.locationEnvironment.state !== 'selected') return 'Location TBC'
+function buildLocationLabel(
+  specification: ProductionSpecification,
+  catalogue: readonly ProductionSpecificationCatalogueOption[],
+) {
+  if (specification.locationEnvironment.state !== 'selected') {
+    const detail = selectedLabel(specification.locationDetail, catalogue)
+    return detail ? `Location TBC - ${detail}` : 'Location TBC'
+  }
   return [
-    selectedLabel(specification.locationEnvironment),
-    selectedLabel(specification.structureType),
-    selectedLabel(specification.locationDetail),
+    selectedLabel(specification.locationEnvironment, catalogue),
+    selectedLabel(specification.structureType, catalogue),
+    selectedLabel(specification.locationDetail, catalogue),
   ].filter(Boolean).join(' ')
 }
 
-function selectedLabel(value: ProductionSpecificationValue) {
+function selectedLabel(
+  value: ProductionSpecificationValue,
+  catalogue: readonly ProductionSpecificationCatalogueOption[],
+) {
   if (value.state !== 'selected') return ''
-  return CATALOGUE_BY_ID.get(value.catalogueId)?.productionLabel ?? ''
+  return catalogue.find((option) => option.id === value.catalogueId && option.isActive !== false)?.productionLabel ?? ''
 }
 
 function formatMeasurement(measurement: ProductionSpecificationMeasurement) {
@@ -371,6 +475,11 @@ function uniqueLabels(values: string[]) {
 function objectValue(input: unknown, label: string): Record<string, unknown> {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error(`${label} must be an object.`)
   return input as Record<string, unknown>
+}
+
+function exactKeys(record: Record<string, unknown>, allowed: readonly string[], label: string) {
+  const unsupported = Object.keys(record).find((key) => !allowed.includes(key))
+  if (unsupported) throw new Error(`${label} contains unsupported field ${unsupported}.`)
 }
 
 function arrayValue(input: unknown, label: string): unknown[] {

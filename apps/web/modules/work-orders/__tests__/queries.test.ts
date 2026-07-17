@@ -102,7 +102,15 @@ vi.mock('@rgtools/db/schema-workorders', () => ({
     draftData: { name: 'work_order_item_production_specifications.draft_data' },
     confirmedData: { name: 'work_order_item_production_specifications.confirmed_data' },
     productionLabel: { name: 'work_order_item_production_specifications.production_label' },
+    evidenceData: { name: 'work_order_item_production_specifications.evidence_data' },
+    ambiguityFlags: { name: 'work_order_item_production_specifications.ambiguity_flags' },
     confirmedAt: { name: 'work_order_item_production_specifications.confirmed_at' },
+  },
+  workOrderItemEnrichmentJobs: {
+    workOrderItemId: { name: 'work_order_item_enrichment_jobs.work_order_item_id' },
+    status: { name: 'work_order_item_enrichment_jobs.status' },
+    lastSafeError: { name: 'work_order_item_enrichment_jobs.last_safe_error' },
+    createdAt: { name: 'work_order_item_enrichment_jobs.created_at' },
   },
   workOrderItemProductionSpecificationRevisions: {
     id: { name: 'work_order_item_production_specification_revisions.id' },
@@ -246,8 +254,14 @@ describe('listWorkOrders', () => {
         draftData: expect.anything(),
         confirmedData: expect.anything(),
         productionLabel: expect.anything(),
+        evidenceData: expect.anything(),
+        ambiguityFlags: expect.anything(),
         confirmedAt: expect.anything(),
         history: expect.objectContaining({ type: 'sql' }),
+      }),
+      enrichmentStatus: expect.objectContaining({
+        status: expect.objectContaining({ type: 'sql' }),
+        lastSafeError: expect.objectContaining({ type: 'sql' }),
       }),
     }))
   })

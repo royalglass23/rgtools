@@ -8,6 +8,7 @@ import { WorkOrderRefreshStatus } from '@/modules/work-orders/WorkOrderRefreshSt
 import { WorkOrderRefreshButton } from '@/modules/work-orders/WorkOrderRefreshButton'
 import { DismissibleNotice } from '@/modules/ui/DismissibleNotice'
 import { getWorkOrderSummaryConfig } from '@/modules/work-orders/summary-config'
+import { loadProductionSpecificationCatalogue } from '@/modules/work-orders/production-specification-catalogue'
 
 export default async function WorkOrdersPage({
   searchParams,
@@ -19,12 +20,13 @@ export default async function WorkOrdersPage({
   const filters = parseWorkOrderListFilters(resolvedSearchParams)
   const refreshError = typeof resolvedSearchParams.refreshError === 'string' ? resolvedSearchParams.refreshError : null
   const exportHref = `/api/work-orders/export?${exportParams(resolvedSearchParams)}`
-  const [{ rows, total, pageCount }, options, permissions, summaryFields, refreshStatus] = await Promise.all([
+  const [{ rows, total, pageCount }, options, permissions, summaryFields, refreshStatus, catalogue] = await Promise.all([
     listWorkOrders(filters),
     getWorkOrderFilterOptions(),
     getCurrentWorkOrderPermissions(),
     getWorkOrderSummaryConfig(),
     getWorkOrderRefreshStatus(),
+    loadProductionSpecificationCatalogue(),
   ])
 
   return (
@@ -67,6 +69,7 @@ export default async function WorkOrdersPage({
         total={total}
         pageCount={pageCount}
         canManage={permissions.canManage}
+        catalogue={catalogue}
       />
     </div>
   )

@@ -27,6 +27,13 @@ export const workOrderProductionSpecificationStatusEnum = pgEnum('work_order_pro
   'needs_review',
   'confirmed',
 ])
+export const workOrderItemEnrichmentStatusEnum = pgEnum('work_order_item_enrichment_status', [
+  'queued',
+  'processing',
+  'completed',
+  'failed',
+])
+export type WorkOrderItemEnrichmentStatusValue = typeof workOrderItemEnrichmentStatusEnum.enumValues[number]
 
 export const workOrderInstallers = pgTable('work_order_installers', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -141,6 +148,7 @@ export const workOrderItems = pgTable('work_order_items', {
   lineTotalExcludingGst: numeric('line_total_excluding_gst', { precision: 12, scale: 2 }),
   sortOrder: integer('sort_order').default(0).notNull(),
   isActive: boolean('is_active').default(true).notNull(),
+  enrichmentHandoffPending: boolean('enrichment_handoff_pending').default(false).notNull(),
   generatedLabel: text('generated_label'),
   manualLabelOverride: text('manual_label_override'),
   labelStatus: workOrderItemLabelStatusEnum('label_status').default('pending').notNull(),
@@ -190,6 +198,13 @@ export const workOrderItemProductionSpecifications = pgTable('work_order_item_pr
   schemaVersion: integer('schema_version').default(1).notNull(),
   draftData: jsonb('draft_data').$type<Record<string, unknown>>(),
   confirmedData: jsonb('confirmed_data').$type<Record<string, unknown>>(),
+  evidenceData: jsonb('evidence_data').$type<Array<Record<string, unknown>>>().default([]).notNull(),
+  ambiguityFlags: jsonb('ambiguity_flags').$type<string[]>().default([]).notNull(),
+  sourceDescriptionFingerprint: text('source_description_fingerprint'),
+  extractionSchemaVersion: integer('extraction_schema_version'),
+  promptVersion: text('prompt_version'),
+  modelIdentifier: text('model_identifier'),
+  generatedAt: timestamp('generated_at', { withTimezone: true }),
   productionLabel: text('production_label'),
   draftUpdatedBy: uuid('draft_updated_by').references(() => users.id, { onDelete: 'set null' }),
   draftUpdatedAt: timestamp('draft_updated_at', { withTimezone: true }),
@@ -200,6 +215,34 @@ export const workOrderItemProductionSpecifications = pgTable('work_order_item_pr
 }, (table) => [
   uniqueIndex('work_order_item_production_specifications_item_uq').on(table.workOrderItemId),
   index('work_order_item_production_specifications_status_idx').on(table.status),
+])
+
+export const workOrderItemEnrichmentJobs = pgTable('work_order_item_enrichment_jobs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workOrderItemId: uuid('work_order_item_id').notNull().references(() => workOrderItems.id, { onDelete: 'cascade' }),
+  sourceDescription: text('source_description').notNull(),
+  sourceDescriptionFingerprint: text('source_description_fingerprint').notNull(),
+  extractionSchemaVersion: integer('extraction_schema_version').notNull(),
+  promptVersion: text('prompt_version').notNull(),
+  status: workOrderItemEnrichmentStatusEnum('status').default('queued').notNull(),
+  attemptCount: integer('attempt_count').default(0).notNull(),
+  availableAt: timestamp('available_at', { withTimezone: true }).defaultNow().notNull(),
+  lockedAt: timestamp('locked_at', { withTimezone: true }),
+  leaseExpiresAt: timestamp('lease_expires_at', { withTimezone: true }),
+  modelIdentifier: text('model_identifier'),
+  lastSafeError: text('last_safe_error'),
+  generatedAt: timestamp('generated_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('work_order_item_enrichment_jobs_key_uq').on(
+    table.workOrderItemId,
+    table.sourceDescriptionFingerprint,
+    table.extractionSchemaVersion,
+    table.promptVersion,
+  ),
+  index('work_order_item_enrichment_jobs_status_available_idx').on(table.status, table.availableAt),
+  index('work_order_item_enrichment_jobs_item_created_idx').on(table.workOrderItemId, table.createdAt),
 ])
 
 export const workOrderItemProductionSpecificationRevisions = pgTable('work_order_item_production_specification_revisions', {

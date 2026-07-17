@@ -69,6 +69,14 @@ Basic steps:
 4. Open the work order to view job details.
 5. Update internal operational fields such as stage, installer, install date, risk, importance, or notes when needed.
 
+New ServiceM8 item lines may show **Enrichment queued** or **Enrichment processing** while RGTools
+prepares a Production Specification draft. A completed draft is marked **Needs Review** and must be
+checked and confirmed by a user with Manage access; AI never confirms it automatically.
+
+If an item shows **Enrichment failed - Retry**, confirm the original ServiceM8 description is safe
+and accurate, then use Retry. View-only users can see that enrichment failed but cannot retry,
+edit, or confirm the specification. The original ServiceM8 description remains visible throughout.
+
 Work Order is for managing active work, not for scoring new leads or creating quote links.
 
 ## Simple Handoff

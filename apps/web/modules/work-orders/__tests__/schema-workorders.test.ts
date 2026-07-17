@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   workOrderEvents,
+  workOrderItemEnrichmentJobs,
   workOrderItemProductionSpecificationRevisions,
   workOrderItemProductionSpecifications,
   workOrderItems,
@@ -129,5 +130,11 @@ describe('Work Order Item Production Specification persistence', () => {
       'ps3_applicable',
       'is_active',
     ]))
+  })
+
+  it('constrains enrichment jobs to the shared lifecycle states', () => {
+    const status = getTableConfig(workOrderItemEnrichmentJobs).columns.find((column) => column.name === 'status')
+
+    expect(status?.enumValues).toEqual(['queued', 'processing', 'completed', 'failed'])
   })
 })

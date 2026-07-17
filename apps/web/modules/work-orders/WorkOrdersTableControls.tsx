@@ -8,6 +8,10 @@ import type { WorkOrderListFilters } from './list-filters'
 import type { WorkOrderRow } from './queries'
 import type { WorkOrderSummaryFieldConfig } from './summary-config'
 import { WorkOrderItemsSummary } from './WorkOrderItemsSummary'
+import {
+  INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE,
+  type ProductionSpecificationCatalogueOption,
+} from './production-specifications'
 
 type FilterOption = { id: string; label: string }
 
@@ -28,6 +32,7 @@ export function WorkOrdersTableControls({
   paramPrefix = '',
   isAdmin = false,
   canManage = false,
+  catalogue = INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE,
 }: {
   rows: WorkOrderRow[]
   filters: WorkOrderListFilters
@@ -39,6 +44,7 @@ export function WorkOrdersTableControls({
   paramPrefix?: string
   isAdmin?: boolean
   canManage?: boolean
+  catalogue?: readonly ProductionSpecificationCatalogueOption[]
 }) {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds])
@@ -108,6 +114,7 @@ export function WorkOrdersTableControls({
         options={options}
         isAdmin={isAdmin}
         canManage={canManage}
+        catalogue={catalogue}
         selectedSet={selectedSet}
         allVisibleSelected={allVisibleSelected}
         onToggleWorkOrder={toggleWorkOrder}
@@ -228,6 +235,7 @@ function WorkOrdersTable({
   options,
   isAdmin,
   canManage,
+  catalogue,
   selectedSet,
   allVisibleSelected,
   onToggleWorkOrder,
@@ -239,6 +247,7 @@ function WorkOrdersTable({
   options: WorkOrderFilterOptions
   isAdmin: boolean
   canManage: boolean
+  catalogue: readonly ProductionSpecificationCatalogueOption[]
   selectedSet: Set<string>
   allVisibleSelected: boolean
   onToggleWorkOrder: (workOrderId: string) => void
@@ -332,6 +341,7 @@ function WorkOrdersTable({
                   canManage={canManage}
                   fields={fields}
                   tone={jobTone}
+                  catalogue={catalogue}
                 />
               )}
             </section>

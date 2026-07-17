@@ -16,7 +16,17 @@ vi.mock('next/link', () => ({
   ),
 }))
 
-vi.mock('../actions', () => ({ batchDeleteWorkOrdersAction: vi.fn() }))
+vi.mock('../actions', () => ({
+  batchDeleteWorkOrdersAction: vi.fn(),
+  regenerateWorkOrderItemLabelAction: vi.fn(),
+  updateWorkOrderItemLabelAction: vi.fn(),
+  updateWorkOrderItemOperationalFieldAction: vi.fn(),
+}))
+vi.mock('../production-specification-actions', () => ({
+  confirmWorkOrderItemProductionSpecificationAction: vi.fn(),
+  retryWorkOrderItemProductionSpecificationEnrichmentAction: vi.fn(),
+  saveWorkOrderItemProductionSpecificationDraftAction: vi.fn(),
+}))
 
 const filters: WorkOrderListFilters = {
   q: '',
