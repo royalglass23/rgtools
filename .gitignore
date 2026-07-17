@@ -64,6 +64,9 @@ docs/superpowers/
 docs/codex/
 docs/adr/
 docs/dev/
+!docs/dev/
+docs/dev/*
+!docs/dev/work-order-enrichment.md
 CONTEXT.md
 workers/tracker/.dev.vars
 

@@ -10,6 +10,10 @@
   },
   "crons": [
     {
+      "path": "/api/cron/work-orders-enrichment",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/work-orders-retention",
       "schedule": "0 15 * * 0"
     }

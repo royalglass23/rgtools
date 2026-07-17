@@ -1,12 +1,13 @@
 'use server'
 
-import { and, eq } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 import {
   workOrderEvents,
+  workOrderItemEnrichmentJobs,
   workOrderItemProductionSpecificationRevisions,
   workOrderItemProductionSpecifications,
   workOrderItems,
@@ -15,8 +16,12 @@ import { assertCurrentUserCanManageWorkOrders } from './permissions'
 import {
   PRODUCTION_SPECIFICATION_SCHEMA_VERSION,
   confirmProductionSpecificationDraft,
+  parsePersistedProductionSpecification,
   parseProductionSpecification,
 } from './production-specifications'
+import { fingerprintSourceDescription } from './item-label-lifecycle'
+import { loadProductionSpecificationCatalogue } from './production-specification-catalogue'
+import { WORK_ORDER_ENRICHMENT_PROMPT_VERSION } from './enrichment-jobs'
 
 export async function saveWorkOrderItemProductionSpecificationDraftAction(
   itemId: string,
@@ -25,7 +30,8 @@ export async function saveWorkOrderItemProductionSpecificationDraftAction(
   await assertCurrentUserCanManageWorkOrders()
   const session = await auth()
   const actorId = session?.user?.id ?? null
-  const draft = parseProductionSpecification(input)
+  const catalogue = await loadProductionSpecificationCatalogue()
+  const draft = parseProductionSpecification(input, catalogue)
   const now = new Date()
 
   const saved = await db.transaction(async (tx) => {
@@ -68,7 +74,7 @@ export async function saveWorkOrderItemProductionSpecificationDraftAction(
     return {
       id: specification.id,
       status: specification.status,
-      draftData: parseProductionSpecification(specification.draftData),
+      draftData: parseProductionSpecification(specification.draftData, catalogue),
     }
   })
 
@@ -81,6 +87,7 @@ export async function confirmWorkOrderItemProductionSpecificationAction(itemId: 
   const session = await auth()
   const actorId = session?.user?.id ?? null
   const confirmedAt = new Date()
+  const catalogue = await loadProductionSpecificationCatalogue()
 
   const confirmed = await db.transaction(async (tx) => {
     const [item] = await tx
@@ -108,12 +115,13 @@ export async function confirmWorkOrderItemProductionSpecificationAction(itemId: 
     const transition = confirmProductionSpecificationDraft({
       specificationId: current.id,
       workOrderItemId: itemId,
-      draft: parseProductionSpecification(current.draftData),
+      draft: parseProductionSpecification(current.draftData, catalogue),
       previousConfirmed: current.confirmedData
-        ? parseProductionSpecification(current.confirmedData)
+        ? parsePersistedProductionSpecification(current.confirmedData, catalogue)
         : null,
       actorId,
       confirmedAt,
+      catalogue,
     })
     const specificationValues = {
       ...transition.specification,
@@ -152,4 +160,110 @@ export async function confirmWorkOrderItemProductionSpecificationAction(itemId: 
 
   revalidatePath('/work-orders')
   return confirmed
+}
+
+export async function retryWorkOrderItemProductionSpecificationEnrichmentAction(itemId: string) {
+  await assertCurrentUserCanManageWorkOrders()
+  const session = await auth()
+  const actorId = session?.user?.id ?? null
+
+  const retried = await db.transaction(async (tx) => {
+    const [item] = await tx
+      .select({
+        id: workOrderItems.id,
+        workOrderId: workOrderItems.workOrderId,
+        isActive: workOrderItems.isActive,
+        originalDescription: workOrderItems.originalDescription,
+      })
+      .from(workOrderItems)
+      .where(and(eq(workOrderItems.id, itemId), eq(workOrderItems.isActive, true)))
+      .limit(1)
+    if (!item) throw new Error('The Work Order item is unavailable or has been removed.')
+
+    const [failedJob] = await tx
+      .select({
+        id: workOrderItemEnrichmentJobs.id,
+        sourceDescription: workOrderItemEnrichmentJobs.sourceDescription,
+        extractionSchemaVersion: workOrderItemEnrichmentJobs.extractionSchemaVersion,
+        promptVersion: workOrderItemEnrichmentJobs.promptVersion,
+      })
+      .from(workOrderItemEnrichmentJobs)
+      .where(and(
+        eq(workOrderItemEnrichmentJobs.workOrderItemId, itemId),
+        eq(
+          workOrderItemEnrichmentJobs.sourceDescriptionFingerprint,
+          fingerprintSourceDescription(item.originalDescription),
+        ),
+        eq(workOrderItemEnrichmentJobs.status, 'failed'),
+      ))
+      .orderBy(desc(workOrderItemEnrichmentJobs.createdAt))
+      .limit(1)
+    if (!failedJob) throw new Error('This item does not have a failed enrichment job to retry.')
+
+    const now = new Date()
+    const versionIsCurrent = failedJob.extractionSchemaVersion === PRODUCTION_SPECIFICATION_SCHEMA_VERSION
+      && failedJob.promptVersion === WORK_ORDER_ENRICHMENT_PROMPT_VERSION
+    const [job] = versionIsCurrent
+      ? await tx
+        .update(workOrderItemEnrichmentJobs)
+        .set({
+          status: 'queued',
+          attemptCount: 0,
+          availableAt: now,
+          lockedAt: null,
+          leaseExpiresAt: null,
+          lastSafeError: null,
+          updatedAt: now,
+        })
+        .where(and(
+          eq(workOrderItemEnrichmentJobs.id, failedJob.id),
+          eq(workOrderItemEnrichmentJobs.status, 'failed'),
+        ))
+        .returning({ id: workOrderItemEnrichmentJobs.id, status: workOrderItemEnrichmentJobs.status })
+      : await tx
+        .insert(workOrderItemEnrichmentJobs)
+        .values({
+          workOrderItemId: itemId,
+          sourceDescription: failedJob.sourceDescription,
+          sourceDescriptionFingerprint: fingerprintSourceDescription(item.originalDescription),
+          extractionSchemaVersion: PRODUCTION_SPECIFICATION_SCHEMA_VERSION,
+          promptVersion: WORK_ORDER_ENRICHMENT_PROMPT_VERSION,
+          status: 'queued',
+          availableAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoNothing({
+          target: [
+            workOrderItemEnrichmentJobs.workOrderItemId,
+            workOrderItemEnrichmentJobs.sourceDescriptionFingerprint,
+            workOrderItemEnrichmentJobs.extractionSchemaVersion,
+            workOrderItemEnrichmentJobs.promptVersion,
+          ],
+        })
+        .returning({ id: workOrderItemEnrichmentJobs.id, status: workOrderItemEnrichmentJobs.status })
+    if (!job) throw new Error('Enrichment retry could not be queued.')
+
+    await tx.insert(workOrderEvents).values({
+      workOrderId: item.workOrderId,
+      workOrderItemId: itemId,
+      actorId,
+      fieldName: 'production_specification_enrichment_retried',
+      previousValue: {
+        jobId: failedJob.id,
+        extractionSchemaVersion: failedJob.extractionSchemaVersion,
+        promptVersion: failedJob.promptVersion,
+      },
+      newValue: {
+        jobId: job.id,
+        extractionSchemaVersion: PRODUCTION_SPECIFICATION_SCHEMA_VERSION,
+        promptVersion: WORK_ORDER_ENRICHMENT_PROMPT_VERSION,
+      },
+      note: null,
+      isClientVisibleCandidate: false,
+    })
+    return job
+  })
+
+  revalidatePath('/work-orders')
+  return retried
 }

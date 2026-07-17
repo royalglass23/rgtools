@@ -5,6 +5,7 @@ import { clientContacts, clients, leads } from '@rgtools/db/schema-leads'
 import {
   workOrderHardwareStatusOptions,
   workOrderEvents,
+  workOrderItemEnrichmentJobs,
   workOrderItemProductionSpecificationRevisions,
   workOrderItemProductionSpecifications,
   workOrderInstallers,
@@ -12,6 +13,7 @@ import {
   workOrderRefreshRuns,
   workOrders,
   workOrderStageOptions,
+  type WorkOrderItemEnrichmentStatusValue,
 } from '@rgtools/db/schema-workorders'
 import type { WorkOrderLevel } from './domain'
 import type { WorkOrderListFilters, WorkOrderSort, WorkOrderSortDirection } from './list-filters'
@@ -149,6 +151,8 @@ const workOrderItemSummarySelection = {
     confirmedData: workOrderItemProductionSpecifications.confirmedData,
     productionLabel: workOrderItemProductionSpecifications.productionLabel,
     confirmedAt: workOrderItemProductionSpecifications.confirmedAt,
+    evidenceData: workOrderItemProductionSpecifications.evidenceData,
+    ambiguityFlags: workOrderItemProductionSpecifications.ambiguityFlags,
     history: sql<Array<{
       id: string
       revisionType: string
@@ -173,6 +177,22 @@ const workOrderItemSummarySelection = {
       left join ${users} on ${users.id} = ${workOrderItemProductionSpecificationRevisions.actorId}
       where ${workOrderItemProductionSpecificationRevisions.workOrderItemId} = ${workOrderItems.id}
     ), '[]'::jsonb)`,
+  },
+  enrichmentStatus: {
+    status: sql<WorkOrderItemEnrichmentStatusValue | null>`(
+      select ${workOrderItemEnrichmentJobs.status}
+      from ${workOrderItemEnrichmentJobs}
+      where ${workOrderItemEnrichmentJobs.workOrderItemId} = ${workOrderItems.id}
+      order by ${workOrderItemEnrichmentJobs.createdAt} desc
+      limit 1
+    )`,
+    lastSafeError: sql<string | null>`(
+      select ${workOrderItemEnrichmentJobs.lastSafeError}
+      from ${workOrderItemEnrichmentJobs}
+      where ${workOrderItemEnrichmentJobs.workOrderItemId} = ${workOrderItems.id}
+      order by ${workOrderItemEnrichmentJobs.createdAt} desc
+      limit 1
+    )`,
   },
 }
 
@@ -292,10 +312,17 @@ async function listWorkOrderSummaryItems(
   const rows = await (limit === undefined ? query : query.limit(limit))
   return rows.map((row) => {
     if (!('productionSpecification' in row)) return row
+    const enrichmentStatus = row.enrichmentStatus?.status
     return {
       ...row,
       productionSpecification: row.productionSpecification?.id
         ? row.productionSpecification
+        : null,
+      enrichmentStatus: enrichmentStatus
+        ? {
+          status: enrichmentStatus,
+          lastSafeError: row.enrichmentStatus.lastSafeError,
+        }
         : null,
     }
   })

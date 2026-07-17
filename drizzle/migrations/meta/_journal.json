@@ -407,6 +407,13 @@
       "when": 1784173925119,
       "tag": "0057_production_specifications",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1784176500000,
+      "tag": "0058_work_order_item_enrichment_jobs",
+      "breakpoints": true
     }
   ]
 }

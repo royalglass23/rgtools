@@ -1,4 +1,5 @@
 import type { WorkOrderListFilters } from './list-filters'
+import type { WorkOrderItemEnrichmentStatusValue } from '@rgtools/db/schema-workorders'
 
 export type WorkOrderItemSummaryRow = {
   id: string
@@ -24,6 +25,12 @@ export type WorkOrderItemSummaryRow = {
   riskLevel: 'low' | 'medium' | 'high' | null
   importance: 'low' | 'medium' | 'high' | null
   productionSpecification?: WorkOrderItemProductionSpecificationSummary | null
+  enrichmentStatus?: WorkOrderItemEnrichmentStatus | null
+}
+
+export type WorkOrderItemEnrichmentStatus = {
+  status: WorkOrderItemEnrichmentStatusValue
+  lastSafeError: string | null
 }
 
 export type WorkOrderItemProductionSpecificationSummary = {
@@ -33,6 +40,8 @@ export type WorkOrderItemProductionSpecificationSummary = {
   confirmedData: unknown
   productionLabel: string | null
   confirmedAt: Date | null
+  evidenceData?: Array<Record<string, unknown>>
+  ambiguityFlags?: string[]
   history: Array<{
     id: string
     revisionType: string
@@ -79,6 +88,7 @@ export function attachActiveItemsToWorkOrders<T extends { id: string }>(
       riskLevel: item.riskLevel,
       importance: item.importance,
       productionSpecification: item.productionSpecification,
+      enrichmentStatus: item.enrichmentStatus,
     }
     groupedItems.push(summaryItem)
     itemsByWorkOrderId.set(item.workOrderId, groupedItems)

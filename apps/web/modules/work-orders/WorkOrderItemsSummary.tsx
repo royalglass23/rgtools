@@ -9,15 +9,17 @@ import {
 import { operationalFieldLabel, type WorkOrderItemOperationalField } from './item-operational-fields'
 import {
   confirmWorkOrderItemProductionSpecificationAction,
+  retryWorkOrderItemProductionSpecificationEnrichmentAction,
   saveWorkOrderItemProductionSpecificationDraftAction,
 } from './production-specification-actions'
 import {
   buildProductionLabel,
   createEmptyProductionSpecification,
   INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE,
-  parseProductionSpecification,
+  parsePersistedProductionSpecification,
   productionSpecificationValueLabel,
   type ProductionSpecification,
+  type ProductionSpecificationCatalogueOption,
   type ProductionSpecificationComponent,
   type ProductionSpecificationFieldName,
   type ProductionSpecificationMeasurement,
@@ -67,6 +69,7 @@ export function WorkOrderItemsSummary({
   showCount = true,
   canManage = false,
   options = EMPTY_OPTIONS,
+  catalogue = INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE,
   fields,
   tone = 'white',
   productionSpecificationsEnabled = process.env.NEXT_PUBLIC_WORK_ORDER_PRODUCTION_SPECIFICATIONS_ENABLED !== 'false',
@@ -75,6 +78,7 @@ export function WorkOrderItemsSummary({
   showCount?: boolean
   canManage?: boolean
   options?: WorkOrderItemOptions
+  catalogue?: readonly ProductionSpecificationCatalogueOption[]
   fields?: ItemFieldConfig[]
   tone?: 'white' | 'tint'
   productionSpecificationsEnabled?: boolean
@@ -127,6 +131,7 @@ export function WorkOrderItemsSummary({
                   canEdit={canManage && itemField.editable && item.isActive}
                   canManageSpecification={productionSpecificationsEnabled && canManage && item.isActive}
                   productionSpecificationsEnabled={productionSpecificationsEnabled}
+                  catalogue={catalogue}
                 />
               )}
               {operationalFields.length > 0 && (
@@ -163,30 +168,33 @@ function ItemCompositeField({
   canEdit,
   canManageSpecification,
   productionSpecificationsEnabled,
+  catalogue,
 }: {
   item: WorkOrderItemSummaryRow
   hoverDetail: string
   canEdit: boolean
   canManageSpecification: boolean
   productionSpecificationsEnabled: boolean
+  catalogue: readonly ProductionSpecificationCatalogueOption[]
 }) {
   const [productionSpecification, setProductionSpecification] = useState<WorkOrderItemProductionSpecificationSummary | null>(
     productionSpecificationsEnabled ? item.productionSpecification ?? null : null,
   )
   const [localSpecificationDocument, setLocalSpecificationDocument] = useState<ProductionSpecification | null>(() => (
     productionSpecificationsEnabled
-      ? safeProductionSpecification(item.productionSpecification?.confirmedData ?? item.productionSpecification?.draftData)
+      ? safeProductionSpecification(item.productionSpecification?.confirmedData ?? item.productionSpecification?.draftData, catalogue)
       : null
   ))
   const [createStatus, setCreateStatus] = useState<'idle' | 'saving' | 'error'>('idle')
   const [createError, setCreateError] = useState<string | null>(null)
   const structuredDocument = localSpecificationDocument ?? safeProductionSpecification(
     productionSpecification?.confirmedData ?? productionSpecification?.draftData,
+    catalogue,
   )
-  const draftProductionLabel = structuredDocument ? buildProductionLabel(structuredDocument) : ''
-  const effectiveLabel = productionSpecification?.productionLabel
+  const draftProductionLabel = structuredDocument ? buildProductionLabel(structuredDocument, catalogue) : ''
+  const effectiveLabel = item.manualLabelOverride
+    ?? productionSpecification?.productionLabel
     ?? (draftProductionLabel && draftProductionLabel !== 'Location TBC' ? draftProductionLabel : null)
-    ?? item.manualLabelOverride
     ?? item.generatedLabel
     ?? truncateDescription(item.originalDescription)
   const isLabelPending = !item.manualLabelOverride
@@ -195,6 +203,19 @@ function ItemCompositeField({
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [saveError, setSaveError] = useState<string | null>(null)
   const [retryLabel, setRetryLabel] = useState<string | null>(null)
+  const [enrichmentStatus, setEnrichmentStatus] = useState(item.enrichmentStatus ?? null)
+  const [enrichmentRetryState, setEnrichmentRetryState] = useState<'idle' | 'retrying' | 'error'>('idle')
+
+  async function retryEnrichment() {
+    setEnrichmentRetryState('retrying')
+    try {
+      await retryWorkOrderItemProductionSpecificationEnrichmentAction(item.id)
+      setEnrichmentStatus({ status: 'queued', lastSafeError: null })
+      setEnrichmentRetryState('idle')
+    } catch {
+      setEnrichmentRetryState('error')
+    }
+  }
 
   async function saveLabel(label: string) {
     setSaveStatus('saving')
@@ -241,7 +262,7 @@ function ItemCompositeField({
   }
 
   async function startSpecificationCorrection() {
-    const confirmedDocument = safeProductionSpecification(productionSpecification?.confirmedData)
+    const confirmedDocument = safeProductionSpecification(productionSpecification?.confirmedData, catalogue)
     if (!productionSpecification || !confirmedDocument) return
     setCreateStatus('saving')
     setCreateError(null)
@@ -274,7 +295,7 @@ function ItemCompositeField({
         )}
       </div>
       <div title={hoverDetail} className="flex flex-wrap items-center gap-2 text-gray-950">
-        {canEdit && !productionSpecification ? (
+        {canEdit ? (
           <>
             <form
               className="flex min-w-[260px] flex-1 gap-2"
@@ -332,7 +353,37 @@ function ItemCompositeField({
           <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">Removed</span>
         )}
       </div>
-      {canManageSpecification && !productionSpecification && (
+      {productionSpecificationsEnabled && enrichmentStatus?.status === 'queued' && (
+        <div className="mt-2 rounded border border-sky-200 bg-sky-50 px-2 py-1 text-xs text-sky-900" role="status">
+          Enrichment queued
+        </div>
+      )}
+      {productionSpecificationsEnabled && enrichmentStatus?.status === 'processing' && (
+        <div className="mt-2 rounded border border-sky-200 bg-sky-50 px-2 py-1 text-xs text-sky-900" role="status">
+          Enrichment processing
+        </div>
+      )}
+      {productionSpecificationsEnabled && enrichmentStatus?.status === 'failed' && (
+        <div className="mt-2 space-y-1 rounded border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-900" role="status">
+          {canManageSpecification ? (
+            <button
+              type="button"
+              disabled={enrichmentRetryState === 'retrying'}
+              onClick={() => void retryEnrichment()}
+              className="font-semibold underline disabled:cursor-wait disabled:opacity-60"
+            >
+              Enrichment failed - Retry
+            </button>
+          ) : (
+            <span>Enrichment failed</span>
+          )}
+          {enrichmentRetryState === 'error' && <p role="alert">Enrichment retry could not be queued.</p>}
+        </div>
+      )}
+      {productionSpecificationsEnabled && enrichmentStatus && (
+        <p className="text-xs text-gray-600">{item.originalDescription}</p>
+      )}
+      {canManageSpecification && !productionSpecification && !enrichmentStatus && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <button
             type="button"
@@ -355,6 +406,7 @@ function ItemCompositeField({
           correctionStatus={createStatus}
           correctionError={createError}
           onStartCorrection={() => void startSpecificationCorrection()}
+          catalogue={catalogue}
         />
       )}
     </div>
@@ -369,6 +421,7 @@ function ProductionSpecificationDetails({
   correctionStatus,
   correctionError,
   onStartCorrection,
+  catalogue,
 }: {
   item: WorkOrderItemSummaryRow
   persisted: WorkOrderItemProductionSpecificationSummary
@@ -377,6 +430,7 @@ function ProductionSpecificationDetails({
   correctionStatus: 'idle' | 'saving' | 'error'
   correctionError: string | null
   onStartCorrection: () => void
+  catalogue: readonly ProductionSpecificationCatalogueOption[]
 }) {
   return (
     <details className="mt-2 rounded border border-sky-200 bg-sky-50/60 px-3 py-2">
@@ -401,11 +455,33 @@ function ProductionSpecificationDetails({
           <p className="mt-1 whitespace-pre-wrap">{item.originalDescription}</p>
         </section>
 
+        {(persisted.evidenceData?.length ?? 0) > 0 && (
+          <section aria-label="Source evidence">
+            <h4 className="font-semibold text-gray-950">Source evidence</h4>
+            <ul className="mt-1 list-disc space-y-1 pl-5">
+              {persisted.evidenceData?.map((entry, index) => (
+                <li key={`${String(entry.field ?? 'evidence')}-${index}`}>
+                  {String(entry.field ?? 'Field')}: {String(entry.sourceText ?? '')}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {(persisted.ambiguityFlags?.length ?? 0) > 0 && (
+          <section aria-label="Review flags">
+            <h4 className="font-semibold text-gray-950">Review flags</h4>
+            <ul className="mt-1 list-disc space-y-1 pl-5">
+              {persisted.ambiguityFlags?.map((flag) => <li key={flag}>{flag}</li>)}
+            </ul>
+          </section>
+        )}
+
         <dl className="grid gap-x-4 gap-y-2 sm:grid-cols-2 lg:grid-cols-4">
           {SPECIFICATION_FIELDS.map(({ field, label }) => (
             <div key={field}>
               <dt className="font-medium text-gray-600">{label}</dt>
-              <dd className="mt-0.5 text-gray-950">{productionSpecificationValueLabel(specification[field])}</dd>
+              <dd className="mt-0.5 text-gray-950">{productionSpecificationValueLabel(specification[field], catalogue)}</dd>
             </div>
           ))}
         </dl>
@@ -492,6 +568,7 @@ function ProductionSpecificationDetails({
             itemId={item.id}
             itemCode={item.itemCode ?? 'item'}
             initialSpecification={specification}
+            catalogue={catalogue}
           />
         )}
       </div>
@@ -503,10 +580,12 @@ function ProductionSpecificationEditor({
   itemId,
   itemCode,
   initialSpecification,
+  catalogue,
 }: {
   itemId: string
   itemCode: string
   initialSpecification: ProductionSpecification
+  catalogue: readonly ProductionSpecificationCatalogueOption[]
 }) {
   const [draft, setDraft] = useState(initialSpecification ?? createEmptyProductionSpecification())
   const [dirty, setDirty] = useState(false)
@@ -561,6 +640,7 @@ function ProductionSpecificationEditor({
             label={label}
             itemCode={itemCode}
             value={draft[field]}
+            catalogue={catalogue}
             onChange={(value) => updateField(field, value)}
           />
         ))}
@@ -791,15 +871,17 @@ function SpecificationChoiceEditor({
   label,
   itemCode,
   value,
+  catalogue,
   onChange,
 }: {
   field: ProductionSpecificationFieldName
   label: string
   itemCode: string
   value: ProductionSpecificationValue
+  catalogue: readonly ProductionSpecificationCatalogueOption[]
   onChange: (value: ProductionSpecificationValue) => void
 }) {
-  const options = INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE.filter((option) => option.field === field)
+  const options = catalogue.filter((option) => option.field === field && option.isActive !== false)
   const selectedValue = value.state === 'selected'
     ? value.catalogueId
     : value.state === 'unmapped' ? '__unmapped' : '__tbc'
@@ -867,10 +949,13 @@ const SPECIFICATION_FIELDS: Array<{
   { field: 'deliveryScope', label: 'Delivery Scope' },
 ]
 
-function safeProductionSpecification(value: unknown) {
+function safeProductionSpecification(
+  value: unknown,
+  catalogue: readonly ProductionSpecificationCatalogueOption[],
+) {
   if (!value) return null
   try {
-    return parseProductionSpecification(value)
+    return parsePersistedProductionSpecification(value, catalogue)
   } catch {
     return null
   }

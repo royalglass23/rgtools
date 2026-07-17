@@ -49,10 +49,12 @@ import { canConfigureSummaryFieldAsEditable } from './summary-field-policy'
 import { acquireWorkOrderRateLimit, withWorkOrderItemLabelLock, withWorkOrderRefreshLock } from './refresh-lock'
 import {
   fingerprintSourceDescription,
-  refreshWorkOrderItemLabels,
-  type WorkOrderItemLabelStore,
 } from './item-label-lifecycle'
-import { generateWorkOrderItemLabel, type WorkOrderItemLabelGenerator } from './item-labels'
+import { generateWorkOrderItemLabel } from './item-labels'
+import {
+  queueWorkOrderItemEnrichments,
+  type WorkOrderItemEnrichmentEnqueuer,
+} from './enrichment-jobs'
 import {
   parseWorkOrderItemOperationalValue,
   readWorkOrderItemOperationalValue,
@@ -124,7 +126,7 @@ export async function batchDeleteWorkOrdersAction(formData: FormData): Promise<v
 
 export async function refreshWorkOrdersFromServiceM8(
   request: ServiceM8FetchRequest = createServiceM8RequestFromEnv(),
-  generateLabel: WorkOrderItemLabelGenerator = generateWorkOrderItemLabel,
+  enqueueEnrichments: WorkOrderItemEnrichmentEnqueuer = queueWorkOrderItemEnrichments,
 ): Promise<WorkOrderRefreshResult> {
   const actorId = await assertRefreshManageAccessWithAudit()
 
@@ -134,7 +136,7 @@ export async function refreshWorkOrdersFromServiceM8(
     throw new Error('Work Orders refresh was requested too recently. Please wait a minute before trying again.')
   }
 
-  const refreshPromise = withWorkOrderRefreshLock(() => performWorkOrderRefresh(request, generateLabel, actorId))
+  const refreshPromise = withWorkOrderRefreshLock(() => performWorkOrderRefresh(request, enqueueEnrichments, actorId))
   inFlightWorkOrderRefresh = refreshPromise
 
   try {
@@ -146,7 +148,7 @@ export async function refreshWorkOrdersFromServiceM8(
 
 async function performWorkOrderRefresh(
   request: ServiceM8FetchRequest,
-  generateLabel: WorkOrderItemLabelGenerator,
+  enqueueEnrichments: WorkOrderItemEnrichmentEnqueuer,
   actorId: string | null,
 ): Promise<WorkOrderRefreshResult> {
 
@@ -211,6 +213,22 @@ async function performWorkOrderRefresh(
   const now = new Date()
   const seenIdentityKeys = inputs.map((input) => `${input.identityKind}:${input.identityValue}`)
   const seenItemUuids = itemInputs.map((input) => input.servicem8ItemUuid)
+  const existingItemRows = seenItemUuids.length > 0
+    ? await db
+      .select({
+        servicem8ItemUuid: workOrderItems.servicem8ItemUuid,
+        enrichmentHandoffPending: workOrderItems.enrichmentHandoffPending,
+      })
+      .from(workOrderItems)
+      .where(inArray(workOrderItems.servicem8ItemUuid, seenItemUuids))
+    : []
+  const existingItemUuids = new Set(existingItemRows.map((item) => item.servicem8ItemUuid))
+  const pendingHandoffUuids = new Set(existingItemRows.flatMap((item) => (
+    item.enrichmentHandoffPending ? [item.servicem8ItemUuid] : []
+  )))
+  const enrichmentHandoffInputs = itemInputs.filter((item) => (
+    !existingItemUuids.has(item.servicem8ItemUuid) || pendingHandoffUuids.has(item.servicem8ItemUuid)
+  ))
   let itemsSynced = 0
 
   try {
@@ -316,6 +334,7 @@ async function performWorkOrderRefresh(
               lineTotalExcludingGst: itemInput.lineTotalExcludingGst,
               sortOrder: itemInput.sortOrder,
               isActive: true,
+              enrichmentHandoffPending: !existingItemUuids.has(itemInput.servicem8ItemUuid),
               updatedAt: now,
             })
             .onConflictDoUpdate({
@@ -375,12 +394,59 @@ async function performWorkOrderRefresh(
   }
 
   try {
-    await refreshPersistedWorkOrderItemLabels(generateLabel)
+    const queueResult = await enqueueEnrichments(enrichmentHandoffInputs.map((item) => ({
+      servicem8ItemUuid: item.servicem8ItemUuid,
+      originalDescription: item.originalDescription,
+    })))
+    if (enrichmentHandoffInputs.length > 0) {
+      await db
+        .update(workOrderItems)
+        .set({ enrichmentHandoffPending: false, updatedAt: new Date() })
+        .where(inArray(
+          workOrderItems.servicem8ItemUuid,
+          enrichmentHandoffInputs.map((item) => item.servicem8ItemUuid),
+        ))
+    }
+    if (typeof queueResult !== 'number' && queueResult.rejected > 0) {
+      await recordEnrichmentQueueHandoffAudit({
+        actorId,
+        action: 'work_order.enrichment_queue_handoff_partial',
+        detail: {
+          queued: queueResult.queued,
+          rejected: queueResult.rejected,
+          reconciliationCommitted: true,
+        },
+      })
+    }
   } catch {
-    // ServiceM8 reconciliation is already committed. Label processing remains retryable.
+    await recordEnrichmentQueueHandoffAudit({
+      actorId,
+      action: 'work_order.enrichment_queue_handoff_failed',
+      detail: {
+        candidateCount: enrichmentHandoffInputs.length,
+        reconciliationCommitted: true,
+      },
+    })
   }
 
   return { synced: inputs.length, itemsSynced, excludedLineCount }
+}
+
+async function recordEnrichmentQueueHandoffAudit(input: {
+  actorId: string | null
+  action: string
+  detail: Record<string, unknown>
+}) {
+  try {
+    await logAudit({
+      actorId: input.actorId,
+      entityType: 'work_order',
+      action: input.action,
+      detail: input.detail,
+    })
+  } catch {
+    // Reconciliation is already committed; observability failure must not falsify its result.
+  }
 }
 
 export async function updateWorkOrderItemLabelAction(itemId: string, formData: FormData) {
@@ -618,54 +684,6 @@ function revalidateWorkOrderItemPaths(workOrderId: string) {
   revalidatePath('/')
   revalidatePath('/work-orders')
   revalidatePath(`/work-orders/${workOrderId}`)
-}
-
-async function refreshPersistedWorkOrderItemLabels(generateLabel: WorkOrderItemLabelGenerator) {
-  const items = await db
-    .select({
-      id: workOrderItems.id,
-      originalDescription: workOrderItems.originalDescription,
-      generatedLabel: workOrderItems.generatedLabel,
-      manualLabelOverride: workOrderItems.manualLabelOverride,
-      labelStatus: workOrderItems.labelStatus,
-      sourceDescriptionFingerprint: workOrderItems.sourceDescriptionFingerprint,
-    })
-    .from(workOrderItems)
-    .where(eq(workOrderItems.isActive, true))
-
-  const store: WorkOrderItemLabelStore = {
-    markPending: (itemId) => updateWorkOrderItemLabelState(itemId, {
-      generatedLabel: null,
-      labelStatus: 'pending',
-    }),
-    saveGenerated: (itemId, label, sourceDescriptionFingerprint) => updateWorkOrderItemLabelState(itemId, {
-      generatedLabel: label,
-      manualLabelOverride: null,
-      labelStatus: 'generated',
-      sourceDescriptionFingerprint,
-    }),
-    markFailed: (itemId) => updateWorkOrderItemLabelState(itemId, {
-      generatedLabel: null,
-      labelStatus: 'failed',
-    }),
-    markSourceChanged: (itemId) => updateWorkOrderItemLabelState(itemId, {
-      labelStatus: 'source_changed',
-    }),
-  }
-
-  return refreshWorkOrderItemLabels(items, store, generateLabel, (itemId, description) => (
-    withWorkOrderItemLabelLock(itemId, () => generateLabel(description))
-  ))
-}
-
-async function updateWorkOrderItemLabelState(
-  itemId: string,
-  values: Partial<typeof workOrderItems.$inferInsert>,
-) {
-  await db
-    .update(workOrderItems)
-    .set({ ...values, updatedAt: new Date() })
-    .where(eq(workOrderItems.id, itemId))
 }
 
 export async function createWorkOrderInstallerAction(formData: FormData) {
