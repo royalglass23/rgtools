@@ -1,0 +1,249 @@
+/*
+ * MT-201 compatibility bridge.
+ *
+ * Existing route modules still carry Tailwind's literal gray/status utilities.
+ * Scoping the bridge to the authenticated shell lets every route consume the
+ * semantic Precision tokens while route markup is migrated incrementally.
+ */
+
+[data-precision-scope]
+  :where(
+    .text-gray-950,
+    .text-gray-900,
+    .text-gray-800,
+    .text-slate-950,
+    .text-slate-900
+  ) {
+  color: var(--text-primary);
+}
+
+[data-precision-scope]
+  :where(.text-gray-700, .text-gray-600, .text-slate-700, .text-slate-600) {
+  color: var(--text-secondary);
+}
+
+[data-precision-scope]
+  :where(.text-gray-500, .text-gray-400, .text-gray-300, .text-slate-500) {
+  color: var(--text-muted);
+}
+
+[data-precision-scope] :where(.bg-white) {
+  background-color: var(--surface-elevated);
+}
+
+[data-precision-scope] :where(.bg-white\/95) {
+  background-color: color-mix(
+    in srgb,
+    var(--surface-elevated) 95%,
+    transparent
+  );
+}
+
+[data-precision-scope] :where(.bg-gray-50, .bg-slate-50) {
+  background-color: var(--surface-subtle);
+}
+
+[data-precision-scope] :where(.bg-gray-50\/50) {
+  background-color: color-mix(in srgb, var(--surface-subtle) 50%, transparent);
+}
+
+[data-precision-scope] :where(.bg-gray-50\/95) {
+  background-color: color-mix(in srgb, var(--surface-subtle) 95%, transparent);
+}
+
+[data-precision-scope] :where(.bg-gray-100, .bg-gray-200, .bg-slate-100) {
+  background-color: var(--surface-muted);
+}
+
+[data-precision-scope]
+  :where(
+    .border-gray-50,
+    .border-gray-100,
+    .border-gray-200,
+    .border-slate-100,
+    .border-slate-200
+  ) {
+  border-color: var(--border-default);
+}
+
+[data-precision-scope] :where(.border-gray-300, .border-slate-300) {
+  border-color: var(--border-strong);
+}
+
+[data-precision-scope]
+  :where(
+    .divide-gray-100,
+    .divide-gray-200,
+    .divide-slate-100,
+    .divide-slate-200
+  )
+  > :not(:last-child) {
+  border-color: var(--border-default);
+}
+
+[data-precision-scope] :where(.shadow-sm) {
+  box-shadow: var(--shadow-raised);
+}
+
+[data-precision-scope] :where(.rounded-lg) {
+  border-radius: var(--radius-panel);
+}
+
+[data-precision-scope] :where(input, select, textarea) {
+  border-color: var(--border-strong);
+  background-color: var(--surface-elevated);
+  color: var(--text-primary);
+}
+
+[data-precision-scope]
+  :where(.bg-gray-950, .bg-gray-900, [class~="bg-[#142B3A]"]) {
+  background-color: var(--brand-strong);
+  color: var(--brand-on-strong);
+}
+
+[data-precision-scope] :where(.text-white) {
+  color: var(--brand-on-strong);
+}
+
+[data-precision-scope]
+  :where(
+    .hover\:bg-gray-50:hover,
+    .hover\:bg-slate-50:hover,
+    .hover\:bg-gray-100:hover
+  ) {
+  background-color: var(--accent-soft);
+}
+
+[data-precision-scope]
+  :where(.hover\:bg-gray-800:hover, [class~="hover:bg-[#1d3d52]"]:hover) {
+  background-color: var(--brand-structural);
+}
+
+[data-precision-scope]
+  :where(
+    .hover\:text-gray-950:hover,
+    .hover\:text-gray-900:hover,
+    .hover\:text-gray-700:hover
+  ) {
+  color: var(--text-primary);
+}
+
+[data-precision-scope] :where(.bg-blue-500, .bg-blue-600) {
+  background-color: var(--brand-primary);
+  color: var(--brand-on-strong);
+}
+
+[data-precision-scope] :where(.hover\:bg-blue-700:hover) {
+  background-color: var(--brand-structural);
+}
+
+[data-precision-scope]
+  :where(
+    .text-blue-600,
+    .text-blue-700,
+    .text-blue-800,
+    .text-blue-900,
+    .text-sky-800
+  ) {
+  color: var(--state-info);
+}
+
+[data-precision-scope]
+  :where(.bg-blue-50, .bg-blue-100, .bg-sky-50, .bg-sky-100) {
+  background-color: var(--state-info-soft);
+}
+
+[data-precision-scope] :where(.bg-green-700) {
+  background-color: var(--state-positive);
+  color: var(--brand-on-strong);
+}
+
+[data-precision-scope] :where(.bg-red-600, .bg-red-700) {
+  background-color: var(--state-critical);
+  color: var(--brand-on-strong);
+}
+
+[data-precision-scope] :where(.hover\:bg-green-800:hover) {
+  background-color: color-mix(in srgb, var(--state-positive) 82%, black);
+}
+
+[data-precision-scope] :where(.hover\:bg-red-700:hover) {
+  background-color: color-mix(in srgb, var(--state-critical) 82%, black);
+}
+
+[data-precision-scope] :where(.border-blue-200, .border-sky-700) {
+  border-color: var(--state-info);
+}
+
+[data-precision-scope]
+  :where(.text-green-700, .text-green-800, .text-green-900, .text-emerald-800) {
+  color: var(--state-positive);
+}
+
+[data-precision-scope] :where(.bg-green-50, .bg-green-100, .bg-emerald-100) {
+  background-color: var(--state-positive-soft);
+}
+
+[data-precision-scope] :where(.border-green-200) {
+  border-color: var(--state-positive);
+}
+
+[data-precision-scope]
+  :where(.text-amber-700, .text-amber-800, .text-amber-900, .text-yellow-800) {
+  color: var(--state-warning);
+}
+
+[data-precision-scope] :where(.bg-amber-50, .bg-amber-100, .bg-yellow-100) {
+  background-color: var(--state-warning-soft);
+}
+
+[data-precision-scope] :where(.border-amber-200, .border-amber-300) {
+  border-color: var(--state-warning);
+}
+
+[data-precision-scope]
+  :where(.text-red-600, .text-red-700, .text-red-800, .text-red-900) {
+  color: var(--state-critical);
+}
+
+[data-precision-scope] :where(.bg-red-50, .bg-red-100) {
+  background-color: var(--state-critical-soft);
+}
+
+[data-precision-scope] :where(.border-red-200, .border-red-300) {
+  border-color: var(--state-critical);
+}
+
+[data-precision-scope] :where(.bg-purple-50) {
+  background-color: var(--state-info-soft);
+}
+
+[data-precision-scope] :where(.text-purple-700) {
+  color: var(--state-info);
+}
+
+[data-precision-scope] :where(.border-purple-200) {
+  border-color: var(--state-info);
+}
+
+[data-precision-scope]
+  :where(.focus\:ring-blue-500, .focus\:ring-blue-100, .focus\:ring-gray-900) {
+  --tw-ring-color: var(--focus-ring);
+}
+
+[data-precision-scope]
+  :where(.focus\:border-blue-500, .focus\:border-gray-900) {
+  border-color: var(--focus-ring);
+}
+
+[data-precision-scope] :where([class~="focus:ring-[#142B3A]"]:focus) {
+  --tw-ring-color: var(--focus-ring);
+}
+
+[data-precision-scope] :where([class~="focus:border-[#142B3A]"]:focus) {
+  border-color: var(--focus-ring);
+}
+
+[data-precision-scope] :where([class~="text-[#142B3A]"]) {
+  color: var(--brand-primary);
+}

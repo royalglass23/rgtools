@@ -1,201 +1,376 @@
-import { auth } from '@/lib/auth'
-import { redirect } from 'next/navigation'
-import Link from 'next/link'
-import { getDashboardTables } from '@/modules/dashboard/config'
-import { getTableMeta } from '@/modules/dashboard/tables'
-import { SERVER_TABLES } from '@/modules/dashboard/registry'
-import { getDashboardActionCounts, getDashboardChartData, getDashboardKpis } from '@/modules/dashboard/kpis'
-import type { SparkPoint } from '@/modules/dashboard/kpis'
-import { SparkLine } from '@/modules/dashboard/SparkLine'
-import { ChartSection } from '@/modules/dashboard/ChartSection'
-import { DismissibleNotice } from '@/modules/ui/DismissibleNotice'
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { ChartSection } from "@/modules/dashboard/ChartSection";
+import { getDashboardTables } from "@/modules/dashboard/config";
+import {
+  getDashboardActionCounts,
+  getDashboardChartData,
+  getDashboardKpis,
+} from "@/modules/dashboard/kpis";
+import { SERVER_TABLES } from "@/modules/dashboard/registry";
+import { getTableMeta } from "@/modules/dashboard/tables";
+import { auth } from "@/lib/auth";
+import {
+  DataPanel,
+  FeedbackState,
+  PageHeader,
+  SectionHeading,
+  StatusBadge,
+} from "@/components/precision-ui/PrecisionUI";
+import styles from "./dashboard.module.css";
+import { DismissibleNotice } from "@/modules/ui/DismissibleNotice";
 
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const session = await auth()
-  if (!session?.user?.id) redirect('/login')
+  const session = await auth();
+  if (!session?.user?.id) redirect("/login");
 
-  const params = await searchParams
-  const denied = typeof params.denied === 'string' ? params.denied : undefined
-  const isAdmin = session.user.role === 'admin'
+  const params = await searchParams;
+  const denied = typeof params.denied === "string" ? params.denied : undefined;
+  const isAdmin = session.user.role === "admin";
 
   const [actionCounts, kpis, chartData] = await Promise.all([
     getDashboardActionCounts(),
     getDashboardKpis(),
     getDashboardChartData(),
-  ])
+  ]);
 
-  // ── Admin-selected tables ───────────────────────────────────────────────────
-  const config = await getDashboardTables()
+  const config = await getDashboardTables();
   const sections = await Promise.all(
     config.map(async (entry) => {
-      const meta = getTableMeta(entry.key)
-      const server = SERVER_TABLES[entry.key]
-      if (!meta || !meta.available || !server) return null
-      const content = await server.render({ searchParams: params, filter: entry.filter, isAdmin })
-      return { key: entry.key, label: meta.label, content }
+      const meta = getTableMeta(entry.key);
+      const server = SERVER_TABLES[entry.key];
+      if (!meta || !meta.available || !server) return null;
+      const content = await server.render({
+        searchParams: params,
+        filter: entry.filter,
+        isAdmin,
+      });
+      return { key: entry.key, label: meta.label, content };
     }),
-  )
-  const visibleSections = sections.filter((section) => section !== null)
+  );
+  const visibleSections = sections.filter((section) => section !== null);
+  const firstName = session.user.name?.trim().split(/\s+/)[0];
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8">
+    <div className={styles.dashboard}>
+      <PageHeader
+        eyebrow="Royal Glass operations"
+        title="Operations dashboard"
+        description={
+          <p>
+            {firstName ? `Welcome back, ${firstName}. ` : ""}
+            Here&apos;s what needs attention across the business.
+          </p>
+        }
+        actions={
+          <div className={styles.liveStatus}>
+            <span aria-hidden="true" />
+            Live overview
+          </div>
+        }
+      />
+
       {denied !== undefined && (
         <DismissibleNotice tone="warning" noticeKey={denied}>
           You don&apos;t have access to that tool.
         </DismissibleNotice>
       )}
 
-      {/* Business Overview + Charts — admin only */}
-      {isAdmin && <BusinessOverviewSection kpis={kpis} />}
-      {isAdmin && <ChartSection leadsPerWeek={chartData.leadsPerWeek} pipelineByWeek={chartData.pipelineByWeek} />}
-
-      {/* Actions Needed */}
       <ActionsNeededSection counts={actionCounts} />
 
-      {/* Configurable tables */}
+      <div className={styles.dashboardFocusGrid}>
+        {isAdmin ? (
+          <ChartSection
+            metrics={businessMetrics(kpis)}
+            leadsPerWeek={chartData.leadsPerWeek}
+            pipelineByWeek={chartData.pipelineByWeek}
+          />
+        ) : (
+          <DataPanel title="Business performance" eyebrow="Manager view">
+            <div className={styles.restrictedPanel}>
+              Business performance is available to administrators.
+            </div>
+          </DataPanel>
+        )}
+        <NextActionsSection counts={actionCounts} />
+      </div>
+
+      <RecommendationsSection counts={actionCounts} />
+
       {visibleSections.length === 0 ? (
-        <div className="bg-white border border-gray-200 rounded px-4 py-10 text-sm text-gray-400 text-center">
-          No dashboard tables selected. An admin can choose them in Dashboard Settings.
-        </div>
+        <FeedbackState tone="empty">
+          No dashboard tables selected. An admin can choose them in Dashboard
+          Settings.
+        </FeedbackState>
       ) : (
         visibleSections.map((section) => (
-          <section key={section.key} className="space-y-3">
-            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-              {section.label}
-            </h2>
+          <DataPanel
+            key={section.key}
+            title={section.label}
+            eyebrow="Live data"
+          >
             {section.content}
-          </section>
+          </DataPanel>
         ))
       )}
     </div>
-  )
+  );
 }
 
 type DashboardKpis = {
-  pipelineValue: number
-  conversionRate: number
-  volumeTrend: number
-  leadVolume: number
-  pipelineSparkline: SparkPoint[]
-  conversionSparkline: SparkPoint[]
-  volumeSparkline: SparkPoint[]
-}
+  pipelineValue: number;
+  conversionRate: number;
+  volumeTrend: number;
+  leadVolume: number;
+};
 
-function BusinessOverviewSection({ kpis }: { kpis: DashboardKpis }) {
-  const fmtPipeline = kpis.pipelineValue >= 1_000_000
-    ? `$${(kpis.pipelineValue / 1_000_000).toFixed(1)}m`
-    : `$${Math.round(kpis.pipelineValue).toLocaleString('en-AU')}`
+function businessMetrics(kpis: DashboardKpis) {
+  const formattedPipeline =
+    kpis.pipelineValue >= 1_000_000
+      ? `$${(kpis.pipelineValue / 1_000_000).toFixed(1)}m`
+      : `$${Math.round(kpis.pipelineValue).toLocaleString("en-AU")}`;
 
-  const trendPositive = kpis.volumeTrend > 0
-  const trendNeutral = kpis.volumeTrend === 0
-  const trendValue = trendNeutral
-    ? `${kpis.leadVolume} leads`
-    : `${trendPositive ? '+' : ''}${kpis.volumeTrend}%`
-  const trendSub = trendNeutral ? 'this 30 days (no prior data)' : 'vs prior 30 days'
+  const trendPositive = kpis.volumeTrend > 0;
+  const trendNeutral = kpis.volumeTrend === 0;
+  const leadTrend = trendNeutral
+    ? "Current 30-day volume"
+    : `${trendPositive ? "+" : ""}${kpis.volumeTrend}% vs previous 30 days`;
 
-  return (
-    <section className="space-y-3">
-      <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Business Overview</h2>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <OverviewCard
-          label="Pipeline Value"
-          value={fmtPipeline}
-          sub="Active hot/warm quotes"
-          sparkline={kpis.pipelineSparkline}
-          color="#3b82f6"
-        />
-        <OverviewCard
-          label="Conversion Rate"
-          value={`${kpis.conversionRate}%`}
-          sub="Won quotes out of all closed quotes"
-          sparkline={kpis.conversionSparkline}
-          color="#22c55e"
-        />
-        <OverviewCard
-          label="Lead Volume Trend"
-          value={trendValue}
-          sub={trendSub}
-          sparkline={kpis.volumeSparkline}
-          color={trendPositive ? '#22c55e' : trendNeutral ? '#6b7280' : '#ef4444'}
-        />
-      </div>
-    </section>
-  )
-}
-
-function OverviewCard({
-  label,
-  value,
-  sub,
-  sparkline,
-  color,
-}: {
-  label: string
-  value: string
-  sub: string
-  sparkline: SparkPoint[]
-  color: string
-}) {
-  return (
-    <div className="bg-white border border-gray-200 rounded p-5 space-y-2">
-      <div className="text-xs font-medium text-gray-400 uppercase tracking-wide">{label}</div>
-      <div className="text-2xl font-semibold text-gray-900">{value}</div>
-      <div className="text-xs text-gray-500">{sub}</div>
-      {sparkline.length > 0 && <SparkLine data={sparkline} color={color} />}
-    </div>
-  )
+  return [
+    {
+      label: "Pipeline value",
+      value: formattedPipeline,
+      detail: "Active hot and warm quotes",
+      tone: "brand" as const,
+    },
+    {
+      label: "Conversion rate",
+      value: `${kpis.conversionRate}%`,
+      detail: "Won quotes out of all closed quotes",
+      tone: "positive" as const,
+    },
+    {
+      label: "Lead volume",
+      value: kpis.leadVolume.toLocaleString("en-AU"),
+      detail: leadTrend,
+      tone: trendPositive ? ("positive" as const) : ("neutral" as const),
+    },
+  ];
 }
 
 type ActionCounts = {
-  staleLeads: number
-  unsynced: number
-  expiringSoon: number
-  neverOpened: number
-  forwarding: number
-  goneCold: number
+  staleLeads: number;
+  unsynced: number;
+  expiringSoon: number;
+  neverOpened: number;
+  forwarding: number;
+  goneCold: number;
+};
+
+type ActionTone = "critical" | "warning" | "info" | "muted";
+
+type DashboardAction = {
+  id: string;
+  label: string;
+  count: number;
+  href: string;
+  tone: ActionTone;
+  area: "Leads" | "Quote Tracker";
+  recommendation: string;
+  recommendationDetail: string;
+};
+
+function dashboardActions(counts: ActionCounts): DashboardAction[] {
+  return [
+    {
+      id: "unsynced",
+      label: "No ServiceM8 job",
+      count: counts.unsynced,
+      href: "/leads?sm8=pending",
+      tone: "critical",
+      area: "Leads",
+      recommendation: "Link high-priority leads to ServiceM8",
+      recommendationDetail:
+        "Tier A and B leads are waiting for an operational job record.",
+    },
+    {
+      id: "stale",
+      label: "Stale leads",
+      count: counts.staleLeads,
+      href: "/leads?stale=true",
+      tone: "warning",
+      area: "Leads",
+      recommendation: "Clear the stale-lead queue",
+      recommendationDetail:
+        "Review ownership and record the next follow-up for leads older than seven days.",
+    },
+    {
+      id: "expiring",
+      label: "Quotes expiring soon",
+      count: counts.expiringSoon,
+      href: "/quote-tracker?activity=expiring",
+      tone: "warning",
+      area: "Quote Tracker",
+      recommendation: "Contact clients before their quote expires",
+      recommendationDetail:
+        "Prioritise active hot and warm quotes approaching their expiry date.",
+    },
+    {
+      id: "never-opened",
+      label: "Quotes never opened",
+      count: counts.neverOpened,
+      href: "/quote-tracker?activity=never_opened",
+      tone: "info",
+      area: "Quote Tracker",
+      recommendation: "Check delivery for unopened quotes",
+      recommendationDetail:
+        "Confirm the client received the quote and resend it when necessary.",
+    },
+    {
+      id: "forwarding",
+      label: "Forwarding suspected",
+      count: counts.forwarding,
+      href: "/quote-tracker?activity=forwarding",
+      tone: "info",
+      area: "Quote Tracker",
+      recommendation: "Review forwarded quote activity",
+      recommendationDetail:
+        "Check whether another decision-maker needs to be added to the follow-up.",
+    },
+    {
+      id: "gone-cold",
+      label: "Quotes gone cold",
+      count: counts.goneCold,
+      href: "/quote-tracker?activity=gone_cold",
+      tone: "muted",
+      area: "Quote Tracker",
+      recommendation: "Re-engage hot and warm quotes",
+      recommendationDetail:
+        "Create a clear follow-up for quotes without recent engagement.",
+    },
+  ];
 }
 
 function ActionsNeededSection({ counts }: { counts: ActionCounts }) {
-  const cards: Array<{ label: string; count: number; href: string }> = [
-    { label: 'Tier A/B — No SM8 Job', count: counts.unsynced, href: '/leads?sm8=pending' },
-    { label: 'Stale Leads (7d+)', count: counts.staleLeads, href: '/leads?stale=true' },
-    { label: 'Expiring Soon', count: counts.expiringSoon, href: '/quote-tracker?activity=expiring' },
-    { label: 'Never Opened', count: counts.neverOpened, href: '/quote-tracker?activity=never_opened' },
-    { label: 'Forwarding Suspected', count: counts.forwarding, href: '/quote-tracker?activity=forwarding' },
-    { label: 'Gone Cold (14d+)', count: counts.goneCold, href: '/quote-tracker?activity=gone_cold' },
-  ]
+  const actions = dashboardActions(counts);
+  const total = actions.reduce((sum, action) => sum + action.count, 0);
 
   return (
-    <section className="space-y-3">
-      <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Actions Needed</h2>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {cards.map(({ label, count, href }) => (
-          <ActionCard key={label} label={label} count={count} href={href} />
+    <section className={styles.section}>
+      <div className={styles.sectionTitleRow}>
+        <div>
+          <SectionHeading title="Needs attention" eyebrow="Priority queue" />
+          <p>Sorted by operational urgency across active modules.</p>
+        </div>
+        <span className={styles.attentionSummary}>
+          {total > 0 ? `${total} items to review` : "All queues clear"}
+        </span>
+      </div>
+      <div className={styles.attentionRail}>
+        {actions.map((action) => (
+          <Link
+            key={action.id}
+            href={action.href}
+            className={styles.attentionItem}
+            data-tone={action.count > 0 ? action.tone : "clear"}
+          >
+            <span className={styles.attentionDot} aria-hidden="true" />
+            <strong>{action.count}</strong>
+            <span className={styles.attentionCopy}>
+              <span>{action.label}</span>
+              <small>{action.area}</small>
+            </span>
+            <span className={styles.attentionArrow} aria-hidden="true">
+              →
+            </span>
+          </Link>
         ))}
       </div>
     </section>
-  )
+  );
 }
 
-function ActionCard({ label, count, href }: { label: string; count: number; href: string }) {
-  const hasAction = count > 0
+function NextActionsSection({ counts }: { counts: ActionCounts }) {
+  const activeActions = dashboardActions(counts)
+    .filter((action) => action.count > 0)
+    .slice(0, 4);
+
   return (
-    <Link
-      href={href}
-      className={`block rounded border p-5 transition-colors ${
-        hasAction
-          ? 'border-orange-200 bg-orange-50 hover:bg-orange-100'
-          : 'border-gray-200 bg-white hover:bg-gray-50'
-      }`}
-    >
-      <div className={`mb-1 text-2xl font-semibold ${hasAction ? 'text-orange-700' : 'text-gray-400'}`}>
-        {count}
-      </div>
-      <div className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</div>
-    </Link>
-  )
+    <DataPanel title="Next actions" eyebrow="Active modules">
+      {activeActions.length > 0 ? (
+        <div className={styles.nextActionList}>
+          {activeActions.map((action) => (
+            <Link
+              key={action.id}
+              href={action.href}
+              className={styles.nextActionRow}
+            >
+              <span
+                className={styles.nextActionDot}
+                data-tone={action.tone}
+                aria-hidden="true"
+              />
+              <span className={styles.nextActionCopy}>
+                <strong>{action.recommendation}</strong>
+                <small>{action.area}</small>
+              </span>
+              <StatusBadge tone={action.tone}>{action.count} due</StatusBadge>
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <div className={styles.clearState}>
+          <strong>No immediate actions</strong>
+          <span>All monitored queues are currently clear.</span>
+        </div>
+      )}
+    </DataPanel>
+  );
+}
+
+function RecommendationsSection({ counts }: { counts: ActionCounts }) {
+  const recommendations = dashboardActions(counts)
+    .filter((action) => action.count > 0)
+    .slice(0, 3);
+
+  return (
+    <DataPanel title="Recommendations" eyebrow="Suggested focus">
+      {recommendations.length > 0 ? (
+        <div className={styles.recommendationList}>
+          {recommendations.map((action, index) => (
+            <Link
+              key={action.id}
+              href={action.href}
+              className={styles.recommendationItem}
+            >
+              <span className={styles.recommendationNumber} aria-hidden="true">
+                {index + 1}
+              </span>
+              <span>
+                <strong>{action.recommendation}</strong>
+                <small>
+                  {action.count} {action.label.toLowerCase()}.{" "}
+                  {action.recommendationDetail}
+                </small>
+              </span>
+              <span className={styles.recommendationArrow} aria-hidden="true">
+                →
+              </span>
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <div className={styles.clearState}>
+          <strong>Keep the current rhythm</strong>
+          <span>
+            No exception-based recommendations are required right now.
+          </span>
+        </div>
+      )}
+    </DataPanel>
+  );
 }

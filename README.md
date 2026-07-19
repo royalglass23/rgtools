@@ -40,6 +40,7 @@ This repo is a pnpm workspace:
 
 - [Local setup](docs/dev/setup.md) - prerequisites, env vars, DB migration, seeding, testing
 - [Architecture](docs/dev/architecture.md) - system design, modules, auth, and lead scoring
+- [Royal Glass Precision UI](docs/dev/royal-glass-precision-ui.md) - theme contract, semantic tokens, shared presentation seams, and extension rules
 - [Deployment](docs/dev/deployment.md) - Vercel + Cloudflare Worker deployment
 - [Branch workflow](docs/dev/branch-workflow.md) - feature to staging and staging to production flow
 - [Changelog](docs/CHANGELOG.md) - release history and unreleased notes
@@ -57,6 +58,7 @@ This repo is a pnpm workspace:
 ## User docs
 
 - [Getting started](docs/user/getting-started.md) - login, dashboard, roles
+- [Appearance themes](docs/user/getting-started.md#appearance) - Light, Dark, and System usage
 - [Lead intake form](docs/how-to/lead-intake.md) - field-by-field guide
 - [Leads dashboard](docs/how-to/leads.md) - list, filters, detail view, ServiceM8 fetch
 - [RG Leads manual checklist](apps/web/tests/rg-leads-test-plan.md) - safe human verification for Quote-status lead workflows

@@ -1,25 +1,22 @@
-'use client'
+"use client";
 
-import { useFormStatus } from 'react-dom'
+import { useFormStatus } from "react-dom";
+import { PrecisionButton } from "@/components/precision-ui/PrecisionUI";
 
 export function QuoteMovementRefreshButton() {
-  const { pending } = useFormStatus()
+  const { pending } = useFormStatus();
 
   return (
-    <button
-      type="submit"
-      disabled={pending}
-      className="inline-flex items-center gap-2 rounded bg-[#142B3A] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#1d3d52] disabled:cursor-wait disabled:bg-[#365364]"
-    >
+    <PrecisionButton type="submit" disabled={pending}>
       {pending && (
         <span
           aria-hidden="true"
-          className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
+          className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
         />
       )}
-      <span role={pending ? 'status' : undefined}>
-        {pending ? 'Refreshing...' : 'Refresh now'}
+      <span role={pending ? "status" : undefined}>
+        {pending ? "Refreshing..." : "Refresh now"}
       </span>
-    </button>
-  )
+    </PrecisionButton>
+  );
 }

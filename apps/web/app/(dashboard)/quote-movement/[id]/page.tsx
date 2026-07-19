@@ -1,60 +1,91 @@
-import Link from 'next/link'
-import { notFound } from 'next/navigation'
-import { requireModule } from '@/lib/guard'
-import { getQuoteMovementRecord } from '@/modules/quote-movement/queries'
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import {
+  DataPanel,
+  PageHeader,
+  StatusBadge,
+  precisionSecondaryLinkClassName,
+} from "@/components/precision-ui/PrecisionUI";
+import { requireModule } from "@/lib/guard";
 import {
   formatQuoteMovementCurrency,
   formatQuoteMovementDate,
   quoteMovementDisplayName,
-} from '@/modules/quote-movement/presentation'
+} from "@/modules/quote-movement/presentation";
+import { getQuoteMovementRecord } from "@/modules/quote-movement/queries";
 
 export default async function QuoteMovementDetailPage({
   params,
 }: {
-  params: Promise<{ id: string }>
+  params: Promise<{ id: string }>;
 }) {
-  await requireModule('quote-tracker')
-  const { id } = await params
-  const record = await getQuoteMovementRecord(id)
+  await requireModule("quote-tracker");
+  const { id } = await params;
+  const record = await getQuoteMovementRecord(id);
 
-  if (!record) notFound()
+  if (!record) notFound();
 
   return (
     <div className="space-y-5">
-      <div>
-        <Link className="text-sm font-medium text-[#142B3A] underline-offset-2 hover:underline" href="/quote-movement">
-          Back to Quote Movement
-        </Link>
-        <h1 className="mt-3 text-2xl font-semibold text-gray-950">
-          {quoteMovementDisplayName(record)}
-        </h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Cached from ServiceM8 on {formatQuoteMovementDate(record.lastServiceM8SyncedAt)}
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Quote movement detail"
+        title={quoteMovementDisplayName(record)}
+        description={`Cached from ServiceM8 on ${formatQuoteMovementDate(record.lastServiceM8SyncedAt)}`}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge tone={record.servicem8Active ? "positive" : "muted"}>
+              {record.servicem8Active ? "Active" : "Inactive"}
+            </StatusBadge>
+            <Link
+              href="/quote-movement"
+              className={precisionSecondaryLinkClassName}
+            >
+              Back to Quote Movement
+            </Link>
+          </div>
+        }
+      />
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <DetailCard label="Customer" value={record.customerName} />
-        <DetailCard label="Address" value={record.jobAddress ?? '-'} />
-        <DetailCard label="Quote value excl. GST" value={formatQuoteMovementCurrency(record.quoteValueExcludingGst)} />
-        <DetailCard label="Active status" value={record.servicem8Active ? 'Active' : 'Inactive'} />
-      </div>
+      <DataPanel title="Quote summary" eyebrow="ServiceM8 source">
+        <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <Field label="Customer" value={record.customerName} />
+          <Field label="Address" value={record.jobAddress ?? "-"} />
+          <Field
+            label="Quote value excl. GST"
+            value={formatQuoteMovementCurrency(record.quoteValueExcludingGst)}
+            numeric
+          />
+          <Field label="ServiceM8 status" value={record.servicem8Status} />
+        </dl>
+      </DataPanel>
 
-      <section className="rounded border border-gray-200 bg-white p-5 shadow-sm">
-        <h2 className="text-lg font-semibold text-gray-950">What Matters Now</h2>
-        <p className="mt-2 text-sm text-gray-600">
-          Conversion history, quote summaries, complexity, and follow-up timing land here in the next Quote Movement slices.
+      <DataPanel title="What Matters Now" eyebrow="Next slices">
+        <p className="max-w-[70ch] text-sm text-text-secondary">
+          Conversion history, quote summaries, complexity, and follow-up timing
+          land here in the next Quote Movement slices.
         </p>
-      </section>
+      </DataPanel>
     </div>
-  )
+  );
 }
 
-function DetailCard({ label, value }: { label: string; value: string }) {
+function Field({
+  label,
+  value,
+  numeric = false,
+}: {
+  label: string;
+  value: string;
+  numeric?: boolean;
+}) {
   return (
-    <div className="rounded border border-gray-200 bg-white p-4 shadow-sm">
-      <div className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</div>
-      <div className="mt-2 text-sm font-semibold text-gray-950">{value}</div>
+    <div>
+      <dt className="text-xs font-medium text-text-muted">{label}</dt>
+      <dd
+        className={`mt-1 break-words text-sm font-semibold text-text-primary ${numeric ? "tabular-nums" : ""}`}
+      >
+        {value}
+      </dd>
     </div>
-  )
+  );
 }
