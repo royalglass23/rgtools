@@ -32,11 +32,11 @@ describe('Production Specifications', () => {
     })
 
     expect(buildProductionLabel(specification)).toBe(
-      'Shower Glass | Int Bathroom | 10 mm Toughened Frosted | Hinged | Chrome | Supply & Install',
+      'Shower Glass | Int Bathroom\n10 mm Toughened Frosted | Hinged | Chrome | Supply & Install',
     )
   })
 
-  it('validates the approved Double Disc tracer and builds one deterministic production label', () => {
+  it('validates the approved Double Disc tracer and builds one deterministic two-line production label', () => {
     const specification = parseProductionSpecification({
       schemaVersion: 1,
       system: { state: 'selected', catalogueId: 'system.double-disc' },
@@ -64,7 +64,7 @@ describe('Production Specifications', () => {
     })
 
     expect(buildProductionLabel(specification)).toBe(
-      'Double Disc | Ext Balcony | 14.9 m | 12 mm Toughened Clear | Timber | Chrome | IL Rail 21 x 25 mm | Supply & Install',
+      'Double Disc | Ext Balcony | 14.9 m\n12 mm Toughened Clear | Timber | Chrome | IL Rail 21 x 25 mm | Supply & Install',
     )
     expect(buildProductionLabel(specification)).not.toContain('AS/NZS')
   })
@@ -109,7 +109,7 @@ describe('Production Specifications', () => {
         draftData: null,
         confirmedData: draft,
         schemaVersion: 1,
-        productionLabel: 'Double Disc | Ext Balcony | 12 mm Toughened Clear | Timber | Chrome | IL Rail 21 x 25 mm | Supply & Install',
+        productionLabel: 'Double Disc | Ext Balcony\n12 mm Toughened Clear | Timber | Chrome | IL Rail 21 x 25 mm | Supply & Install',
         confirmedBy: 'user-1',
         confirmedAt,
         updatedAt: confirmedAt,
@@ -123,6 +123,7 @@ describe('Production Specifications', () => {
         newSnapshot: draft,
         reasonCode: null,
         note: null,
+        changes: [],
         createdAt: confirmedAt,
       },
     })
@@ -138,6 +139,10 @@ describe('Production Specifications', () => {
       previousConfirmed: draft,
       actorId: 'user-2',
       confirmedAt: new Date('2026-07-17T03:30:00.000Z'),
+      changeReason: {
+        code: 'client_request',
+        note: 'Client approved the Matte Black finish.',
+      },
     })
 
     expect(changed.revision).toEqual(expect.objectContaining({
@@ -145,7 +150,67 @@ describe('Production Specifications', () => {
       actorId: 'user-2',
       previousSnapshot: draft,
       newSnapshot: changedDraft,
-      note: 'Hardware/Fittings Finish: Chrome -> Matte Black',
+      reasonCode: 'client_request',
+      note: 'Client approved the Matte Black finish.',
+      changes: [{
+        identity: 'hardwareFinish',
+        kind: 'field',
+        previousValue: { state: 'selected', catalogueId: 'finish.chrome' },
+        newValue: { state: 'selected', catalogueId: 'finish.matte-black' },
+      }],
     }))
   })
+
+  it('requires an approved reason for every later confirmed change and explanation for Other', () => {
+    const confirmed = parseProductionSpecification(confirmedSpecificationInput())
+    const changed = {
+      ...confirmed,
+      hardwareFinish: { state: 'selected' as const, catalogueId: 'finish.matte-black' },
+    }
+    const transition = {
+      specificationId: 'specification-1',
+      workOrderItemId: 'item-1',
+      draft: changed,
+      previousConfirmed: confirmed,
+      actorId: 'user-1',
+      confirmedAt: new Date('2026-07-17T03:30:00.000Z'),
+    }
+
+    expect(() => confirmProductionSpecificationDraft(transition)).toThrow(
+      'Choose an approved change reason before confirming this revision.',
+    )
+    expect(() => confirmProductionSpecificationDraft({
+      ...transition,
+      changeReason: { code: 'other' },
+    })).toThrow('Explain the Other change reason before confirming this revision.')
+    expect(() => confirmProductionSpecificationDraft({
+      ...transition,
+      changeReason: { code: 'not-approved' as 'other' },
+    })).toThrow('Choose an approved change reason before confirming this revision.')
+  })
 })
+
+function confirmedSpecificationInput() {
+  return {
+    schemaVersion: 1,
+    system: { state: 'selected', catalogueId: 'system.double-disc' },
+    structureMaterial: { state: 'selected', catalogueId: 'structure_material.timber' },
+    structureType: { state: 'selected', catalogueId: 'structure_type.balcony' },
+    locationEnvironment: { state: 'selected', catalogueId: 'location.external' },
+    locationDetail: { state: 'tbc' },
+    structureBuilt: { state: 'selected', catalogueId: 'structure_built.new' },
+    glassConstruction: { state: 'selected', catalogueId: 'glass_construction.toughened' },
+    glassAppearance: { state: 'selected', catalogueId: 'glass_appearance.clear' },
+    thickness: { state: 'selected', catalogueId: 'thickness.12mm' },
+    gateRequired: { state: 'selected', catalogueId: 'gate_required.no' },
+    doorOpeningType: { state: 'tbc' },
+    fixingMethod: { state: 'selected', catalogueId: 'fixing_method.double-disc' },
+    hardwareFinish: { state: 'selected', catalogueId: 'finish.chrome' },
+    systemFinish: { state: 'tbc' },
+    interlinkingRail: { state: 'selected', catalogueId: 'interlinking_rail.21x25mm' },
+    deliveryScope: { state: 'selected', catalogueId: 'delivery_scope.supply-install' },
+    measurements: [],
+    additionalComponents: [],
+    specialRequirements: [],
+  }
+}

@@ -1,4 +1,5 @@
 import { createServer, type Server } from 'node:http'
+import { createHash } from 'node:crypto'
 import AxeBuilder from '@axe-core/playwright'
 import { hash } from 'bcryptjs'
 import { neon } from '@neondatabase/serverless'
@@ -31,6 +32,7 @@ const workOrderModules = [
   { slug: 'admin/work-orders', name: 'Work Order Configuration', adminOnly: true },
 ]
 let primaryJobIsCurrent = true
+let primaryShowerDescription = 'Supply and install frameless shower screen 1200 x 2100 matte black'
 let adapterServer: Server | null = null
 let databaseVerified = false
 let previousSummaryConfig: {
@@ -195,6 +197,39 @@ test.describe('MT-199 Work Order Items release acceptance', () => {
     await expect(firstItem.getByLabel('Short label for SHOWER-001')).toHaveValue('Frameless shower screen, 1200 x 2100, matte black')
     await expect(firstItem).toHaveAttribute('title', /Supply and install frameless shower screen[\s\S]*Line total excluding GST: \$2501\.00/)
 
+    await seedConfirmedChromeProductionSpecification()
+    await page.reload()
+    await firstItem.getByText('View specification').click()
+    await firstItem.getByRole('button', { name: 'Change specification' }).click()
+    await firstItem.getByLabel('Hardware/Fittings Finish for SHOWER-001').selectOption('finish.matte-black')
+    await firstItem.getByLabel('Change reason').selectOption('client_request')
+    await firstItem.getByLabel('Change note (optional)').fill('Client approved Matte Black.')
+    await firstItem.getByRole('button', { name: 'Confirm specification' }).click()
+    await expect(firstItem.getByText('Specification confirmed')).toBeVisible()
+
+    await page.reload()
+    await expect(firstItem.getByLabel('Short label for SHOWER-001')).toHaveValue(/Matte Black/)
+    await firstItem.getByText('View specification').click()
+    await expect(firstItem.getByText(/Client request/)).toBeVisible()
+    await expect(firstItem.getByText('Hardware/Fittings Finish: Chrome → Matte Black')).toBeVisible()
+
+    primaryShowerDescription = 'ServiceM8 revised shower description with new Matte Black source wording'
+    await refreshWorkOrders(page)
+    await expect(firstItem.getByText('Source Changed')).toBeVisible()
+    await firstItem.getByText('View specification').click()
+    await firstItem.getByText('Compare ServiceM8 source').click()
+    await expect(firstItem.getByText(primaryShowerDescription)).toBeVisible()
+    await firstItem.getByRole('button', { name: 'Ignore source change' }).click()
+    await expect(firstItem.getByText('Source Changed')).toHaveCount(0)
+
+    primaryShowerDescription = 'ServiceM8 second revision requiring a reviewable draft'
+    await refreshWorkOrders(page)
+    await firstItem.getByText('View specification').click()
+    await firstItem.getByText('Compare ServiceM8 source').click()
+    await firstItem.getByRole('button', { name: 'Create new draft' }).click()
+    await expect(firstItem.getByText('Review and correct draft')).toBeVisible()
+    await expect(firstItem.getByText('Confirmed')).toBeVisible()
+
     const manualLabel = 'Manual MT199 shower label'
     await firstItem.getByLabel('Short label for SHOWER-001').fill(manualLabel)
     await firstItem.getByRole('button', { name: 'Save label' }).click()
@@ -298,6 +333,103 @@ async function readDownload(download: Download) {
   return Buffer.concat(chunks).toString('utf8')
 }
 
+async function seedConfirmedChromeProductionSpecification() {
+  if (!isolatedDatabaseUrl) return
+  const sql = neon(isolatedDatabaseUrl)
+  const items = await sql`
+    SELECT id, work_order_id AS "workOrderId"
+    FROM work_order_items
+    WHERE servicem8_item_uuid = ${primaryItemUuids[0]}
+    LIMIT 1
+  ` as Array<{ id: string; workOrderId: string }>
+  const item = items[0]
+  if (!item) throw new Error('MT-205 acceptance item was not created by the controlled refresh.')
+
+  const confirmedData = confirmedChromeProductionSpecification()
+  const sourceDescriptionFingerprint = createHash('sha256').update(primaryShowerDescription).digest('hex')
+  const specifications = await sql`
+    INSERT INTO work_order_item_production_specifications (
+      work_order_item_id,
+      status,
+      schema_version,
+      confirmed_data,
+      source_description,
+      source_description_fingerprint,
+      production_label,
+      confirmed_by,
+      confirmed_at,
+      confirmed_revision,
+      draft_revision,
+      updated_at
+    ) VALUES (
+      ${item.id}::uuid,
+      'confirmed',
+      1,
+      ${JSON.stringify(confirmedData)}::jsonb,
+      ${primaryShowerDescription},
+      ${sourceDescriptionFingerprint},
+      'Shower Glass | Int Bathroom | 10 mm Toughened Clear | Hinged | Chrome | Supply & Install',
+      ${userId}::uuid,
+      now(),
+      1,
+      0,
+      now()
+    )
+    RETURNING id
+  ` as Array<{ id: string }>
+  const specification = specifications[0]
+  if (!specification) throw new Error('MT-205 acceptance specification could not be seeded.')
+
+  await sql`
+    INSERT INTO work_order_item_production_specification_revisions (
+      specification_id,
+      work_order_item_id,
+      actor_id,
+      revision_type,
+      previous_snapshot,
+      new_snapshot,
+      reason_code,
+      note,
+      changes
+    ) VALUES (
+      ${specification.id}::uuid,
+      ${item.id}::uuid,
+      ${userId}::uuid,
+      'baseline_confirmed',
+      NULL,
+      ${JSON.stringify(confirmedData)}::jsonb,
+      NULL,
+      NULL,
+      '[]'::jsonb
+    )
+  `
+}
+
+function confirmedChromeProductionSpecification() {
+  return {
+    schemaVersion: 1,
+    system: { state: 'selected', catalogueId: 'system.shower-glass' },
+    structureMaterial: { state: 'tbc' },
+    structureType: { state: 'tbc' },
+    locationEnvironment: { state: 'selected', catalogueId: 'location.internal' },
+    locationDetail: { state: 'selected', catalogueId: 'location_detail.bathroom' },
+    structureBuilt: { state: 'tbc' },
+    glassConstruction: { state: 'selected', catalogueId: 'glass_construction.toughened' },
+    glassAppearance: { state: 'selected', catalogueId: 'glass_appearance.clear' },
+    thickness: { state: 'selected', catalogueId: 'thickness.10mm' },
+    gateRequired: { state: 'selected', catalogueId: 'gate_required.no' },
+    doorOpeningType: { state: 'selected', catalogueId: 'door_opening_type.hinged' },
+    fixingMethod: { state: 'tbc' },
+    hardwareFinish: { state: 'selected', catalogueId: 'finish.chrome' },
+    systemFinish: { state: 'tbc' },
+    interlinkingRail: { state: 'tbc' },
+    deliveryScope: { state: 'selected', catalogueId: 'delivery_scope.supply-install' },
+    measurements: [],
+    additionalComponents: [],
+    specialRequirements: [],
+  }
+}
+
 function createControlledAdapterServer() {
   return createServer(async (request, response) => {
     const path = new URL(request.url ?? '/', `http://127.0.0.1:${adapterPort}`).pathname
@@ -329,7 +461,7 @@ function createControlledAdapterServer() {
           active: 1,
           job_uuid: primaryJobUuid,
           material_uuid: 'mt199-material-shower',
-          name: 'Supply and install frameless shower screen 1200 x 2100 matte black',
+          name: primaryShowerDescription,
           quantity: '2',
           price: '1250.50',
           sort_order: '1',
