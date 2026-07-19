@@ -7,7 +7,9 @@ const transactionValues = vi.hoisted(() => [] as Array<{ table: string; values: 
 const transactionUpdates = vi.hoisted(() => [] as Array<{ table: string; values: Record<string, unknown> }>)
 const transactionConflictSets = vi.hoisted(() => [] as Array<{ table: string; values: Record<string, unknown> }>)
 const mockTransaction = vi.hoisted(() => vi.fn())
-const mockExecute = vi.hoisted(() => vi.fn(async () => ({ rows: [{}] })))
+const mockExecute = vi.hoisted(() => vi.fn<
+  (query?: unknown) => Promise<{ rows: unknown[] }>
+>(async () => ({ rows: [{}] })))
 const mockSelect = vi.hoisted(() => vi.fn())
 const mockUpdate = vi.hoisted(() => vi.fn())
 const mockRecordRefreshInsert = vi.hoisted(() => vi.fn())
@@ -17,6 +19,7 @@ const labelUpdates = vi.hoisted(() => [] as Array<Record<string, unknown>>)
 const mockGetWorkOrderBillingExclusions = vi.hoisted(() => vi.fn())
 const mockEnqueueEnrichments = vi.hoisted(() => vi.fn(async () => 0))
 const mockLogAudit = vi.hoisted(() => vi.fn())
+const mockCreateServiceM8RequestFromEnv = vi.hoisted(() => vi.fn())
 
 vi.mock('@/lib/db', () => ({
   db: {
@@ -29,7 +32,9 @@ vi.mock('@/lib/db', () => ({
 }))
 vi.mock('@/lib/auth', () => ({ auth: vi.fn() }))
 vi.mock('@/lib/audit-db', () => ({ logAudit: mockLogAudit }))
-vi.mock('@/lib/servicem8/client', () => ({ createServiceM8RequestFromEnv: vi.fn() }))
+vi.mock('@/lib/servicem8/client', () => ({
+  createServiceM8RequestFromEnv: mockCreateServiceM8RequestFromEnv,
+}))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('next/navigation', () => ({ redirect: vi.fn() }))
 vi.mock('../permissions', () => ({
@@ -43,10 +48,17 @@ vi.mock('../queries', () => ({
   findLinkedLeadAndClient: vi.fn(async () => null),
 }))
 
-import { refreshWorkOrdersFromServiceM8 } from '../actions'
+import {
+  refreshWorkOrderByJobNumberFromServiceM8,
+  refreshWorkOrdersFromServiceM8,
+  updateWorkOrderByJobNumberAction,
+} from '../actions'
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mockExecute.mockReset()
+  mockExecute.mockResolvedValue({ rows: [{}] })
+  mockCreateServiceM8RequestFromEnv.mockReset()
   transactionValues.length = 0
   transactionUpdates.length = 0
   transactionConflictSets.length = 0
@@ -66,6 +78,9 @@ beforeEach(() => {
     from: vi.fn((table: Parameters<typeof getTableName>[0]) => {
       if (getTableName(table) === 'work_order_items') {
         return { where: vi.fn(async () => persistedLabelRows) }
+      }
+      if (getTableName(table) === 'work_order_specification_catalogue_options') {
+        return { orderBy: vi.fn(async () => []) }
       }
       return {
         where: vi.fn(() => ({
@@ -124,6 +139,132 @@ beforeEach(() => {
 })
 
 describe('refreshWorkOrdersFromServiceM8', () => {
+  it('refreshes only the requested job without deactivating unrelated saved jobs', async () => {
+    const requestedPaths: string[] = []
+    const request = vi.fn(async (path: string) => {
+      requestedPaths.push(decodeURIComponent(path))
+      if (path.startsWith('/job.json')) {
+        return Response.json([{
+          uuid: 'job-1',
+          active: 1,
+          status: 'Work Order',
+          generated_job_id: 'R260210',
+          company_uuid: 'company-1',
+        }])
+      }
+      if (path.startsWith('/company/company-1.json')) {
+        return Response.json({ uuid: 'company-1', name: 'Example Client' })
+      }
+      if (path.startsWith('/jobmaterial.json')) {
+        return Response.json([{
+          uuid: 'item-1',
+          active: 1,
+          job_uuid: 'job-1',
+          material_uuid: 'material-1',
+          name: 'Shower glass',
+          quantity: '1',
+        }])
+      }
+      if (path.startsWith('/material/material-1.json')) {
+        return Response.json({ uuid: 'material-1', item_number: 'GLASS-001' })
+      }
+      return Response.json([], { status: 404 })
+    })
+
+    await expect(refreshWorkOrderByJobNumberFromServiceM8(
+      'R260210',
+      request,
+      mockEnqueueEnrichments,
+    )).resolves.toEqual({
+      synced: 1,
+      itemsSynced: 1,
+      excludedLineCount: 0,
+    })
+
+    expect(requestedPaths).toContainEqual(expect.stringContaining("generated_job_id eq 'R260210'"))
+    expect(requestedPaths).toContainEqual(expect.stringContaining("job_uuid eq 'job-1'"))
+    expect(requestedPaths).toContain('/material/material-1.json')
+    expect(requestedPaths).not.toContain('/material.json?cursor=-1')
+    expect(transactionUpdates).not.toContainEqual({
+      table: 'work_orders',
+      values: expect.objectContaining({ isCurrent: false }),
+    })
+  })
+
+  it('reports a committed job update truthfully when AI processing infrastructure fails', async () => {
+    mockCreateServiceM8RequestFromEnv.mockReturnValue(vi.fn(async (path: string) => {
+      if (path.startsWith('/job.json')) {
+        return Response.json([{
+          uuid: 'job-1',
+          active: 1,
+          status: 'Work Order',
+          generated_job_id: 'R260210',
+        }])
+      }
+      if (path.startsWith('/jobmaterial.json')) return Response.json([])
+      return Response.json([], { status: 404 })
+    }))
+    mockExecute.mockImplementation(async (query?: unknown) => {
+      if (JSON.stringify(query).includes('WITH candidates')) {
+        throw new Error('enrichment store unavailable')
+      }
+      return { rows: [{}] }
+    })
+    const formData = new FormData()
+    formData.set('jobNumber', 'R260210')
+
+    await expect(updateWorkOrderByJobNumberAction(
+      { status: 'idle', message: '' },
+      formData,
+    )).resolves.toEqual({
+      status: 'success',
+      message: 'Job R260210 updated: 0 items refreshed. AI processing could not complete; queued drafts remain available for retry.',
+    })
+  })
+
+  it('reports terminal AI failures and skipped counts in the completed job update', async () => {
+    mockCreateServiceM8RequestFromEnv.mockReturnValue(vi.fn(async (path: string) => {
+      if (path.startsWith('/job.json')) {
+        return Response.json([{
+          uuid: 'job-1',
+          active: 1,
+          status: 'Work Order',
+          generated_job_id: 'R260210',
+        }])
+      }
+      if (path.startsWith('/jobmaterial.json')) return Response.json([])
+      return Response.json([], { status: 404 })
+    }))
+    let workerClaimed = false
+    mockExecute.mockImplementation(async (query?: unknown) => {
+      if (JSON.stringify(query).includes('WITH candidates')) {
+        if (workerClaimed) return { rows: [] }
+        workerClaimed = true
+        return {
+          rows: [{
+            id: 'enrichment-job-1',
+            work_order_item_id: 'item-1',
+            source_description: 'Shower glass',
+            attempt_count: 1,
+            extraction_schema_version: 999,
+            prompt_version: 'production-specification-v1',
+          }],
+        }
+      }
+      return { rows: [{}] }
+    })
+    const formData = new FormData()
+    formData.set('jobNumber', 'R260210')
+
+    await expect(updateWorkOrderByJobNumberAction(
+      { status: 'idle', message: '' },
+      formData,
+    )).resolves.toEqual({
+      status: 'success',
+      message: 'Job R260210 updated: 0 items refreshed; 0 AI drafts created; 1 failed; 0 skipped. Review failed items and use Retry.',
+    })
+  })
+
   it('commits reconciliation, durably queues minimal item context, and returns without waiting for AI', async () => {
     const transactionImplementation = mockTransaction.getMockImplementation()
     if (!transactionImplementation) throw new Error('Transaction test boundary is unavailable.')

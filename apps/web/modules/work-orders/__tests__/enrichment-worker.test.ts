@@ -4,11 +4,88 @@ import { describe, expect, it } from 'vitest'
 
 import {
   processWorkOrderEnrichmentBatch,
+  processWorkOrderEnrichmentQueue,
   type WorkOrderEnrichmentRuntimeStore,
 } from '../enrichment-worker'
 import { createEmptyProductionSpecification } from '../production-specifications'
 
 describe('Work Order enrichment worker', () => {
+  it('drains more than one safe batch from the selected queue in one run', async () => {
+    const queued = Array.from({ length: 5 }, (_, index) => ({
+      id: `job-${index + 1}`,
+      workOrderItemId: `item-${index + 1}`,
+      sourceDescription: `Shower glass ${index + 1}`,
+      attemptCount: 1,
+      extractionSchemaVersion: 1,
+      promptVersion: 'production-specification-v1',
+    }))
+    const store: WorkOrderEnrichmentRuntimeStore = {
+      claim: async (limit) => queued.splice(0, limit),
+      saveDraft: async () => 'saved',
+      markRetry: async () => undefined,
+      markFailed: async () => undefined,
+    }
+
+    const result = await processWorkOrderEnrichmentQueue({
+      store,
+      provider: async () => validEmptyEnrichmentOutput(),
+      concurrency: 3,
+      maxBatches: 8,
+    })
+
+    expect(result).toEqual({
+      batches: 2,
+      claimed: 5,
+      drafted: 5,
+      retried: 0,
+      failed: 0,
+      skippedConfirmed: 0,
+      skippedInactive: 0,
+      skippedStaffEdited: 0,
+      limitReached: false,
+    })
+  })
+
+  it('stops before the next batch would exceed the processing time budget', async () => {
+    const queued = Array.from({ length: 6 }, (_, index) => ({
+      id: `timed-job-${index + 1}`,
+      workOrderItemId: `timed-item-${index + 1}`,
+      sourceDescription: `Pool glass ${index + 1}`,
+      attemptCount: 1,
+      extractionSchemaVersion: 1,
+      promptVersion: 'production-specification-v1',
+    }))
+    const store: WorkOrderEnrichmentRuntimeStore = {
+      claim: async (limit) => queued.splice(0, limit),
+      saveDraft: async () => 'saved',
+      markRetry: async () => undefined,
+      markFailed: async () => undefined,
+    }
+    const clockReadings = [0, 0, 31_000]
+
+    const result = await processWorkOrderEnrichmentQueue({
+      store,
+      provider: async () => validEmptyEnrichmentOutput(),
+      concurrency: 3,
+      timeoutMs: 30_000,
+      timeBudgetMs: 60_000,
+      clockMs: () => clockReadings.shift() ?? 31_000,
+    })
+
+    expect(result).toEqual({
+      batches: 1,
+      claimed: 3,
+      drafted: 3,
+      retried: 0,
+      failed: 0,
+      skippedConfirmed: 0,
+      skippedInactive: 0,
+      skippedStaffEdited: 0,
+      limitReached: true,
+    })
+    expect(queued).toHaveLength(3)
+  })
+
   it('revalidates provider output against the active shared catalogue', async () => {
     const savedDrafts: unknown[] = []
     const store: WorkOrderEnrichmentRuntimeStore = {

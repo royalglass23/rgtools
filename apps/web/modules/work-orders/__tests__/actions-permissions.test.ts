@@ -66,6 +66,7 @@ import {
   saveWorkOrderSummaryConfigAction,
   updateWorkOrderItemOperationalFieldAction,
   updateWorkOrderItemLabelAction,
+  updateWorkOrderByJobNumberAction,
 } from '../actions'
 
 beforeEach(() => {
@@ -140,6 +141,21 @@ describe('work order action permissions', () => {
       action: 'work_order.refresh.denied',
       actorId: 'user-1',
     }))
+  })
+
+  it('returns a safe error when a view-only user tries to update one job', async () => {
+    mockAssertCanManage.mockRejectedValue(new Error('Forbidden: Work Orders manage access is required.'))
+    const formData = new FormData()
+    formData.set('jobNumber', 'R260210')
+
+    await expect(updateWorkOrderByJobNumberAction(
+      { status: 'idle', message: '' },
+      formData,
+    )).resolves.toEqual({
+      status: 'error',
+      message: 'You do not have permission to update Work Orders.',
+    })
+    expect(mockTransaction).not.toHaveBeenCalled()
   })
 
   it('requires manage access before updating an operational Work Order Item field', async () => {
