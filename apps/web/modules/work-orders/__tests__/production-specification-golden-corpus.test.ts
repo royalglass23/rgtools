@@ -50,7 +50,7 @@ const goldenCases: GoldenCase[] = [
       evidence('hardwareFinish', 'polished chrome'),
       evidence('measurements', 'Five pieces'),
     ],
-    expectedLabel: 'Shower Glass | Location TBC - Bathroom | 5 pcs | 1960H | 10 mm Toughened Clear | Hinged | Chrome',
+    expectedLabel: 'Shower Glass | Location TBC - Bathroom | 5 pcs | 1960H\n10 mm Toughened Clear | Hinged | Chrome',
   },
   {
     name: 'round stainless rail',
@@ -71,7 +71,7 @@ const goldenCases: GoldenCase[] = [
       evidence('deliveryScope', 'supply and install'),
       evidence('measurements', '22m'),
     ],
-    expectedLabel: 'Round SS Rail | Int Stair Area | 22 m | 50.8 mm | Chrome | Supply & Install',
+    expectedLabel: 'Round SS Rail | Int Stair Area | 22 m | 50.8 mm\nChrome | Supply & Install',
   },
   {
     name: 'Double Disc balustrade',
@@ -102,7 +102,7 @@ const goldenCases: GoldenCase[] = [
       evidence('interlinkingRail', '21x25 interlinking rail'),
       evidence('measurements', '14.9m x 1.0m'),
     ],
-    expectedLabel: 'Double Disc Balustrade | Ext Balcony | 14.9 m x 1.0 m | 12 mm Toughened Clear | Timber | Chrome/316 SS | IL Rail 21 x 25 mm',
+    expectedLabel: 'Double Disc Balustrade | Ext Balcony | 14.9 m x 1.0 m\n12 mm Toughened Clear | Timber | Chrome/316 SS | IL Rail 21 x 25 mm',
   },
   {
     name: 'EdgeTec PosiGlaze pool fence',
@@ -131,7 +131,7 @@ const goldenCases: GoldenCase[] = [
       evidence('gateRequired', 'one gate'),
       evidence('measurements', '16.5m x 1200H'),
     ],
-    expectedLabel: 'EdgeTec PosiGlaze Pool Fence | Location TBC - Pool Area | 16.5 m x 1200H | 12 mm Toughened Clear | Timber Top-Mount | Black/Ironsand | 1 Gate',
+    expectedLabel: 'EdgeTec PosiGlaze Pool Fence | Location TBC - Pool Area | 16.5 m x 1200H\n12 mm Toughened Clear | Timber Top-Mount | Black/Ironsand | 1 Gate',
   },
   {
     name: 'supply-only handrail brackets',
@@ -152,7 +152,7 @@ const goldenCases: GoldenCase[] = [
       evidence('deliveryScope', 'supply only'),
       evidence('measurements', 'Seven'),
     ],
-    expectedLabel: 'Handrail Brackets | Int Stair Area | 7 pcs | Chrome | Supply Only',
+    expectedLabel: 'Handrail Brackets | Int Stair Area | 7 pcs\nChrome | Supply Only',
   },
   {
     name: 'pool-fence variation',
@@ -167,7 +167,7 @@ const goldenCases: GoldenCase[] = [
       evidence('fixingMethod', 'custom anti-toe-hold design'),
       evidence('measurements', 'two boundary panels'),
     ],
-    expectedLabel: 'Pool Fence Variation | Location TBC | Boundary Panels | 1200H | Custom Anti-Toe-Hold Design',
+    expectedLabel: 'Pool Fence Variation | Location TBC | Boundary Panels | 1200H\nCustom Anti-Toe-Hold Design',
   },
   {
     name: 'hinged shower over bathtub',
@@ -192,7 +192,7 @@ const goldenCases: GoldenCase[] = [
       evidence('hardwareFinish', 'brushed nickel'),
       evidence('measurements', 'One set'),
     ],
-    expectedLabel: 'Shower Glass | Location TBC - Bathroom | 1 Set | 800W x 1380H | 10 mm Toughened Clear | Hinged + Fixed Panel | Brushed Nickel',
+    expectedLabel: 'Shower Glass | Location TBC - Bathroom | 1 Set | 800W x 1380H\n10 mm Toughened Clear | Hinged + Fixed Panel | Brushed Nickel',
   },
   {
     name: 'multi-screen shower item',
@@ -217,7 +217,7 @@ const goldenCases: GoldenCase[] = [
       evidence('deliveryScope', 'installation included'),
       evidence('measurements', 'Four sets'),
     ],
-    expectedLabel: 'Shower Screens | Location TBC | 4 Sets | 10 mm Toughened Clear | 2 Single + Corner + Diamond | Chrome | Install Included',
+    expectedLabel: 'Shower Screens | Location TBC | 4 Sets\n10 mm Toughened Clear | 2 Single + Corner + Diamond | Chrome | Install Included',
   },
 ]
 

@@ -201,6 +201,10 @@ export const workOrderItemProductionSpecifications = pgTable('work_order_item_pr
   evidenceData: jsonb('evidence_data').$type<Array<Record<string, unknown>>>().default([]).notNull(),
   ambiguityFlags: jsonb('ambiguity_flags').$type<string[]>().default([]).notNull(),
   sourceDescriptionFingerprint: text('source_description_fingerprint'),
+  sourceDescription: text('source_description'),
+  draftSourceDescriptionFingerprint: text('draft_source_description_fingerprint'),
+  draftSourceDescription: text('draft_source_description'),
+  ignoredSourceDescriptionFingerprint: text('ignored_source_description_fingerprint'),
   extractionSchemaVersion: integer('extraction_schema_version'),
   promptVersion: text('prompt_version'),
   modelIdentifier: text('model_identifier'),
@@ -210,6 +214,9 @@ export const workOrderItemProductionSpecifications = pgTable('work_order_item_pr
   draftUpdatedAt: timestamp('draft_updated_at', { withTimezone: true }),
   confirmedBy: uuid('confirmed_by').references(() => users.id, { onDelete: 'set null' }),
   confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+  confirmedRevision: integer('confirmed_revision').default(0).notNull(),
+  draftRevision: integer('draft_revision').default(0).notNull(),
+  draftBaseRevision: integer('draft_base_revision'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
@@ -255,6 +262,7 @@ export const workOrderItemProductionSpecificationRevisions = pgTable('work_order
   newSnapshot: jsonb('new_snapshot').$type<Record<string, unknown>>().notNull(),
   reasonCode: text('reason_code'),
   note: text('note'),
+  changes: jsonb('changes').$type<Array<Record<string, unknown>>>().default([]).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   index('work_order_item_specification_revisions_item_created_idx').on(table.workOrderItemId, table.createdAt),

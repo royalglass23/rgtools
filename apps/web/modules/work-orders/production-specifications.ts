@@ -104,6 +104,24 @@ export type ProductionSpecificationCatalogueOption = {
   isActive?: boolean
 }
 
+export const PRODUCTION_SPECIFICATION_CHANGE_REASONS = [
+  { code: 'client_request', label: 'Client request' },
+  { code: 'measurement_correction', label: 'Measurement correction' },
+  { code: 'design_change', label: 'Design change' },
+  { code: 'supplier_change', label: 'Supplier change' },
+  { code: 'other', label: 'Other' },
+] as const
+
+export type ProductionSpecificationChangeReasonCode =
+  typeof PRODUCTION_SPECIFICATION_CHANGE_REASONS[number]['code']
+
+export type ProductionSpecificationChange = {
+  kind: 'field' | 'measurements' | 'component' | 'requirement'
+  identity: string
+  previousValue: unknown
+  newValue: unknown
+}
+
 export const INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE: readonly ProductionSpecificationCatalogueOption[] = [
   option('system.double-disc', 'system', 'Double Disc', 'Double Disc', 'system', 'double-disc'),
   option('system.frameless-spigot', 'system', 'Frameless Spigot', 'Frameless Spigot', 'system', 'frameless-spigot'),
@@ -288,9 +306,9 @@ export function buildProductionLabel(
   ].filter(Boolean).join(' / ')
   const scope = labelFor(specification.deliveryScope)
 
-  return [system, location, ...measurements, glass, doorOpening, fixingAndMaterial, finishes, extras, scope]
-    .filter(Boolean)
-    .join(' | ')
+  const identityLine = [system, location, ...measurements].filter(Boolean).join(' | ')
+  const productionLine = [glass, doorOpening, fixingAndMaterial, finishes, extras, scope].filter(Boolean).join(' | ')
+  return [identityLine, productionLine].filter(Boolean).join('\n')
 }
 
 export function productionSpecificationValueLabel(
@@ -312,14 +330,22 @@ export function confirmProductionSpecificationDraft(input: {
   actorId: string | null
   confirmedAt: Date
   catalogue?: readonly ProductionSpecificationCatalogueOption[]
+  changeReason?: {
+    code: ProductionSpecificationChangeReasonCode
+    note?: string
+  }
 }) {
   const catalogue = input.catalogue ?? INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE
   const confirmedData = parseProductionSpecification(input.draft, catalogue)
   const productionLabel = buildProductionLabel(confirmedData, catalogue)
   if (!productionLabel) throw new Error('Production specification cannot be confirmed without a production label.')
-  const automaticChangeNote = input.previousConfirmed
-    ? summarizeProductionSpecificationChanges(input.previousConfirmed, confirmedData, catalogue)
-    : null
+  const changeReason = input.previousConfirmed ? parseChangeReason(input.changeReason) : null
+  const changes = input.previousConfirmed
+    ? productionSpecificationChanges(input.previousConfirmed, confirmedData)
+    : []
+  if (input.previousConfirmed && changes.length === 0) {
+    throw new Error('Change at least one confirmed value before confirming this revision.')
+  }
 
   return {
     specification: {
@@ -339,11 +365,43 @@ export function confirmProductionSpecificationDraft(input: {
       revisionType: input.previousConfirmed ? 'draft_confirmed' : 'baseline_confirmed',
       previousSnapshot: input.previousConfirmed,
       newSnapshot: confirmedData,
-      reasonCode: null,
-      note: automaticChangeNote,
+      reasonCode: changeReason?.code ?? null,
+      note: changeReason?.note ?? null,
+      changes,
       createdAt: input.confirmedAt,
     },
   }
+}
+
+export function productionSpecificationChanges(
+  previous: ProductionSpecification,
+  next: ProductionSpecification,
+): ProductionSpecificationChange[] {
+  const fieldChanges = SPECIFICATION_FIELD_NAMES.flatMap<ProductionSpecificationChange>((field) => (
+    JSON.stringify(previous[field]) === JSON.stringify(next[field])
+      ? []
+      : [{
+          kind: 'field',
+          identity: field,
+          previousValue: previous[field],
+          newValue: next[field],
+        }]
+  ))
+  const repeatableChanges: ProductionSpecificationChange[] = [
+    ['measurements', 'measurements', previous.measurements, next.measurements],
+    ['component', 'additionalComponents', previous.additionalComponents, next.additionalComponents],
+    ['requirement', 'specialRequirements', previous.specialRequirements, next.specialRequirements],
+  ].flatMap(([kind, identity, previousValue, newValue]) => (
+    JSON.stringify(previousValue) === JSON.stringify(newValue)
+      ? []
+      : [{
+          kind: kind as ProductionSpecificationChange['kind'],
+          identity: String(identity),
+          previousValue,
+          newValue,
+        }]
+  ))
+  return [...fieldChanges, ...repeatableChanges]
 }
 
 export function summarizeProductionSpecificationChanges(
@@ -359,6 +417,21 @@ export function summarizeProductionSpecificationChanges(
   if (JSON.stringify(previous.additionalComponents) !== JSON.stringify(next.additionalComponents)) changes.push('Additional Components updated')
   if (JSON.stringify(previous.specialRequirements) !== JSON.stringify(next.specialRequirements)) changes.push('Special Requirements updated')
   return changes.length > 0 ? changes.join('; ') : 'Confirmed with no specification changes'
+}
+
+function parseChangeReason(input: {
+  code: ProductionSpecificationChangeReasonCode
+  note?: string
+} | undefined) {
+  if (!input || !PRODUCTION_SPECIFICATION_CHANGE_REASONS.some(({ code }) => code === input.code)) {
+    throw new Error('Choose an approved change reason before confirming this revision.')
+  }
+  const note = input.note?.trim() || null
+  if (input.code === 'other' && !note) {
+    throw new Error('Explain the Other change reason before confirming this revision.')
+  }
+  if (note && note.length > 500) throw new Error('Change note must be 500 characters or fewer.')
+  return { code: input.code, note }
 }
 
 function option(

@@ -15,18 +15,27 @@ import type {
   WorkOrderEnrichmentRuntimeStore,
 } from './enrichment-worker'
 
-export function createWorkOrderEnrichmentRuntimeStore(): WorkOrderEnrichmentRuntimeStore {
+export function createWorkOrderEnrichmentRuntimeStore(
+  options: { jobNumber?: string } = {},
+): WorkOrderEnrichmentRuntimeStore {
+  const scopedJobNumber = options.jobNumber ?? null
+
   return {
     async claim(limit, leaseMs) {
       const claimed = await db.execute(sql`
         WITH candidates AS (
-          SELECT id
-          FROM work_order_item_enrichment_jobs
+          SELECT jobs.id
+          FROM work_order_item_enrichment_jobs AS jobs
+          INNER JOIN work_order_items
+            ON work_order_items.id = jobs.work_order_item_id
+          INNER JOIN work_orders
+            ON work_orders.id = work_order_items.work_order_id
           WHERE (
-            (status = 'queued' AND available_at <= now())
-            OR (status = 'processing' AND lease_expires_at <= now())
+            (jobs.status = 'queued' AND jobs.available_at <= now())
+            OR (jobs.status = 'processing' AND jobs.lease_expires_at <= now())
           )
-          ORDER BY available_at ASC, created_at ASC
+            AND (${scopedJobNumber}::text IS NULL OR work_orders.job_number = ${scopedJobNumber})
+          ORDER BY jobs.available_at ASC, jobs.created_at ASC
           FOR UPDATE SKIP LOCKED
           LIMIT ${limit}
         )
@@ -108,6 +117,12 @@ export function createWorkOrderEnrichmentRuntimeStore(): WorkOrderEnrichmentRunt
             FROM work_order_item_enrichment_jobs
             WHERE id = ${job.id}
           )`,
+          draftSourceDescription: job.sourceDescription,
+          draftSourceDescriptionFingerprint: sql<string>`(
+            SELECT source_description_fingerprint
+            FROM work_order_item_enrichment_jobs
+            WHERE id = ${job.id}
+          )`,
           extractionSchemaVersion: output.schemaVersion,
           promptVersion: sql<string>`(
             SELECT prompt_version
@@ -125,7 +140,11 @@ export function createWorkOrderEnrichmentRuntimeStore(): WorkOrderEnrichmentRunt
         if (current) {
           await tx
             .update(workOrderItemProductionSpecifications)
-            .set(specificationValues)
+            .set({
+              ...specificationValues,
+              draftRevision: sql`${workOrderItemProductionSpecifications.draftRevision} + 1`,
+              draftBaseRevision: 0,
+            })
             .where(and(
               eq(workOrderItemProductionSpecifications.id, current.id),
               eq(workOrderItemProductionSpecifications.status, 'needs_review'),
@@ -134,6 +153,8 @@ export function createWorkOrderEnrichmentRuntimeStore(): WorkOrderEnrichmentRunt
           await tx.insert(workOrderItemProductionSpecifications).values({
             workOrderItemId: job.workOrderItemId,
             ...specificationValues,
+            draftRevision: 1,
+            draftBaseRevision: 0,
           })
         }
 

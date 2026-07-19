@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const selectResults = vi.hoisted(() => [] as unknown[][])
 const inserts = vi.hoisted(() => [] as Array<{ table: string; values: Record<string, unknown> }>)
 const updates = vi.hoisted(() => [] as Array<{ table: string; values: Record<string, unknown> }>)
+const executeQueries = vi.hoisted(() => [] as unknown[])
 
 vi.mock('drizzle-orm', () => ({
   and: vi.fn((...conditions: unknown[]) => ({ conditions })),
@@ -25,6 +26,10 @@ vi.mock('@rgtools/db/schema-workorders', () => ({
 
 vi.mock('@/lib/db', () => ({
   db: {
+    execute: vi.fn(async (query: unknown) => {
+      executeQueries.push(query)
+      return { rows: [] }
+    }),
     transaction: vi.fn(async (callback: (tx: ReturnType<typeof transactionBoundary>) => unknown) => (
       callback(transactionBoundary())
     )),
@@ -38,9 +43,18 @@ beforeEach(() => {
   selectResults.length = 0
   inserts.length = 0
   updates.length = 0
+  executeQueries.length = 0
 })
 
 describe('Work Order enrichment runtime store', () => {
+  it('claims queued enrichment only for the selected job number', async () => {
+    await createWorkOrderEnrichmentRuntimeStore({ jobNumber: 'R260210' }).claim(3, 60_000)
+
+    const query = executeQueries[0] as { strings: string[]; values: unknown[] }
+    expect(query.strings.join('?')).toContain('work_orders.job_number')
+    expect(query.values).toContain('R260210')
+  })
+
   it('persists a Needs Review draft without an authoritative Production Label', async () => {
     selectResults.push(
       [{ id: 'item-1', isActive: true }],
@@ -67,6 +81,9 @@ describe('Work Order enrichment runtime store', () => {
       .toEqual(expect.objectContaining({
         status: 'needs_review',
         productionLabel: null,
+        draftSourceDescription: 'Shower glass',
+        draftRevision: 1,
+        draftBaseRevision: 0,
       }))
   })
 

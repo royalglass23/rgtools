@@ -414,6 +414,13 @@
       "when": 1784176500000,
       "tag": "0058_work_order_item_enrichment_jobs",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1784257200000,
+      "tag": "0059_work_order_specification_change_lifecycle",
+      "breakpoints": true
     }
   ]
 }
