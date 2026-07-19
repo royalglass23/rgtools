@@ -165,6 +165,22 @@ describe('WorkOrderItemsSummary', () => {
             newValue: { state: 'selected', catalogueId: 'finish.matte-black' },
           }],
           createdAt: new Date('2026-07-17T03:30:00.000Z'),
+        }, {
+          id: 'revision-3',
+          revisionType: 'catalogue_option_changed',
+          actorUsername: 'configure@example.com',
+          previousSnapshot: confirmedSpecificationDocument(),
+          newSnapshot: confirmedSpecificationDocument(),
+          reasonCode: null,
+          note: 'Catalogue option finish.chrome changed: Production Label wording Chrome -> Polished Chrome.',
+          changes: [{
+            identity: 'finish.chrome',
+            kind: 'catalogue',
+            label: 'Production Label wording',
+            previousValue: 'Chrome',
+            newValue: 'Polished Chrome',
+          }],
+          createdAt: new Date('2026-07-18T03:30:00.000Z'),
         }],
       },
     })]} />)
@@ -180,6 +196,8 @@ describe('WorkOrderItemsSummary', () => {
     expect(screen.getByText(/Baseline confirmed by installer@example.com/)).toBeInTheDocument()
     expect(screen.getByText(/Client request/)).toBeInTheDocument()
     expect(screen.getByText('Hardware\/Fittings Finish: Chrome → Matte Black')).toBeInTheDocument()
+    expect(screen.getByText(/Catalogue option updated by configure@example.com/)).toBeInTheDocument()
+    expect(screen.getByText('Catalogue option finish.chrome — Production Label wording: Chrome → Polished Chrome')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save draft' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Confirm specification' })).not.toBeInTheDocument()
   })

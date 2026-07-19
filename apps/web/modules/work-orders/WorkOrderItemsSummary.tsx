@@ -725,6 +725,7 @@ function revisionTypeLabel(revisionType: string) {
   if (revisionType === 'baseline_confirmed') return 'Baseline confirmed'
   if (revisionType === 'source_change_ignored') return 'Source change ignored'
   if (revisionType === 'source_change_draft_created') return 'Source-change draft created'
+  if (revisionType === 'catalogue_option_changed') return 'Catalogue option updated'
   return 'Specification updated'
 }
 
@@ -737,6 +738,10 @@ function revisionChangeLabel(
   catalogue: readonly ProductionSpecificationCatalogueOption[],
 ) {
   const identity = String(change.identity ?? 'Specification')
+  if (change.kind === 'catalogue') {
+    const governedAttribute = typeof change.label === 'string' ? ` — ${change.label}` : ''
+    return `Catalogue option ${identity}${governedAttribute}: ${auditValueLabel(change.previousValue, catalogue)} → ${auditValueLabel(change.newValue, catalogue)}`
+  }
   const field = SPECIFICATION_FIELDS.find(({ field }) => field === identity)
   const label = field?.label ?? identity
   return `${label}: ${auditValueLabel(change.previousValue, catalogue)} → ${auditValueLabel(change.newValue, catalogue)}`
@@ -746,6 +751,7 @@ function auditValueLabel(
   value: unknown,
   catalogue: readonly ProductionSpecificationCatalogueOption[],
 ) {
+  if (typeof value === 'string') return value
   if (value && typeof value === 'object' && !Array.isArray(value) && 'state' in value) {
     return productionSpecificationValueLabel(value as ProductionSpecificationValue, catalogue)
   }

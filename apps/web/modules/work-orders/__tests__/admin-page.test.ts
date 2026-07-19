@@ -23,6 +23,13 @@ function summaryConfigSource() {
   );
 }
 
+function catalogueEditorSource() {
+  return readFileSync(
+    join(process.cwd(), "modules/work-orders/ProductionSpecificationCatalogueEditor.tsx"),
+    "utf8",
+  );
+}
+
 describe("work order admin page", () => {
   it("lets admins deactivate controlled options instead of deleting them", () => {
     const source = pageSource();
@@ -67,5 +74,20 @@ describe("work order admin page", () => {
     expect(source).toContain("Billing line exclusions");
     expect(source).toContain("saveWorkOrderBillingExclusionsAction");
     expect(source).toContain("One case-insensitive term per line");
+  });
+
+  it("governs stable Specification Catalogue options with impact preview and explicit confirmation", () => {
+    const source = `${pageSource()}\n${catalogueEditorSource()}`;
+
+    expect(source).toContain("Specification Catalogue");
+    expect(source).toContain("Production Label wording");
+    expect(source).toContain("Aliases");
+    expect(source).toContain("PS1");
+    expect(source).toContain("PS3");
+    expect(source).toContain("Not used for PS");
+    expect(source).toContain("Affected confirmed items");
+    expect(source).toContain("confirmImpact");
+    expect(source).toContain("Saving catalogue option");
+    expect(source).not.toContain("Delete catalogue option");
   });
 });

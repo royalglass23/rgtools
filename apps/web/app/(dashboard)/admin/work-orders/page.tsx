@@ -11,6 +11,8 @@ import {
   saveWorkOrderSummaryConfigAction,
 } from "@/modules/work-orders/actions";
 import { getWorkOrderBillingExclusions } from "@/modules/work-orders/billing-exclusions";
+import { ProductionSpecificationCatalogueEditor } from "@/modules/work-orders/ProductionSpecificationCatalogueEditor";
+import { getProductionSpecificationCatalogueAdminModel } from "@/modules/work-orders/production-specification-catalogue-store";
 import { getWorkOrderConfigLists } from "@/modules/work-orders/queries";
 import { SummaryFieldsEditor } from "@/modules/work-orders/SummaryFieldsEditor";
 import { getWorkOrderSummaryConfig } from "@/modules/work-orders/summary-config";
@@ -26,10 +28,12 @@ export default async function WorkOrderConfigurationPage({
     { installers, stages, hardwareStatuses },
     summaryFields,
     billingExclusions,
+    specificationCatalogue,
   ] = await Promise.all([
     getWorkOrderConfigLists(),
     getWorkOrderSummaryConfig(),
     getWorkOrderBillingExclusions(),
+    getProductionSpecificationCatalogueAdminModel(),
   ]);
 
   return (
@@ -72,6 +76,8 @@ export default async function WorkOrderConfigurationPage({
           rows={hardwareStatuses}
         />
       </div>
+
+      <ProductionSpecificationCatalogueEditor options={specificationCatalogue} />
 
       <BillingExclusionsPanel terms={billingExclusions} />
       <SummaryFieldsPanel fields={summaryFields} />
