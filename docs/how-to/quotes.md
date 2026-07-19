@@ -1,6 +1,6 @@
 # Quote Tracker — Workflow & Troubleshooting Guide
 
-A practical guide for Royal Glass staff. Covers the full lifecycle from generating a quote in ServiceM8 through to reading engagement data back in the dashboard.
+A practical guide for Royal Glass staff. Covers the full lifecycle from active ServiceM8 Quote jobs through to tracked quote links and engagement data in the dashboard.
 
 ---
 
@@ -23,7 +23,26 @@ The viewer and tracker are Cloudflare Workers. The dashboard is the rgtools app 
 
 ---
 
-## Step-by-step workflow
+## Quote Movement
+
+Quote Movement is the active ServiceM8 Quote list inside rgtools. It is read-only: rgtools pulls current active Quote jobs from ServiceM8 into its own cache and never writes Quote Movement changes back to ServiceM8.
+
+Open **Quotes -> Quote Movement** to see active Quote jobs with:
+
+| Field | What it means |
+|---|---|
+| Job number | The ServiceM8 generated job ID, linked to the Quote Movement detail shell |
+| Customer | The ServiceM8 company name, with a safe fallback when the company is missing |
+| Address | The job address from ServiceM8 |
+| Quote value excl. GST | Sum of active ServiceM8 job material lines before GST |
+| Status | Whether the cached ServiceM8 job is still active |
+| Last synced | When rgtools last refreshed that row from ServiceM8 |
+
+Use **Refresh now** when you want the cache updated from ServiceM8. The page shows **Last refreshed** and keeps the previous cached list available if ServiceM8 cannot be reached. If there are no active Quote jobs in the cache, the page says **No active ServiceM8 Quote jobs.**
+
+The detail page at **Quotes -> Quote Movement -> [job]** is a foundation shell for the next Quote Movement slices. Follow-up history, summaries, complexity, and conversion timing are not part of this release.
+
+## Quote Tracker step-by-step workflow
 
 ### 1. Generate the quote in ServiceM8
 
@@ -37,9 +56,9 @@ Before creating a tracked link, the quote PDF must exist in ServiceM8.
 
 ### 2. Create a tracked quote
 
-From the **Quote Tracker** page:
+From the **Quotes -> Track Quotes** page:
 
-1. Go to **Quote Tracker** in the dashboard sidebar.
+1. Go to **Quotes -> Track Quotes** in the dashboard sidebar.
 2. Click **Track Quote** (top-right of the page).
 3. In the dialog, type the ServiceM8 **Job ID** (e.g. `R260210`) and click **Create** (or press Enter).
 4. The dialog shows *Fetching quote from ServiceM8…* while it pulls the PDF, uploads it to R2, and mints a short link. This takes a few seconds.
@@ -329,6 +348,7 @@ pnpm quote:create --uuid <jobUuid>
 
 | Thing | Location |
 |---|---|
+| Quote Movement dashboard | `/quote-movement` in rgtools |
 | Quote tracker dashboard | `/quote-tracker` in rgtools |
 | Viewer worker code | `workers/viewer/src/index.ts` |
 | Tracker worker code | `workers/tracker/src/index.ts` |

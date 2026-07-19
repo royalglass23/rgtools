@@ -42,7 +42,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
                 <DropdownMenu label="Lead Intake" items={leadIntakeItems} />
               )}
               {quoteTrackerItems.length > 0 && (
-                <DropdownMenu label="Quote Tracker" items={quoteTrackerItems} />
+                <DropdownMenu label="Quotes" items={quoteTrackerItems} />
               )}
               {workOrderItems.length > 0 && (
                 <DropdownMenu label="Work Order" items={workOrderItems} />
