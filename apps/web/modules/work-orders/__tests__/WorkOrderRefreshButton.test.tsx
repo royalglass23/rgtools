@@ -19,7 +19,7 @@ describe('WorkOrderRefreshButton', () => {
 
     render(<WorkOrderRefreshButton />)
 
-    expect(screen.getByRole('button', { name: 'Refresh from ServiceM8' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Refresh all jobs' })).toBeEnabled()
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 
@@ -28,7 +28,7 @@ describe('WorkOrderRefreshButton', () => {
 
     render(<WorkOrderRefreshButton />)
 
-    expect(screen.getByRole('button', { name: 'Fetching data...' })).toBeDisabled()
-    expect(screen.getByRole('status')).toHaveTextContent('Fetching data...')
+    expect(screen.getByRole('button', { name: 'Refreshing all jobs...' })).toBeDisabled()
+    expect(screen.getByRole('status')).toHaveTextContent('Refreshing all jobs...')
   })
 })

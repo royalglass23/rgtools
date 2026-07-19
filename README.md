@@ -47,7 +47,7 @@ This repo is a pnpm workspace:
 - [Security runbook](docs/dev/security.md) - auth, access control, secrets, data boundaries, and incident response
 - [Quote tracking privacy note](docs/dev/quote-tracking.md) - what is collected, retention, access
 - [ServiceM8 sync architecture](docs/dev/servicem8-sync-architecture.md) - lead-to-ServiceM8 sync model
-- [Work Order enrichment operations](docs/dev/work-order-enrichment.md) - cron, secrets, privacy boundary, retry, monitoring, and rollback
+- [Work Order enrichment operations](docs/dev/work-order-enrichment.md) - manual Hobby processing, privacy boundary, retry, monitoring, and rollback
 - [ServiceM8 MCP notes](docs/dev/servicem8-mcp.md) - ServiceM8 MCP setup and limits
 - [Domain and environment setup](docs/dev/rgtools-domain-and-env-setup.md) - Royal Glass domains, Neon branches, and env separation
 - [Cloudflare DNS migration](docs/dev/dns-migration-cloudflare.md) - DNS migration plan

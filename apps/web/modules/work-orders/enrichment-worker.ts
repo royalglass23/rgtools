@@ -43,6 +43,80 @@ export type WorkOrderEnrichmentProvider = (
   sourceDescription: string,
 ) => Promise<ProductionSpecificationEnrichmentOutput>
 
+export async function processWorkOrderEnrichmentQueue({
+  store,
+  provider,
+  loadCatalogue,
+  concurrency = 3,
+  timeoutMs = 30_000,
+  leaseMs = 60_000,
+  maxAttempts = 3,
+  maxBatches = 8,
+  timeBudgetMs = 240_000,
+  clockMs = () => Date.now(),
+  now = () => new Date(),
+}: {
+  store: WorkOrderEnrichmentRuntimeStore
+  provider?: WorkOrderEnrichmentProvider
+  loadCatalogue?: ProductionSpecificationCatalogueLoader
+  concurrency?: number
+  timeoutMs?: number
+  leaseMs?: number
+  maxAttempts?: number
+  maxBatches?: number
+  timeBudgetMs?: number
+  clockMs?: () => number
+  now?: () => Date
+}) {
+  const boundedConcurrency = integerBetween(concurrency, 1, 10, 'concurrency')
+  const boundedMaxBatches = integerBetween(maxBatches, 1, 20, 'maxBatches')
+  assertValidTimeBudgetMs(timeBudgetMs, timeoutMs)
+  const startedAtMs = clockMs()
+  const total = {
+    batches: 0,
+    claimed: 0,
+    drafted: 0,
+    retried: 0,
+    failed: 0,
+    skippedConfirmed: 0,
+    skippedInactive: 0,
+    skippedStaffEdited: 0,
+    limitReached: false,
+  }
+
+  for (let batchNumber = 0; batchNumber < boundedMaxBatches; batchNumber += 1) {
+    if ((clockMs() - startedAtMs) + timeoutMs > timeBudgetMs) {
+      total.limitReached = true
+      return total
+    }
+    const batch = await processWorkOrderEnrichmentBatch({
+      store,
+      provider,
+      loadCatalogue,
+      concurrency: boundedConcurrency,
+      timeoutMs,
+      leaseMs,
+      maxAttempts,
+      now,
+    })
+    if (batch.claimed === 0) return total
+
+    total.batches += 1
+    total.claimed += batch.claimed
+    total.drafted += batch.drafted
+    total.retried += batch.retried
+    total.failed += batch.failed
+    total.skippedConfirmed += batch.skippedConfirmed
+    total.skippedInactive += batch.skippedInactive
+    total.skippedStaffEdited += batch.skippedStaffEdited
+
+    if (batch.claimed < boundedConcurrency) return total
+  }
+
+  total.limitReached = true
+  return total
+}
+
 export async function processWorkOrderEnrichmentBatch({
   store,
   provider,
@@ -161,5 +235,11 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: s
 function assertValidTimeoutMs(timeoutMs: number) {
   if (!Number.isFinite(timeoutMs) || timeoutMs < 1 || timeoutMs > 120_000) {
     throw new Error('timeoutMs must be between 1 and 120000.')
+  }
+}
+
+function assertValidTimeBudgetMs(timeBudgetMs: number, timeoutMs: number) {
+  if (!Number.isFinite(timeBudgetMs) || timeBudgetMs < timeoutMs || timeBudgetMs > 270_000) {
+    throw new Error('timeBudgetMs must be at least timeoutMs and no more than 270000.')
   }
 }

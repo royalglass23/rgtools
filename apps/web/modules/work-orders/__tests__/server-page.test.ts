@@ -63,6 +63,7 @@ describe('work orders server page', () => {
 
     expect(source).toContain('getCurrentWorkOrderPermissions')
     expect(source).toContain('permissions.canManage &&')
+    expect(source).toContain('<WorkOrderJobUpdateForm updateAction={updateWorkOrderByJobNumberAction} />')
     expect(source).toContain('<WorkOrderRefreshButton />')
   })
 
