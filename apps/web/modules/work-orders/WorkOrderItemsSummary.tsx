@@ -9,6 +9,8 @@ import {
 import { operationalFieldLabel, type WorkOrderItemOperationalField } from './item-operational-fields'
 import {
   confirmWorkOrderItemProductionSpecificationAction,
+  createWorkOrderItemProductionSpecificationDraftFromSourceChangeAction,
+  ignoreWorkOrderItemProductionSpecificationSourceChangeAction,
   retryWorkOrderItemProductionSpecificationEnrichmentAction,
   saveWorkOrderItemProductionSpecificationDraftAction,
 } from './production-specification-actions'
@@ -17,9 +19,11 @@ import {
   createEmptyProductionSpecification,
   INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE,
   parsePersistedProductionSpecification,
+  PRODUCTION_SPECIFICATION_CHANGE_REASONS,
   productionSpecificationValueLabel,
   type ProductionSpecification,
   type ProductionSpecificationCatalogueOption,
+  type ProductionSpecificationChangeReasonCode,
   type ProductionSpecificationComponent,
   type ProductionSpecificationFieldName,
   type ProductionSpecificationMeasurement,
@@ -126,6 +130,7 @@ export function WorkOrderItemsSummary({
             >
               {itemField && (
                 <ItemCompositeField
+                  key={productionSpecificationStateKey(item, productionSpecificationsEnabled)}
                   item={item}
                   hoverDetail={hoverDetail}
                   canEdit={canManage && itemField.editable && item.isActive}
@@ -191,6 +196,7 @@ function ItemCompositeField({
     productionSpecification?.confirmedData ?? productionSpecification?.draftData,
     catalogue,
   )
+  const draftSpecificationDocument = safeProductionSpecification(productionSpecification?.draftData, catalogue)
   const draftProductionLabel = structuredDocument ? buildProductionLabel(structuredDocument, catalogue) : ''
   const effectiveLabel = item.manualLabelOverride
     ?? productionSpecification?.productionLabel
@@ -205,6 +211,7 @@ function ItemCompositeField({
   const [retryLabel, setRetryLabel] = useState<string | null>(null)
   const [enrichmentStatus, setEnrichmentStatus] = useState(item.enrichmentStatus ?? null)
   const [enrichmentRetryState, setEnrichmentRetryState] = useState<'idle' | 'retrying' | 'error'>('idle')
+  const [sourceChanged, setSourceChanged] = useState(Boolean(productionSpecification?.sourceChanged))
 
   async function retryEnrichment() {
     setEnrichmentRetryState('retrying')
@@ -250,8 +257,11 @@ function ItemCompositeField({
     })
     setLocalSpecificationDocument(emptyDraft)
     try {
-      const saved = await saveWorkOrderItemProductionSpecificationDraftAction(item.id, emptyDraft)
-      setProductionSpecification((current) => current ? { ...current, id: saved.id } : current)
+      const saved = await saveWorkOrderItemProductionSpecificationDraftAction(item.id, emptyDraft, {
+        expectedConfirmedRevision: productionSpecification?.confirmedRevision ?? 0,
+        expectedDraftRevision: productionSpecification?.draftRevision ?? 0,
+      })
+      setProductionSpecification((current) => current ? { ...current, ...saved } : current)
       setCreateStatus('idle')
     } catch (error) {
       setProductionSpecification(null)
@@ -267,11 +277,13 @@ function ItemCompositeField({
     setCreateStatus('saving')
     setCreateError(null)
     try {
-      const saved = await saveWorkOrderItemProductionSpecificationDraftAction(item.id, confirmedDocument)
+      const saved = await saveWorkOrderItemProductionSpecificationDraftAction(item.id, confirmedDocument, {
+        expectedConfirmedRevision: productionSpecification.confirmedRevision ?? 0,
+        expectedDraftRevision: productionSpecification.draftRevision ?? 0,
+      })
       setProductionSpecification((current) => current ? {
         ...current,
-        id: saved.id,
-        status: 'needs_review',
+        ...saved,
         draftData: confirmedDocument,
       } : current)
       setLocalSpecificationDocument(confirmedDocument)
@@ -341,13 +353,16 @@ function ItemCompositeField({
             />
           </>
         ) : (
-          <span className="line-clamp-2">{effectiveLabel}</span>
+          <span className="line-clamp-2 whitespace-pre-line">{effectiveLabel}</span>
         )}
         {isLabelPending && (
           <span className="rounded bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800">Label pending</span>
         )}
         {item.labelStatus === 'source_changed' && (
           <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">Source description changed</span>
+        )}
+        {sourceChanged && (
+          <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">Source Changed</span>
         )}
         {!item.isActive && (
           <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">Removed</span>
@@ -402,10 +417,16 @@ function ItemCompositeField({
           item={item}
           persisted={productionSpecification}
           specification={structuredDocument}
+          draftSpecification={draftSpecificationDocument}
           canManage={canManageSpecification}
           correctionStatus={createStatus}
           correctionError={createError}
           onStartCorrection={() => void startSpecificationCorrection()}
+          sourceChanged={sourceChanged}
+          onSourceIgnored={() => setSourceChanged(false)}
+          onSourceDraftCreated={(saved) => {
+            setProductionSpecification((current) => current ? { ...current, ...saved } : current)
+          }}
           catalogue={catalogue}
         />
       )}
@@ -417,19 +438,27 @@ function ProductionSpecificationDetails({
   item,
   persisted,
   specification,
+  draftSpecification,
   canManage,
   correctionStatus,
   correctionError,
   onStartCorrection,
+  sourceChanged,
+  onSourceIgnored,
+  onSourceDraftCreated,
   catalogue,
 }: {
   item: WorkOrderItemSummaryRow
   persisted: WorkOrderItemProductionSpecificationSummary
   specification: ProductionSpecification
+  draftSpecification: ProductionSpecification | null
   canManage: boolean
   correctionStatus: 'idle' | 'saving' | 'error'
   correctionError: string | null
   onStartCorrection: () => void
+  sourceChanged: boolean
+  onSourceIgnored: () => void
+  onSourceDraftCreated: (saved: Partial<WorkOrderItemProductionSpecificationSummary>) => void
   catalogue: readonly ProductionSpecificationCatalogueOption[]
 }) {
   return (
@@ -450,9 +479,21 @@ function ProductionSpecificationDetails({
           )}
         </div>
 
+        {sourceChanged && (
+          <SourceChangeComparison
+            item={item}
+            persisted={persisted}
+            canManage={canManage}
+            onIgnored={onSourceIgnored}
+            onDraftCreated={onSourceDraftCreated}
+          />
+        )}
+
         <section aria-label="Original ServiceM8 description">
           <h4 className="font-semibold text-gray-950">Original ServiceM8 description</h4>
-          <p className="mt-1 whitespace-pre-wrap">{item.originalDescription}</p>
+          <p className="mt-1 whitespace-pre-wrap">
+            {persisted.sourceDescription ?? 'Original source text was not recorded.'}
+          </p>
         </section>
 
         {(persisted.evidenceData?.length ?? 0) > 0 && (
@@ -536,19 +577,28 @@ function ProductionSpecificationDetails({
               {persisted.history.map((revision) => (
                 <li key={revision.id} className="rounded border border-gray-200 bg-white px-2 py-1.5">
                   <span className="font-medium">
-                    {revision.revisionType === 'baseline_confirmed' ? 'Baseline confirmed' : 'Specification updated'}
+                    {revisionTypeLabel(revision.revisionType)}
                     {' by '}{revision.actorUsername ?? 'Unknown user'}
                   </span>
                   {' - '}{formatDateTime(revision.createdAt)}
-                  {revision.reasonCode ? ` - ${revision.reasonCode}` : ''}
+                  {revision.reasonCode ? ` - ${changeReasonLabel(revision.reasonCode)}` : ''}
                   {revision.note ? `: ${revision.note}` : ''}
+                  {(revision.changes?.length ?? 0) > 0 && (
+                    <ul className="mt-1 list-disc space-y-1 pl-5">
+                      {revision.changes?.map((change, index) => (
+                        <li key={`${String(change.identity ?? change.kind ?? 'change')}-${index}`}>
+                          {revisionChangeLabel(change, catalogue)}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </li>
               ))}
             </ol>
           )}
         </section>
 
-        {canManage && persisted.status === 'confirmed' && (
+        {canManage && persisted.status === 'confirmed' && !draftSpecification && (
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
@@ -563,11 +613,14 @@ function ProductionSpecificationDetails({
           </div>
         )}
 
-        {canManage && persisted.status === 'needs_review' && (
+        {canManage && draftSpecification && (
           <ProductionSpecificationEditor
             itemId={item.id}
             itemCode={item.itemCode ?? 'item'}
-            initialSpecification={specification}
+            initialSpecification={draftSpecification}
+            hasConfirmedSpecification={Boolean(persisted.confirmedData)}
+            confirmedRevision={persisted.confirmedRevision ?? 0}
+            draftRevision={persisted.draftRevision ?? 0}
             catalogue={catalogue}
           />
         )}
@@ -576,21 +629,153 @@ function ProductionSpecificationDetails({
   )
 }
 
+function SourceChangeComparison({
+  item,
+  persisted,
+  canManage,
+  onIgnored,
+  onDraftCreated,
+}: {
+  item: WorkOrderItemSummaryRow
+  persisted: WorkOrderItemProductionSpecificationSummary
+  canManage: boolean
+  onIgnored: () => void
+  onDraftCreated: (saved: Partial<WorkOrderItemProductionSpecificationSummary>) => void
+}) {
+  const [status, setStatus] = useState<'idle' | 'ignoring' | 'creating' | 'error'>('idle')
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const currentFingerprint = persisted.currentSourceDescriptionFingerprint
+
+  async function ignoreSourceChange() {
+    if (!currentFingerprint) return
+    setStatus('ignoring')
+    setErrorMessage(null)
+    try {
+      await ignoreWorkOrderItemProductionSpecificationSourceChangeAction(item.id, {
+        expectedConfirmedRevision: persisted.confirmedRevision ?? 0,
+        sourceDescriptionFingerprint: currentFingerprint,
+      })
+      setStatus('idle')
+      onIgnored()
+    } catch (error) {
+      setStatus('error')
+      setErrorMessage(error instanceof Error ? error.message : 'Source change could not be ignored.')
+    }
+  }
+
+  async function createDraft() {
+    if (!currentFingerprint) return
+    setStatus('creating')
+    setErrorMessage(null)
+    try {
+      const saved = await createWorkOrderItemProductionSpecificationDraftFromSourceChangeAction(item.id, {
+        expectedConfirmedRevision: persisted.confirmedRevision ?? 0,
+        expectedDraftRevision: persisted.draftRevision ?? 0,
+        sourceDescriptionFingerprint: currentFingerprint,
+      })
+      onDraftCreated(saved)
+      setStatus('idle')
+    } catch (error) {
+      setStatus('error')
+      setErrorMessage(error instanceof Error ? error.message : 'A source-change draft could not be created.')
+    }
+  }
+
+  return (
+    <details className="rounded border border-amber-300 bg-amber-50 px-3 py-2">
+      <summary className="cursor-pointer font-semibold text-amber-950">Compare ServiceM8 source</summary>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <section aria-label="Confirmed ServiceM8 source">
+          <h4 className="font-semibold text-gray-950">Confirmed source</h4>
+          <p className="mt-1 whitespace-pre-wrap">{persisted.sourceDescription ?? 'Confirmed source text is unavailable.'}</p>
+        </section>
+        <section aria-label="Current ServiceM8 source">
+          <h4 className="font-semibold text-gray-950">Current ServiceM8 source</h4>
+          <p className="mt-1 whitespace-pre-wrap">{item.originalDescription}</p>
+        </section>
+      </div>
+      {canManage && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={status === 'ignoring' || status === 'creating' || Boolean(persisted.draftData)}
+            onClick={() => void ignoreSourceChange()}
+            className="rounded border border-amber-700 bg-white px-3 py-1.5 font-semibold text-amber-900 disabled:cursor-wait disabled:opacity-60"
+          >
+            Ignore source change
+          </button>
+          <button
+            type="button"
+            disabled={status === 'ignoring' || status === 'creating'}
+            onClick={() => void createDraft()}
+            className="rounded bg-[#142B3A] px-3 py-1.5 font-semibold text-white disabled:cursor-wait disabled:opacity-60"
+          >
+            {persisted.draftData ? 'Draft ready for review' : 'Create new draft'}
+          </button>
+          {status === 'ignoring' && <span role="status">Ignoring source change</span>}
+          {status === 'creating' && <span role="status">Creating reviewable draft</span>}
+          {status === 'error' && <span role="alert" className="text-red-700">{errorMessage}</span>}
+        </div>
+      )}
+    </details>
+  )
+}
+
+function revisionTypeLabel(revisionType: string) {
+  if (revisionType === 'baseline_confirmed') return 'Baseline confirmed'
+  if (revisionType === 'source_change_ignored') return 'Source change ignored'
+  if (revisionType === 'source_change_draft_created') return 'Source-change draft created'
+  return 'Specification updated'
+}
+
+function changeReasonLabel(reasonCode: string) {
+  return PRODUCTION_SPECIFICATION_CHANGE_REASONS.find(({ code }) => code === reasonCode)?.label ?? reasonCode
+}
+
+function revisionChangeLabel(
+  change: Record<string, unknown>,
+  catalogue: readonly ProductionSpecificationCatalogueOption[],
+) {
+  const identity = String(change.identity ?? 'Specification')
+  const field = SPECIFICATION_FIELDS.find(({ field }) => field === identity)
+  const label = field?.label ?? identity
+  return `${label}: ${auditValueLabel(change.previousValue, catalogue)} → ${auditValueLabel(change.newValue, catalogue)}`
+}
+
+function auditValueLabel(
+  value: unknown,
+  catalogue: readonly ProductionSpecificationCatalogueOption[],
+) {
+  if (value && typeof value === 'object' && !Array.isArray(value) && 'state' in value) {
+    return productionSpecificationValueLabel(value as ProductionSpecificationValue, catalogue)
+  }
+  return JSON.stringify(value)
+}
+
 function ProductionSpecificationEditor({
   itemId,
   itemCode,
   initialSpecification,
+  hasConfirmedSpecification,
+  confirmedRevision,
+  draftRevision,
   catalogue,
 }: {
   itemId: string
   itemCode: string
   initialSpecification: ProductionSpecification
+  hasConfirmedSpecification: boolean
+  confirmedRevision: number
+  draftRevision: number
   catalogue: readonly ProductionSpecificationCatalogueOption[]
 }) {
   const [draft, setDraft] = useState(initialSpecification ?? createEmptyProductionSpecification())
   const [dirty, setDirty] = useState(false)
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'confirming' | 'confirmed' | 'error'>('idle')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [revisions, setRevisions] = useState({ confirmedRevision, draftRevision })
+  const [changeReason, setChangeReason] = useState<ProductionSpecificationChangeReasonCode | ''>('')
+  const [changeNote, setChangeNote] = useState('')
 
   function updateField(field: ProductionSpecificationFieldName, value: ProductionSpecificationValue) {
     setDraft((current) => ({ ...current, [field]: value }))
@@ -603,23 +788,42 @@ function ProductionSpecificationEditor({
     setStatus('saving')
     setErrorMessage(null)
     try {
-      await saveWorkOrderItemProductionSpecificationDraftAction(itemId, draft)
+      const saved = await saveWorkOrderItemProductionSpecificationDraftAction(itemId, draft, {
+        expectedConfirmedRevision: revisions.confirmedRevision,
+        expectedDraftRevision: revisions.draftRevision,
+      })
+      setRevisions({
+        confirmedRevision: saved.confirmedRevision,
+        draftRevision: saved.draftRevision,
+      })
       setDirty(false)
       setStatus('saved')
-      return true
+      return saved
     } catch (error) {
       setStatus('error')
       setErrorMessage(error instanceof Error ? error.message : 'Production Specification draft could not be saved.')
-      return false
+      return null
     }
   }
 
   async function confirmDraft() {
-    if (dirty && !(await saveDraft())) return
+    if (hasConfirmedSpecification && !changeReason) {
+      setStatus('error')
+      setErrorMessage('Choose an approved change reason before confirming this revision.')
+      return
+    }
+    const saved = dirty ? await saveDraft() : null
+    if (dirty && !saved) return
     setStatus('confirming')
     setErrorMessage(null)
     try {
-      await confirmWorkOrderItemProductionSpecificationAction(itemId)
+      await confirmWorkOrderItemProductionSpecificationAction(itemId, {
+        expectedConfirmedRevision: saved?.confirmedRevision ?? revisions.confirmedRevision,
+        expectedDraftRevision: saved?.draftRevision ?? revisions.draftRevision,
+        ...(hasConfirmedSpecification && changeReason
+          ? { changeReason: { code: changeReason, note: changeNote } }
+          : {}),
+      })
       setStatus('confirmed')
     } catch (error) {
       setStatus('error')
@@ -665,6 +869,40 @@ function ProductionSpecificationEditor({
           setStatus('idle')
         }}
       />
+      {hasConfirmedSpecification && (
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <label className="text-xs font-medium text-gray-700">
+            Change reason
+            <select
+              aria-label="Change reason"
+              required
+              value={changeReason}
+              onChange={(event) => {
+                setChangeReason(event.target.value as ProductionSpecificationChangeReasonCode | '')
+                setStatus('idle')
+                setErrorMessage(null)
+              }}
+              className="mt-1 w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-gray-950"
+            >
+              <option value="">Choose a reason</option>
+              {PRODUCTION_SPECIFICATION_CHANGE_REASONS.map(({ code, label }) => (
+                <option key={code} value={code}>{label}</option>
+              ))}
+            </select>
+          </label>
+          <label className="text-xs font-medium text-gray-700">
+            Change note {changeReason === 'other' ? '(required)' : '(optional)'}
+            <textarea
+              aria-label="Change note (optional)"
+              required={changeReason === 'other'}
+              maxLength={500}
+              value={changeNote}
+              onChange={(event) => setChangeNote(event.target.value)}
+              className="mt-1 min-h-16 w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-gray-950"
+            />
+          </label>
+        </div>
+      )}
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <button
           type="button"
@@ -1150,6 +1388,18 @@ function ItemCount({ count }: { count: number }) {
 function formatQuantity(quantity: string) {
   const parsed = Number(quantity)
   return Number.isFinite(parsed) ? String(parsed) : quantity
+}
+
+function productionSpecificationStateKey(item: WorkOrderItemSummaryRow, enabled: boolean) {
+  const specification = item.productionSpecification
+  return [
+    enabled ? 'enabled' : 'disabled',
+    specification?.id ?? 'none',
+    specification?.confirmedRevision ?? 0,
+    specification?.draftRevision ?? 0,
+    specification?.currentSourceDescriptionFingerprint ?? 'no-source',
+    specification?.sourceChanged ? 'changed' : 'unchanged',
+  ].join(':')
 }
 
 function truncateDescription(description: string) {

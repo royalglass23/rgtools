@@ -15,6 +15,7 @@ import {
   workOrderStageOptions,
   type WorkOrderItemEnrichmentStatusValue,
 } from '@rgtools/db/schema-workorders'
+import { fingerprintSourceDescription } from './item-label-lifecycle'
 import type { WorkOrderLevel } from './domain'
 import type { WorkOrderListFilters, WorkOrderSort, WorkOrderSortDirection } from './list-filters'
 import {
@@ -151,6 +152,13 @@ const workOrderItemSummarySelection = {
     confirmedData: workOrderItemProductionSpecifications.confirmedData,
     productionLabel: workOrderItemProductionSpecifications.productionLabel,
     confirmedAt: workOrderItemProductionSpecifications.confirmedAt,
+    confirmedRevision: workOrderItemProductionSpecifications.confirmedRevision,
+    draftRevision: workOrderItemProductionSpecifications.draftRevision,
+    sourceDescription: workOrderItemProductionSpecifications.sourceDescription,
+    sourceDescriptionFingerprint: workOrderItemProductionSpecifications.sourceDescriptionFingerprint,
+    draftSourceDescription: workOrderItemProductionSpecifications.draftSourceDescription,
+    draftSourceDescriptionFingerprint: workOrderItemProductionSpecifications.draftSourceDescriptionFingerprint,
+    ignoredSourceDescriptionFingerprint: workOrderItemProductionSpecifications.ignoredSourceDescriptionFingerprint,
     evidenceData: workOrderItemProductionSpecifications.evidenceData,
     ambiguityFlags: workOrderItemProductionSpecifications.ambiguityFlags,
     history: sql<Array<{
@@ -171,6 +179,7 @@ const workOrderItemSummarySelection = {
         'newSnapshot', ${workOrderItemProductionSpecificationRevisions.newSnapshot},
         'reasonCode', ${workOrderItemProductionSpecificationRevisions.reasonCode},
         'note', ${workOrderItemProductionSpecificationRevisions.note},
+        'changes', ${workOrderItemProductionSpecificationRevisions.changes},
         'createdAt', ${workOrderItemProductionSpecificationRevisions.createdAt}
       ) order by ${workOrderItemProductionSpecificationRevisions.createdAt} asc)
       from ${workOrderItemProductionSpecificationRevisions}
@@ -316,7 +325,7 @@ async function listWorkOrderSummaryItems(
     return {
       ...row,
       productionSpecification: row.productionSpecification?.id
-        ? row.productionSpecification
+        ? sourceComparisonSummary(row.originalDescription, row.productionSpecification)
         : null,
       enrichmentStatus: enrichmentStatus
         ? {
@@ -326,6 +335,27 @@ async function listWorkOrderSummaryItems(
         : null,
     }
   })
+}
+
+function sourceComparisonSummary<T extends {
+  confirmedData: unknown
+  sourceDescription: string | null
+  sourceDescriptionFingerprint: string | null
+  ignoredSourceDescriptionFingerprint: string | null
+}>(currentSourceDescription: string, specification: T) {
+  const currentSourceDescriptionFingerprint = fingerprintSourceDescription(currentSourceDescription)
+  const sourceDiffers = specification.sourceDescriptionFingerprint
+    ? specification.sourceDescriptionFingerprint !== currentSourceDescriptionFingerprint
+    : specification.sourceDescription !== null && specification.sourceDescription !== currentSourceDescription
+  return {
+    ...specification,
+    currentSourceDescriptionFingerprint,
+    sourceChanged: Boolean(
+      specification.confirmedData
+      && sourceDiffers
+      && specification.ignoredSourceDescriptionFingerprint !== currentSourceDescriptionFingerprint
+    ),
+  }
 }
 
 export async function getWorkOrderFilterOptions() {

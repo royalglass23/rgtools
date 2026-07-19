@@ -40,6 +40,14 @@ export type WorkOrderItemProductionSpecificationSummary = {
   confirmedData: unknown
   productionLabel: string | null
   confirmedAt: Date | null
+  confirmedRevision?: number
+  draftRevision?: number
+  sourceDescription?: string | null
+  sourceDescriptionFingerprint?: string | null
+  draftSourceDescription?: string | null
+  draftSourceDescriptionFingerprint?: string | null
+  currentSourceDescriptionFingerprint?: string | null
+  sourceChanged?: boolean
   evidenceData?: Array<Record<string, unknown>>
   ambiguityFlags?: string[]
   history: Array<{
@@ -50,6 +58,7 @@ export type WorkOrderItemProductionSpecificationSummary = {
     newSnapshot: unknown
     reasonCode: string | null
     note: string | null
+    changes?: Array<Record<string, unknown>>
     createdAt: Date
   }>
 }

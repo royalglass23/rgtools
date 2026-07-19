@@ -6,6 +6,8 @@ const mockUpdateLabel = vi.hoisted(() => vi.fn())
 const mockSaveSpecificationDraft = vi.hoisted(() => vi.fn())
 const mockConfirmSpecification = vi.hoisted(() => vi.fn())
 const mockRetryEnrichment = vi.hoisted(() => vi.fn())
+const mockIgnoreSourceChange = vi.hoisted(() => vi.fn())
+const mockCreateSourceChangeDraft = vi.hoisted(() => vi.fn())
 
 vi.mock('../actions', () => ({
   updateWorkOrderItemLabelAction: mockUpdateLabel,
@@ -16,6 +18,8 @@ vi.mock('../production-specification-actions', () => ({
   saveWorkOrderItemProductionSpecificationDraftAction: mockSaveSpecificationDraft,
   confirmWorkOrderItemProductionSpecificationAction: mockConfirmSpecification,
   retryWorkOrderItemProductionSpecificationEnrichmentAction: mockRetryEnrichment,
+  ignoreWorkOrderItemProductionSpecificationSourceChangeAction: mockIgnoreSourceChange,
+  createWorkOrderItemProductionSpecificationDraftFromSourceChangeAction: mockCreateSourceChangeDraft,
 }))
 
 import { WorkOrderItemsSummary } from '../WorkOrderItemsSummary'
@@ -132,6 +136,7 @@ describe('WorkOrderItemsSummary', () => {
         draftData: null,
         confirmedData: confirmedSpecificationDocument(),
         productionLabel: 'Double Disc | Ext Balcony | 12 mm Toughened Clear | Timber | Chrome | Supply & Install',
+        sourceDescription: 'Original noisy ServiceM8 description with pricing and compliance wording',
         confirmedAt: new Date('2026-07-16T03:30:00.000Z'),
         history: [{
           id: 'revision-1',
@@ -142,6 +147,24 @@ describe('WorkOrderItemsSummary', () => {
           reasonCode: null,
           note: null,
           createdAt: new Date('2026-07-16T03:30:00.000Z'),
+        }, {
+          id: 'revision-2',
+          revisionType: 'draft_confirmed',
+          actorUsername: 'manager@example.com',
+          previousSnapshot: confirmedSpecificationDocument(),
+          newSnapshot: {
+            ...confirmedSpecificationDocument(),
+            hardwareFinish: { state: 'selected', catalogueId: 'finish.matte-black' },
+          },
+          reasonCode: 'client_request',
+          note: 'Client approved Matte Black.',
+          changes: [{
+            identity: 'hardwareFinish',
+            kind: 'field',
+            previousValue: { state: 'selected', catalogueId: 'finish.chrome' },
+            newValue: { state: 'selected', catalogueId: 'finish.matte-black' },
+          }],
+          createdAt: new Date('2026-07-17T03:30:00.000Z'),
         }],
       },
     })]} />)
@@ -155,8 +178,54 @@ describe('WorkOrderItemsSummary', () => {
     expect(screen.getByText(/Pool gate hardware/)).toBeInTheDocument()
     expect(screen.getByText('Custom design to avoid toe hold')).toBeInTheDocument()
     expect(screen.getByText(/Baseline confirmed by installer@example.com/)).toBeInTheDocument()
+    expect(screen.getByText(/Client request/)).toBeInTheDocument()
+    expect(screen.getByText('Hardware\/Fittings Finish: Chrome → Matte Black')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save draft' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Confirm specification' })).not.toBeInTheDocument()
+  })
+
+  it('shows every viewer a safe ServiceM8 source comparison and only Manage users the decisions', async () => {
+    mockIgnoreSourceChange.mockResolvedValue({ status: 'ignored', sourceDescriptionFingerprint: 'source-new' })
+    const item = workOrderItem({
+      id: 'item-source-comparison',
+      itemCode: 'GLASS-SOURCE',
+      quantity: '1.000',
+      originalDescription: 'New ServiceM8 description with Matte Black hardware',
+      lineTotalExcludingGst: '1200.00',
+      generatedLabel: 'Legacy short label',
+      manualLabelOverride: null,
+      isActive: true,
+      productionSpecification: {
+        id: 'specification-source-comparison',
+        status: 'confirmed',
+        draftData: null,
+        confirmedData: confirmedSpecificationDocument(),
+        productionLabel: 'Double Disc | Ext Balcony | 12 mm Toughened Clear | Timber | Chrome | Supply & Install',
+        confirmedAt: new Date('2026-07-16T03:30:00.000Z'),
+        confirmedRevision: 1,
+        draftRevision: 1,
+        sourceDescription: 'Original ServiceM8 description with Chrome hardware',
+        sourceDescriptionFingerprint: 'source-old',
+        currentSourceDescriptionFingerprint: 'source-new',
+        sourceChanged: true,
+        history: [],
+      },
+    })
+    const { rerender } = render(<WorkOrderItemsSummary items={[item]} />)
+
+    expect(screen.getByText('Source Changed')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('Compare ServiceM8 source'))
+    expect(screen.getAllByText('Original ServiceM8 description with Chrome hardware')).toHaveLength(2)
+    expect(screen.getByText('New ServiceM8 description with Matte Black hardware')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Ignore source change' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Create new draft' })).not.toBeInTheDocument()
+
+    rerender(<WorkOrderItemsSummary canManage items={[item]} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Ignore source change' }))
+    await waitFor(() => expect(mockIgnoreSourceChange).toHaveBeenCalledWith('item-source-comparison', {
+      expectedConfirmedRevision: 1,
+      sourceDescriptionFingerprint: 'source-new',
+    }))
   })
 
   it('keeps an authorised manual label correction editable after enrichment', () => {
@@ -214,8 +283,10 @@ describe('WorkOrderItemsSummary', () => {
     const confirmed = confirmedSpecificationDocument()
     mockSaveSpecificationDraft.mockResolvedValue({
       id: 'specification-1',
-      status: 'needs_review',
+      status: 'confirmed',
       draftData: confirmed,
+      confirmedRevision: 1,
+      draftRevision: 2,
     })
     render(<WorkOrderItemsSummary canManage items={[workOrderItem({
       id: 'item-client-change',
@@ -233,6 +304,8 @@ describe('WorkOrderItemsSummary', () => {
         confirmedData: confirmed,
         productionLabel: 'Double Disc | Ext Balcony | 12 mm Toughened Clear | Timber | Chrome | Supply & Install',
         confirmedAt: new Date('2026-07-16T03:30:00.000Z'),
+        confirmedRevision: 1,
+        draftRevision: 1,
         history: [],
       },
     })]} />)
@@ -240,13 +313,83 @@ describe('WorkOrderItemsSummary', () => {
     fireEvent.click(screen.getByText('View specification'))
     fireEvent.click(screen.getByRole('button', { name: 'Change specification' }))
 
-    await waitFor(() => expect(mockSaveSpecificationDraft).toHaveBeenCalledWith('item-client-change', confirmed))
+    await waitFor(() => expect(mockSaveSpecificationDraft).toHaveBeenCalledWith('item-client-change', confirmed, {
+      expectedConfirmedRevision: 1,
+      expectedDraftRevision: 1,
+    }))
     expect(await screen.findByText('Review and correct draft')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Confirm specification' })).toBeInTheDocument()
   })
 
+  it('completes the Chrome to Matte Black client-request journey with required reason and revision tokens', async () => {
+    const confirmed = confirmedSpecificationDocument()
+    mockSaveSpecificationDraft.mockResolvedValue({
+      id: 'specification-1',
+      status: 'confirmed',
+      confirmedRevision: 1,
+      draftRevision: 3,
+    })
+    mockConfirmSpecification.mockResolvedValue({
+      status: 'confirmed',
+      productionLabel: 'Double Disc | Ext Balcony | 12 mm Toughened Clear | Timber | Matte Black | Supply & Install',
+      confirmedRevision: 2,
+    })
+    render(<WorkOrderItemsSummary canManage items={[workOrderItem({
+      id: 'item-client-revision',
+      itemCode: 'GLASS-REVISION',
+      quantity: '1.000',
+      originalDescription: 'ServiceM8 source with Chrome hardware',
+      lineTotalExcludingGst: '1200.00',
+      generatedLabel: 'Existing short label',
+      manualLabelOverride: null,
+      isActive: true,
+      productionSpecification: {
+        id: 'specification-1',
+        status: 'confirmed',
+        draftData: confirmed,
+        confirmedData: confirmed,
+        productionLabel: 'Double Disc | Ext Balcony | 12 mm Toughened Clear | Timber | Chrome | Supply & Install',
+        confirmedAt: new Date('2026-07-16T03:30:00.000Z'),
+        confirmedRevision: 1,
+        draftRevision: 2,
+        history: [],
+      },
+    })]} />)
+
+    fireEvent.click(screen.getByText('View specification'))
+    fireEvent.change(screen.getByLabelText('Hardware/Fittings Finish for GLASS-REVISION'), {
+      target: { value: 'finish.matte-black' },
+    })
+    fireEvent.change(screen.getByLabelText('Change reason'), { target: { value: 'client_request' } })
+    fireEvent.change(screen.getByLabelText('Change note (optional)'), {
+      target: { value: 'Client approved Matte Black.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm specification' }))
+
+    await waitFor(() => expect(mockSaveSpecificationDraft).toHaveBeenCalledWith(
+      'item-client-revision',
+      expect.objectContaining({
+        hardwareFinish: { state: 'selected', catalogueId: 'finish.matte-black' },
+      }),
+      { expectedConfirmedRevision: 1, expectedDraftRevision: 2 },
+    ))
+    await waitFor(() => expect(mockConfirmSpecification).toHaveBeenCalledWith('item-client-revision', {
+      expectedConfirmedRevision: 1,
+      expectedDraftRevision: 3,
+      changeReason: {
+        code: 'client_request',
+        note: 'Client approved Matte Black.',
+      },
+    }))
+  })
+
   it('lets a Manage user correct a Needs Review draft and confirm it without entering a change reason', async () => {
-    mockSaveSpecificationDraft.mockResolvedValue({ id: 'specification-1', status: 'needs_review' })
+    mockSaveSpecificationDraft.mockResolvedValue({
+      id: 'specification-1',
+      status: 'needs_review',
+      confirmedRevision: 0,
+      draftRevision: 1,
+    })
     mockConfirmSpecification.mockResolvedValue({ status: 'confirmed', productionLabel: 'Updated production label' })
     render(<WorkOrderItemsSummary canManage items={[workOrderItem({
       id: 'item-draft',
@@ -284,11 +427,15 @@ describe('WorkOrderItemsSummary', () => {
       expect.objectContaining({
         hardwareFinish: { state: 'selected', catalogueId: 'finish.matte-black' },
       }),
+      { expectedConfirmedRevision: 0, expectedDraftRevision: 0 },
     ))
     expect(screen.getByText('Draft saved')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Confirm specification' }))
-    await waitFor(() => expect(mockConfirmSpecification).toHaveBeenCalledWith('item-draft'))
+    await waitFor(() => expect(mockConfirmSpecification).toHaveBeenCalledWith('item-draft', {
+      expectedConfirmedRevision: 0,
+      expectedDraftRevision: 1,
+    }))
     expect(screen.queryByLabelText(/Change reason/)).not.toBeInTheDocument()
   })
 
@@ -382,7 +529,12 @@ describe('WorkOrderItemsSummary', () => {
   })
 
   it('lets a Manage user add structured measurements, components, and special requirements to a draft', async () => {
-    mockSaveSpecificationDraft.mockResolvedValue({ id: 'specification-1', status: 'needs_review' })
+    mockSaveSpecificationDraft.mockResolvedValue({
+      id: 'specification-1',
+      status: 'needs_review',
+      confirmedRevision: 0,
+      draftRevision: 1,
+    })
     render(<WorkOrderItemsSummary canManage items={[workOrderItem({
       id: 'item-repeatable-details',
       itemCode: 'GLASS-DETAILS',
@@ -433,6 +585,7 @@ describe('WorkOrderItemsSummary', () => {
           detail: 'Custom design to avoid toe hold',
         })],
       }),
+      { expectedConfirmedRevision: 0, expectedDraftRevision: 0 },
     ))
   })
 
@@ -458,6 +611,8 @@ describe('WorkOrderItemsSummary', () => {
       id: 'specification-new',
       status: 'needs_review',
       draftData: emptyDraft,
+      confirmedRevision: 0,
+      draftRevision: 1,
     })
     render(<WorkOrderItemsSummary canManage items={[workOrderItem({
       id: 'item-without-specification',
@@ -482,6 +637,7 @@ describe('WorkOrderItemsSummary', () => {
         additionalComponents: [],
         specialRequirements: [],
       }),
+      { expectedConfirmedRevision: 0, expectedDraftRevision: 0 },
     ))
     expect(await screen.findByText('Needs Review')).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'Short label for GLASS-NEW' }))
