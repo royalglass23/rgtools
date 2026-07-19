@@ -14,6 +14,7 @@ export default defineConfig({
     alias: [
       { find: '@rgtools/db/schema-leads', replacement: path.resolve(__dirname, '../../packages/db/src/schema-leads.ts') },
       { find: '@rgtools/db/schema-ps-generator', replacement: path.resolve(__dirname, '../../packages/db/src/schema-ps-generator.ts') },
+      { find: '@rgtools/db/schema-quote-movement', replacement: path.resolve(__dirname, '../../packages/db/src/schema-quote-movement.ts') },
       { find: '@rgtools/db/schema-workorders', replacement: path.resolve(__dirname, '../../packages/db/src/schema-workorders.ts') },
       { find: '@rgtools/db/schema', replacement: path.resolve(__dirname, '../../packages/db/src/schema.ts') },
       { find: '@rgtools/db', replacement: path.resolve(__dirname, '../../packages/db/src/index.ts') },

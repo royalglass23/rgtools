@@ -45,6 +45,7 @@ describe('menu availability', () => {
     }))
 
     expect(roleCanSeeMenu('admin', 'admin/tracking', availability)).toBe(false)
+    expect(roleCanSeeMenu('admin', 'quote-movement', availability)).toBe(false)
     expect(roleCanSeeMenu('admin', 'quote-tracker/guide', availability)).toBe(false)
     expect(roleCanSeeMenu('admin', 'admin/client-merge-review', availability)).toBe(false)
     expect(roleCanSeeMenu('admin', 'clients/configuration', availability)).toBe(false)

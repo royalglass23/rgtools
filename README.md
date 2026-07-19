@@ -19,7 +19,7 @@ This repo is a pnpm workspace:
 | **Lead Intake** | Staff form to capture and score inbound enquiries, auto-syncs to ServiceM8 |
 | **Leads** | Paginated lead list and detail view with tier, ServiceM8, table, and date filters |
 | **Clients** | Canonical client records, linked lead/job context, and merge review tooling |
-| **Quote Tracker** | Pull a ServiceM8 quote into a tracked short link, share it, inspect client engagement, and generate AI follow-up guidance |
+| **Quotes** | Pull a ServiceM8 quote into a tracked short link, share it, inspect client engagement, and view the cached active ServiceM8 Quote Movement list |
 | **Work Orders** | Grouped active installation jobs and ServiceM8 item lines, with asynchronously drafted Production Specifications, review/confirmation, manual corrections, operational fields, and portal-safe timeline candidates |
 | **PS Generator** | Generate PS1 and PS3 Producer Statement PDF packages from published system, option, template, mapping, and wording configuration |
 | **Admin** | User/module access, pricing/tracking settings, dashboard tables, audit/error exports, and client merge review |
@@ -46,6 +46,7 @@ This repo is a pnpm workspace:
 - [Security policy](docs/SECURITY.md) - reporting and operational security expectations
 - [Security runbook](docs/dev/security.md) - auth, access control, secrets, data boundaries, and incident response
 - [Quote tracking privacy note](docs/dev/quote-tracking.md) - what is collected, retention, access
+- [Quote Movement developer notes](docs/dev/quote-movement.md) - cached active ServiceM8 Quote jobs and refresh behavior
 - [ServiceM8 sync architecture](docs/dev/servicem8-sync-architecture.md) - lead-to-ServiceM8 sync model
 - [Work Order enrichment operations](docs/dev/work-order-enrichment.md) - cron, secrets, privacy boundary, retry, monitoring, and rollback
 - [ServiceM8 MCP notes](docs/dev/servicem8-mcp.md) - ServiceM8 MCP setup and limits
@@ -62,7 +63,7 @@ This repo is a pnpm workspace:
 - [Client records](docs/how-to/clients.md) - client list, detail, links, and merge review
 - [Scoring guide](docs/user/scoring-guide.md) - Decision Matrix fields, tiers A-E, and follow-up actions
 - [Phone script](docs/user/phone-script-lead-intake.md) - call structure for consistent lead capture
-- [Quote Tracker how-to](docs/how-to/quotes.md) - create tracked quotes, share links, read engagement, troubleshooting
+- [Quotes how-to](docs/how-to/quotes.md) - create tracked quotes, review Quote Movement, share links, read engagement, troubleshooting
 - [PS Generator how-to](docs/how-to/ps-generator.md) - generate PS packages, understand configuration, and seed prerequisites
 
 ## Security

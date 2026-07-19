@@ -56,6 +56,7 @@ describe('buildDashboardNavigation', () => {
       },
     ])
     expect(nav.quoteTrackerItems).toEqual([
+      { id: 'quote-movement-list', slug: 'quote-movement', name: 'Quote Movement', href: '/quote-movement' },
       { id: 'quote-tracker-list', slug: 'quote-tracker', name: 'Track Quotes', href: '/quote-tracker' },
       {
         id: 'quote-tracker-configuration',
@@ -100,6 +101,7 @@ describe('buildDashboardNavigation', () => {
     expect(nav.primaryModules.map((mod) => ({ slug: mod.slug, name: mod.name }))).toEqual([
     ])
     expect(nav.quoteTrackerItems).toEqual([
+      { id: 'quote-movement-list', slug: 'quote-movement', name: 'Quote Movement', href: '/quote-movement' },
       { id: 'quote-tracker-list', slug: 'quote-tracker', name: 'Track Quotes', href: '/quote-tracker' },
       { id: 'quote-tracker-guide', slug: 'quote-tracker/guide', name: 'Guide', href: '/quote-tracker/guide' },
     ])
