@@ -421,6 +421,13 @@
       "when": 1784257200000,
       "tag": "0059_work_order_specification_change_lifecycle",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1784260800000,
+      "tag": "0060_quote_movement_foundation",
+      "breakpoints": true
     }
   ]
 }
