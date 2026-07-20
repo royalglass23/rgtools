@@ -5,18 +5,26 @@ import { parseWorkOrderListFilters } from '@/modules/work-orders/list-filters'
 import { listWorkOrdersForExport } from '@/modules/work-orders/queries'
 import { getWorkOrderSummaryConfig } from '@/modules/work-orders/summary-config'
 import { buildWorkOrderExportTable } from '@/modules/work-orders/work-order-export'
+import { getWorkOrderSpecificationFilterConfig } from '@/modules/work-orders/specification-filter-config'
+import { loadProductionSpecificationCatalogue } from '@/modules/work-orders/production-specification-catalogue'
 
 export async function GET(request: Request) {
   await requireModule('work-orders')
 
   const url = new URL(request.url)
-  const filters = parseWorkOrderListFilters(Object.fromEntries(url.searchParams.entries()))
   try {
-    const [rows, fields] = await Promise.all([
-      listWorkOrdersForExport(filters),
+    const [specificationFilters, catalogue, fields] = await Promise.all([
+      getWorkOrderSpecificationFilterConfig(),
+      loadProductionSpecificationCatalogue(),
       getWorkOrderSummaryConfig(),
     ])
-    const body = rowsToCsv(buildWorkOrderExportTable(rows, fields))
+    const filters = parseWorkOrderListFilters(Object.fromEntries(url.searchParams.entries()), {
+      specificationFields: specificationFilters
+        .filter((field) => field.enabled)
+        .map((field) => field.field),
+    })
+    const rows = await listWorkOrdersForExport(filters, catalogue)
+    const body = rowsToCsv(buildWorkOrderExportTable(rows, fields, catalogue))
 
     return new NextResponse(body, {
       headers: {

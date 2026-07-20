@@ -1,0 +1,60 @@
+.editor {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.description {
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.table {
+  border-collapse: collapse;
+  color: var(--text-primary);
+  min-width: 44rem;
+  width: 100%;
+}
+
+.table thead {
+  background: var(--surface-subtle);
+}
+
+.table th,
+.table td {
+  border-bottom: 1px solid var(--border-default);
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+}
+
+.table th {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.fieldLabel {
+  font-weight: 600;
+}
+
+.orderActions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.checkbox {
+  accent-color: var(--brand-primary);
+  height: 1rem;
+  width: 1rem;
+}
+
+.checkbox:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.formActions {
+  display: flex;
+  justify-content: flex-end;
+}

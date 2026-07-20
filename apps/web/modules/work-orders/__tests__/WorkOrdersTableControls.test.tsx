@@ -62,6 +62,33 @@ describe('WorkOrdersTableControls', () => {
     expect(within(utilities).getByRole('link', { name: 'Reset' })).toBeInTheDocument()
   })
 
+  it('renders globally enabled Production Specification filters in configured order with canonical option IDs', () => {
+    renderDashboard([], WORK_ORDER_SUMMARY_FIELD_CATALOG.map((field) => ({ ...field, filterable: false })), {
+      specificationFilters: [
+        { field: 'hardwareFinish', enabled: true, order: 2 },
+        { field: 'glassConstruction', enabled: true, order: 1 },
+        { field: 'locationDetail', enabled: false, order: 3 },
+      ],
+      catalogue: [
+        { id: 'hardware_finish.matte-black', field: 'hardwareFinish', displayLabel: 'Matte Black', productionLabel: 'Matt Black', isActive: true },
+        { id: 'glass_construction.laminated', field: 'glassConstruction', displayLabel: 'Laminated', productionLabel: 'Laminated', isActive: true },
+        { id: 'location_detail.lower-landing', field: 'locationDetail', displayLabel: 'Lower Landing', productionLabel: 'Lower Landing', isActive: true },
+      ],
+    })
+
+    const specificationFilters = screen.getAllByRole('combobox').filter((control) => (
+      control.getAttribute('aria-label') === 'Glass Construction'
+      || control.getAttribute('aria-label') === 'Hardware/Fittings Finish'
+    ))
+    expect(specificationFilters.map((control) => control.getAttribute('aria-label'))).toEqual([
+      'Glass Construction',
+      'Hardware/Fittings Finish',
+    ])
+    expect(screen.getByRole('combobox', { name: 'Hardware/Fittings Finish' })).toHaveValue('all')
+    expect(screen.getByRole('option', { name: 'Matte Black' })).toHaveValue('hardware_finish.matte-black')
+    expect(screen.queryByRole('combobox', { name: 'Location Detail/Area' })).not.toBeInTheDocument()
+  })
+
   it('reports matching active children against the parent active total', () => {
     const row = workOrder({ id: 'job-filtered', jobNumber: 'R300', clientName: 'Filtered Client', leadScore: 70, itemLabel: 'Matching item' })
     row.activeItemCount = 3
@@ -177,6 +204,10 @@ describe('WorkOrdersTableControls', () => {
 function renderDashboard(
   rows: WorkOrderRow[],
   fields: WorkOrderSummaryFieldConfig[] = WORK_ORDER_SUMMARY_FIELD_CATALOG,
+  specification?: {
+    specificationFilters: Array<{ field: 'hardwareFinish' | 'glassConstruction' | 'locationDetail'; enabled: boolean; order: number }>
+    catalogue: Array<{ id: string; field: 'hardwareFinish' | 'glassConstruction' | 'locationDetail'; displayLabel: string; productionLabel: string; isActive: boolean }>
+  },
 ) {
   return render(
     <WorkOrdersTableControls
@@ -186,6 +217,8 @@ function renderDashboard(
       options={{ installers: [], stages: [], hardwareStatuses: [] }}
       total={rows.length}
       pageCount={1}
+      specificationFilters={specification?.specificationFilters}
+      catalogue={specification?.catalogue}
     />,
   )
 }

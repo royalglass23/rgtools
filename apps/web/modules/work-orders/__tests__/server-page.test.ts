@@ -50,6 +50,16 @@ describe('work orders server page', () => {
     expect(source).not.toContain('name={`${paramPrefix}servicem8Status`}')
   })
 
+  it('applies the global specification filter configuration to query state and controls', () => {
+    const source = pageSource()
+
+    expect(source).toContain('getWorkOrderSpecificationFilterConfig')
+    expect(source).toContain('specificationFields: specificationFilters')
+    expect(source).toContain('.filter((field) => field.enabled)')
+    expect(source).toContain('specificationFilters={specificationFilters}')
+    expect(source).toContain('listWorkOrders(filters, catalogue)')
+  })
+
   it('has distinct empty and no-results copy for the summary table', () => {
     const source = `${pageSource()}\n${controlsSource()}`
 

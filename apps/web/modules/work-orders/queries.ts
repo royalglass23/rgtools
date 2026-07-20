@@ -11,6 +11,7 @@ import {
   workOrderInstallers,
   workOrderItems,
   workOrderRefreshRuns,
+  workOrderSpecificationCatalogueOptions,
   workOrders,
   workOrderStageOptions,
   type WorkOrderItemEnrichmentStatusValue,
@@ -24,6 +25,10 @@ import {
   type WorkOrderItemSummaryRow,
 } from './work-order-items'
 import type { WorkOrderRefreshStatusValue } from './WorkOrderRefreshStatus'
+import {
+  INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE,
+  type ProductionSpecificationCatalogueOption,
+} from './production-specifications'
 
 export const WORK_ORDER_EXPORT_MAX_ROWS = 10_000
 
@@ -205,7 +210,10 @@ const workOrderItemSummarySelection = {
   },
 }
 
-export async function listWorkOrders(filters: WorkOrderListFilters) {
+export async function listWorkOrders(
+  filters: WorkOrderListFilters,
+  catalogue: readonly ProductionSpecificationCatalogueOption[] = INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE,
+) {
   const where = listWhere(filters)
   const offset = (filters.page - 1) * filters.size
 
@@ -236,7 +244,7 @@ export async function listWorkOrders(filters: WorkOrderListFilters) {
   const total = totalRow?.total ?? 0
   const groupedRows = attachActiveItemsToWorkOrders(rows, activeItems)
   return {
-    rows: applyWorkOrderItemListFilters(groupedRows, filters),
+    rows: applyWorkOrderItemListFilters(groupedRows, filters, catalogue),
     total,
     pageCount: Math.max(1, Math.ceil(total / filters.size)),
   }
@@ -244,6 +252,7 @@ export async function listWorkOrders(filters: WorkOrderListFilters) {
 
 export async function listWorkOrdersForExport(
   filters: WorkOrderListFilters,
+  catalogue: readonly ProductionSpecificationCatalogueOption[] = INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE,
 ): Promise<WorkOrderExportRow[]> {
   const rows = await db
     .select(workOrderRowSelection)
@@ -275,7 +284,7 @@ export async function listWorkOrdersForExport(
     )
   }
 
-  const exportRows = applyWorkOrderItemListFilters(attachActiveItemsToWorkOrders(rows, items), filters)
+  const exportRows = applyWorkOrderItemListFilters(attachActiveItemsToWorkOrders(rows, items), filters, catalogue)
     .flatMap<WorkOrderExportRow>(({ items: matchingItems, activeItemCount, matchingActiveItemCount, ...workOrder }) => {
       void activeItemCount
       void matchingActiveItemCount
@@ -560,6 +569,15 @@ function matchingItemExists(filters: WorkOrderListFilters, searchPattern?: strin
   if (filters.importance !== 'all') {
     conditions.push(eq(sql`coalesce(${workOrderItems.importanceOverride}, ${workOrderItems.aiImportance})`, filters.importance))
   }
+  for (const [field, catalogueId] of Object.entries(filters.specification ?? {})) {
+    conditions.push(sql`exists (
+      select 1
+      from ${workOrderItemProductionSpecifications} as current_specification
+      where current_specification.work_order_item_id = ${workOrderItems.id}
+        and current_specification.confirmed_data -> ${field} ->> 'state' = 'selected'
+        and current_specification.confirmed_data -> ${field} ->> 'catalogueId' = ${catalogueId}
+    )`)
+  }
   if (searchPattern) {
     const itemSearchCondition = or(
       ilike(workOrderItems.itemCode, searchPattern),
@@ -568,6 +586,7 @@ function matchingItemExists(filters: WorkOrderListFilters, searchPattern?: strin
         searchPattern,
       ),
       ilike(workOrderItems.originalDescription, searchPattern),
+      currentProductionSpecificationSearchExists(searchPattern),
     )
     if (itemSearchCondition) conditions.push(itemSearchCondition)
   }
@@ -581,6 +600,62 @@ function hasConfiguredItemFilters(filters: WorkOrderListFilters) {
     || filters.maintenanceProgram !== 'all'
     || filters.risk !== 'all'
     || filters.importance !== 'all'
+    || Object.keys(filters.specification ?? {}).length > 0
+}
+
+function currentProductionSpecificationSearchExists(searchPattern: string) {
+  return sql`exists (
+    select 1
+    from ${workOrderItemProductionSpecifications} as current_specification
+    where current_specification.work_order_item_id = ${workOrderItems.id}
+      and current_specification.confirmed_data is not null
+      and (
+        current_specification.production_label ilike ${searchPattern}
+        or exists (
+          select 1
+          from ${workOrderSpecificationCatalogueOptions} as catalogue_option
+          where catalogue_option.display_label ilike ${searchPattern}
+            and current_specification.confirmed_data
+              -> catalogue_option.field_name
+              ->> 'catalogueId' = catalogue_option.id
+        )
+        or exists (
+          select 1
+          from jsonb_each(current_specification.confirmed_data) as specification_field(field_name, field_value)
+          where (
+            specification_field.field_value ->> 'state' = 'tbc'
+            and 'TBC' ilike ${searchPattern}
+          ) or (
+            specification_field.field_value ->> 'state' = 'unmapped'
+            and concat('Unmapped - ', specification_field.field_value ->> 'raw') ilike ${searchPattern}
+          )
+        )
+        or exists (
+          select 1
+          from jsonb_array_elements(coalesce(current_specification.confirmed_data -> 'measurements', '[]'::jsonb)) as measurement(value)
+          where measurement.value ->> 'label' ilike ${searchPattern}
+            or measurement.value ->> 'kind' ilike ${searchPattern}
+            or measurement.value ->> 'value' ilike ${searchPattern}
+            or measurement.value ->> 'unit' ilike ${searchPattern}
+        )
+        or exists (
+          select 1
+          from jsonb_array_elements(coalesce(current_specification.confirmed_data -> 'additionalComponents', '[]'::jsonb)) as component(value)
+          where component.value ->> 'name' ilike ${searchPattern}
+            or component.value ->> 'quantity' ilike ${searchPattern}
+            or component.value ->> 'dimensions' ilike ${searchPattern}
+            or component.value ->> 'material' ilike ${searchPattern}
+            or component.value ->> 'finish' ilike ${searchPattern}
+            or component.value ->> 'notes' ilike ${searchPattern}
+        )
+        or exists (
+          select 1
+          from jsonb_array_elements(coalesce(current_specification.confirmed_data -> 'specialRequirements', '[]'::jsonb)) as requirement(value)
+          where requirement.value ->> 'kind' ilike ${searchPattern}
+            or requirement.value ->> 'detail' ilike ${searchPattern}
+        )
+      )
+  )`
 }
 
 function listOrderBy(sort: WorkOrderSort) {

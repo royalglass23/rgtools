@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { applyWorkOrderItemListFilters, attachActiveItemsToWorkOrders } from '../work-order-items'
 import type { WorkOrderListFilters } from '../list-filters'
+import { createEmptyProductionSpecification } from '../production-specifications'
 
 function itemOperationalDefaults() {
   return {
@@ -126,6 +127,101 @@ describe('attachActiveItemsToWorkOrders', () => {
 })
 
 describe('applyWorkOrderItemListFilters', () => {
+  it('matches confirmed Production Specification fields by canonical option ID and keeps the parent header', () => {
+    const specification = (id: string, catalogueId: string) => ({
+      id,
+      status: 'confirmed' as const,
+      draftData: null,
+      confirmedData: {
+        ...createEmptyProductionSpecification(),
+        hardwareFinish: { state: 'selected' as const, catalogueId },
+      },
+      productionLabel: 'Current production label',
+      confirmedAt: new Date('2026-07-16T03:30:00.000Z'),
+      history: [],
+    })
+    const [workOrder] = attachActiveItemsToWorkOrders([{
+      id: 'work-order-1',
+      clientName: 'Acme Construction',
+      companyName: null,
+      jobNumber: 'R260210',
+      jobAddress: '10 Queen Street',
+      jobDescription: 'Bathroom renovation',
+    }], [
+      { ...itemOperationalDefaults(), id: 'item-black', workOrderId: 'work-order-1', itemCode: 'GLASS-001', quantity: '1.000', originalDescription: 'First line', lineTotalExcludingGst: '900.00', generatedLabel: null, manualLabelOverride: null, isActive: true, productionSpecification: specification('spec-black', 'hardware_finish.matte-black') },
+      { ...itemOperationalDefaults(), id: 'item-brass', workOrderId: 'work-order-1', itemCode: 'GLASS-002', quantity: '1.000', originalDescription: 'Second line', lineTotalExcludingGst: '900.00', generatedLabel: null, manualLabelOverride: null, isActive: true, productionSpecification: specification('spec-brass', 'hardware_finish.brushed-brass') },
+    ])
+
+    const [result] = applyWorkOrderItemListFilters([workOrder], {
+      ...listFilters,
+      specification: { hardwareFinish: 'hardware_finish.matte-black' },
+    })
+
+    expect(result.id).toBe('work-order-1')
+    expect(result.items.map((item) => item.id)).toEqual(['item-black'])
+    expect(result.matchingActiveItemCount).toBe(1)
+    expect(result.activeItemCount).toBe(2)
+  })
+
+  it('searches only the current Production Label and confirmed specification values', () => {
+    const confirmedData = {
+      ...createEmptyProductionSpecification(),
+      hardwareFinish: { state: 'selected' as const, catalogueId: 'hardware_finish.matte-black' },
+      specialRequirements: [{ kind: 'design_constraint' as const, detail: 'Keep 25 mm clearance' }],
+    }
+    const draftData = {
+      ...confirmedData,
+      hardwareFinish: { state: 'selected' as const, catalogueId: 'hardware_finish.brushed-brass' },
+    }
+    const [workOrder] = attachActiveItemsToWorkOrders([{
+      id: 'work-order-1',
+      clientName: 'Acme Construction',
+      companyName: null,
+      jobNumber: 'R260210',
+      jobAddress: '10 Queen Street',
+      jobDescription: 'Bathroom renovation',
+    }], [{
+      ...itemOperationalDefaults(),
+      id: 'item-glass',
+      workOrderId: 'work-order-1',
+      itemCode: 'GLASS-001',
+      quantity: '1.000',
+      originalDescription: 'Generic ServiceM8 glass line',
+      lineTotalExcludingGst: '900.00',
+      generatedLabel: 'Legacy short label',
+      manualLabelOverride: null,
+      isActive: true,
+      productionSpecification: {
+        id: 'specification-1',
+        status: 'needs_review',
+        confirmedData,
+        draftData,
+        productionLabel: 'Current frameless shower label',
+        confirmedAt: new Date('2026-07-16T03:30:00.000Z'),
+        history: [{
+          id: 'revision-1',
+          revisionType: 'confirmed_change',
+          actorUsername: 'staff@example.com',
+          previousSnapshot: { specialRequirements: [{ detail: 'Superseded teal wording' }] },
+          newSnapshot: confirmedData,
+          reasonCode: 'design_change',
+          note: 'Superseded teal wording',
+          createdAt: new Date('2026-07-17T03:30:00.000Z'),
+        }],
+      },
+    }])
+    const catalogue = [
+      { id: 'hardware_finish.matte-black', field: 'hardwareFinish' as const, displayLabel: 'Matte Black', productionLabel: 'Matt Black' },
+      { id: 'hardware_finish.brushed-brass', field: 'hardwareFinish' as const, displayLabel: 'Brushed Brass', productionLabel: 'Brass' },
+    ]
+
+    expect(applyWorkOrderItemListFilters([workOrder], { ...listFilters, q: 'current frameless' }, catalogue)[0].items).toHaveLength(1)
+    expect(applyWorkOrderItemListFilters([workOrder], { ...listFilters, q: 'matte black' }, catalogue)[0].items).toHaveLength(1)
+    expect(applyWorkOrderItemListFilters([workOrder], { ...listFilters, q: 'keep 25 mm clearance' }, catalogue)[0].items).toHaveLength(1)
+    expect(applyWorkOrderItemListFilters([workOrder], { ...listFilters, q: 'brushed brass' }, catalogue)[0].items).toHaveLength(0)
+    expect(applyWorkOrderItemListFilters([workOrder], { ...listFilters, q: 'superseded teal' }, catalogue)[0].items).toHaveLength(0)
+  })
+
   it('keeps every active child when search matches parent job context', () => {
     const items = [
       { ...itemOperationalDefaults(), id: 'item-glass', workOrderId: 'work-order-1', itemCode: 'GLASS-001', quantity: '1.000', originalDescription: 'Shower glass', lineTotalExcludingGst: '900.00', generatedLabel: 'Shower panel', manualLabelOverride: null, isActive: true },

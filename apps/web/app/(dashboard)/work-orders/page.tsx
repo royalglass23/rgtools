@@ -13,6 +13,7 @@ import { WorkOrderJobUpdateForm } from '@/modules/work-orders/WorkOrderJobUpdate
 import { DismissibleNotice } from '@/modules/ui/DismissibleNotice'
 import { getWorkOrderSummaryConfig } from '@/modules/work-orders/summary-config'
 import { loadProductionSpecificationCatalogue } from '@/modules/work-orders/production-specification-catalogue'
+import { getWorkOrderSpecificationFilterConfig } from '@/modules/work-orders/specification-filter-config'
 
 export const maxDuration = 300
 
@@ -23,16 +24,23 @@ export default async function WorkOrdersPage({
 }) {
   await requireModule('work-orders')
   const resolvedSearchParams = await searchParams
-  const filters = parseWorkOrderListFilters(resolvedSearchParams)
+  const [specificationFilters, catalogue] = await Promise.all([
+    getWorkOrderSpecificationFilterConfig(),
+    loadProductionSpecificationCatalogue(),
+  ])
+  const filters = parseWorkOrderListFilters(resolvedSearchParams, {
+    specificationFields: specificationFilters
+      .filter((field) => field.enabled)
+      .map((field) => field.field),
+  })
   const refreshError = typeof resolvedSearchParams.refreshError === 'string' ? resolvedSearchParams.refreshError : null
   const exportHref = `/api/work-orders/export?${exportParams(resolvedSearchParams)}`
-  const [{ rows, total, pageCount }, options, permissions, summaryFields, refreshStatus, catalogue] = await Promise.all([
-    listWorkOrders(filters),
+  const [{ rows, total, pageCount }, options, permissions, summaryFields, refreshStatus] = await Promise.all([
+    listWorkOrders(filters, catalogue),
     getWorkOrderFilterOptions(),
     getCurrentWorkOrderPermissions(),
     getWorkOrderSummaryConfig(),
     getWorkOrderRefreshStatus(),
-    loadProductionSpecificationCatalogue(),
   ])
 
   return (
@@ -85,6 +93,7 @@ export default async function WorkOrdersPage({
         pageCount={pageCount}
         canManage={permissions.canManage}
         catalogue={catalogue}
+        specificationFilters={specificationFilters}
       />
     </div>
   )
