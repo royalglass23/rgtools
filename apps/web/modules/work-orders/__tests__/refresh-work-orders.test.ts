@@ -311,6 +311,57 @@ describe('refreshWorkOrdersFromServiceM8', () => {
     expect(enqueueEnrichments).toHaveBeenCalledOnce()
   })
 
+  it('keeps 100-item enqueue overhead within one second of the refresh baseline without invoking a provider', async () => {
+    const itemCount = 100
+    const provider = vi.fn()
+    const request = vi.fn(async (path: string) => {
+      if (path.startsWith('/job.json')) {
+        return Response.json([{
+          uuid: 'job-1',
+          active: 1,
+          status: 'Work Order',
+          generated_job_id: 'R260210',
+        }])
+      }
+      if (path.startsWith('/jobmaterial.json')) {
+        return Response.json(Array.from({ length: itemCount }, (_, index) => ({
+          uuid: `item-${index + 1}`,
+          active: 1,
+          job_uuid: 'job-1',
+          item_number: `GLASS-${String(index + 1).padStart(3, '0')}`,
+          name: `Realistic glass item ${index + 1}`,
+          quantity: '1',
+        })))
+      }
+      return Response.json([])
+    })
+    const enqueueEnrichments = vi.fn(async (items: Array<{
+      servicem8ItemUuid: string
+      originalDescription: string
+    }>) => {
+      expect(items).toHaveLength(itemCount)
+      return itemCount
+    })
+
+    const measure = async (enqueue: typeof enqueueEnrichments) => {
+      const startedAt = performance.now()
+      await refreshWorkOrdersFromServiceM8(request, enqueue)
+      return performance.now() - startedAt
+    }
+    const noOpEnqueue = vi.fn(async () => 0)
+    const baselineSamples: number[] = []
+    const rolloutSamples: number[] = []
+    for (let run = 0; run < 5; run += 1) {
+      baselineSamples.push(await measure(noOpEnqueue))
+      rolloutSamples.push(await measure(enqueueEnrichments))
+    }
+    const median = (samples: number[]) => [...samples].sort((a, b) => a - b)[2]
+
+    expect(median(rolloutSamples) - median(baselineSamples)).toBeLessThan(1_000)
+    expect(enqueueEnrichments).toHaveBeenCalledTimes(5)
+    expect(provider).not.toHaveBeenCalled()
+  })
+
   it('keeps a committed refresh successful when the post-commit enrichment handoff fails', async () => {
     const request = vi.fn(async (path: string) => {
       if (path.startsWith('/job.json')) {

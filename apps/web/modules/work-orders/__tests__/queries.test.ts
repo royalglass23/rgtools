@@ -95,6 +95,12 @@ vi.mock('@rgtools/db/schema-workorders', () => ({
     aiImportance: { name: 'work_order_items.ai_importance' },
     sortOrder: { name: 'work_order_items.sort_order' },
   },
+  workOrderSpecificationCatalogueOptions: {
+    id: { name: 'work_order_specification_catalogue_options.id' },
+    fieldName: { name: 'work_order_specification_catalogue_options.field_name' },
+    displayLabel: { name: 'work_order_specification_catalogue_options.display_label' },
+    productionLabel: { name: 'work_order_specification_catalogue_options.production_label' },
+  },
   workOrderItemProductionSpecifications: {
     id: { name: 'work_order_item_production_specifications.id' },
     workOrderItemId: { name: 'work_order_item_production_specifications.work_order_item_id' },
@@ -298,6 +304,26 @@ describe('listWorkOrders', () => {
     expect(searchCondition?.conditions).toEqual(expect.arrayContaining([
       expect.objectContaining({ type: 'sql', text: expect.stringContaining('exists') }),
     ]))
+  })
+
+  it('selects parent pages through current confirmed specification search and canonical filters only', async () => {
+    await listWorkOrders({
+      ...filters,
+      q: 'matte black',
+      specification: { hardwareFinish: 'hardware_finish.matte-black' },
+    })
+
+    const sqlText = collectSqlText(whereCalls[1])
+    expect(sqlText).toContain('production_label')
+    expect(sqlText).toContain('confirmed_data')
+    expect(sqlText).toContain('catalogueId')
+    expect(sqlText).toContain('jsonb_array_elements')
+    expect(sqlText).not.toContain('confirmed_data::text')
+    expect(sqlText).not.toContain('draft_data')
+    expect(sqlText).not.toContain('evidence_data')
+    expect(sqlText).not.toContain('revision')
+    expect(limitCalls).toEqual([5])
+    expect(offsetCalls).toEqual([0])
   })
 
   it('pages parent Work Orders and uses a deterministic default score order', async () => {
@@ -585,4 +611,14 @@ function workOrderRow(overrides: Partial<WorkOrderBaseRow>): WorkOrderBaseRow {
     updatedAt: new Date('2026-07-15T00:00:00.000Z'),
     ...overrides,
   }
+}
+
+function collectSqlText(value: unknown): string {
+  if (!value || typeof value !== 'object') return ''
+  if (Array.isArray(value)) return value.map(collectSqlText).join(' ')
+  const record = value as Record<string, unknown>
+  return [
+    typeof record.text === 'string' ? record.text : '',
+    ...Object.values(record).map(collectSqlText),
+  ].join(' ')
 }

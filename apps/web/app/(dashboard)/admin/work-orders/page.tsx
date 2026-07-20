@@ -1,4 +1,5 @@
 import { requireModule } from "@/lib/guard";
+import { DataPanel } from "@/components/precision-ui/PrecisionUI";
 import { DismissibleNotice } from "@/modules/ui/DismissibleNotice";
 import {
   createWorkOrderHardwareStatusAction,
@@ -11,9 +12,14 @@ import {
   saveWorkOrderSummaryConfigAction,
 } from "@/modules/work-orders/actions";
 import { getWorkOrderBillingExclusions } from "@/modules/work-orders/billing-exclusions";
+import { ProductionSpecificationCatalogueEditor } from "@/modules/work-orders/ProductionSpecificationCatalogueEditor";
+import { SpecificationFiltersEditor } from "@/modules/work-orders/SpecificationFiltersEditor";
+import { getProductionSpecificationCatalogueAdminModel } from "@/modules/work-orders/production-specification-catalogue-store";
 import { getWorkOrderConfigLists } from "@/modules/work-orders/queries";
 import { SummaryFieldsEditor } from "@/modules/work-orders/SummaryFieldsEditor";
 import { getWorkOrderSummaryConfig } from "@/modules/work-orders/summary-config";
+import { saveWorkOrderSpecificationFilterConfigAction } from "@/modules/work-orders/specification-filter-config-actions";
+import { getWorkOrderSpecificationFilterConfig } from "@/modules/work-orders/specification-filter-config";
 
 export default async function WorkOrderConfigurationPage({
   searchParams,
@@ -26,10 +32,14 @@ export default async function WorkOrderConfigurationPage({
     { installers, stages, hardwareStatuses },
     summaryFields,
     billingExclusions,
+    specificationCatalogue,
+    specificationFilters,
   ] = await Promise.all([
     getWorkOrderConfigLists(),
     getWorkOrderSummaryConfig(),
     getWorkOrderBillingExclusions(),
+    getProductionSpecificationCatalogueAdminModel(),
+    getWorkOrderSpecificationFilterConfig(),
   ]);
 
   return (
@@ -42,7 +52,6 @@ export default async function WorkOrderConfigurationPage({
           Work Order summary fields saved.
         </DismissibleNotice>
       )}
-
       <div>
         <h1 className="text-2xl font-semibold text-gray-950">
           Work Order Configuration
@@ -73,9 +82,31 @@ export default async function WorkOrderConfigurationPage({
         />
       </div>
 
+      <ProductionSpecificationCatalogueEditor options={specificationCatalogue} />
+
+      <SpecificationFiltersPanel fields={specificationFilters} />
+
       <BillingExclusionsPanel terms={billingExclusions} />
       <SummaryFieldsPanel fields={summaryFields} />
     </div>
+  );
+}
+
+function SpecificationFiltersPanel({
+  fields,
+}: {
+  fields: Awaited<ReturnType<typeof getWorkOrderSpecificationFilterConfig>>;
+}) {
+  return (
+    <DataPanel
+      title="Production Specification filters"
+      eyebrow="Global discovery controls"
+    >
+      <SpecificationFiltersEditor
+        fields={fields}
+        saveAction={saveWorkOrderSpecificationFilterConfigAction}
+      />
+    </DataPanel>
   );
 }
 

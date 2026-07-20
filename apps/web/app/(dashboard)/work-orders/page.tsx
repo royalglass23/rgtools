@@ -13,6 +13,15 @@ import { WorkOrderJobUpdateForm } from '@/modules/work-orders/WorkOrderJobUpdate
 import { DismissibleNotice } from '@/modules/ui/DismissibleNotice'
 import { getWorkOrderSummaryConfig } from '@/modules/work-orders/summary-config'
 import { loadProductionSpecificationCatalogue } from '@/modules/work-orders/production-specification-catalogue'
+import { getWorkOrderSpecificationFilterConfig } from '@/modules/work-orders/specification-filter-config'
+import { ExistingItemRolloutPanel } from '@/modules/work-orders/ExistingItemRolloutPanel'
+import {
+  readExistingItemRolloutStatusAction,
+  resumeExistingItemRolloutAction,
+  startExistingItemRolloutAction,
+} from '@/modules/work-orders/existing-item-rollout-actions'
+import { getLatestExistingItemRolloutStatus } from '@/modules/work-orders/existing-item-rollout'
+import { createExistingItemRolloutStore } from '@/modules/work-orders/existing-item-rollout-store'
 
 export const maxDuration = 300
 
@@ -23,16 +32,27 @@ export default async function WorkOrdersPage({
 }) {
   await requireModule('work-orders')
   const resolvedSearchParams = await searchParams
-  const filters = parseWorkOrderListFilters(resolvedSearchParams)
+  const [specificationFilters, catalogue] = await Promise.all([
+    getWorkOrderSpecificationFilterConfig(),
+    loadProductionSpecificationCatalogue(),
+  ])
+  const filters = parseWorkOrderListFilters(resolvedSearchParams, {
+    specificationFields: specificationFilters
+      .filter((field) => field.enabled)
+      .map((field) => field.field),
+  })
   const refreshError = typeof resolvedSearchParams.refreshError === 'string' ? resolvedSearchParams.refreshError : null
   const exportHref = `/api/work-orders/export?${exportParams(resolvedSearchParams)}`
-  const [{ rows, total, pageCount }, options, permissions, summaryFields, refreshStatus, catalogue] = await Promise.all([
-    listWorkOrders(filters),
+  const rolloutEnabled = process.env.WORK_ORDER_EXISTING_ITEM_ROLLOUT_ENABLED === 'true'
+  const [{ rows, total, pageCount }, options, permissions, summaryFields, refreshStatus, rolloutStatus] = await Promise.all([
+    listWorkOrders(filters, catalogue),
     getWorkOrderFilterOptions(),
     getCurrentWorkOrderPermissions(),
     getWorkOrderSummaryConfig(),
     getWorkOrderRefreshStatus(),
-    loadProductionSpecificationCatalogue(),
+    rolloutEnabled
+      ? getLatestExistingItemRolloutStatus({ store: createExistingItemRolloutStore() })
+      : Promise.resolve(null),
   ])
 
   return (
@@ -70,6 +90,16 @@ export default async function WorkOrdersPage({
 
       <WorkOrderRefreshStatus status={refreshStatus} />
 
+      {rolloutEnabled && (
+        <ExistingItemRolloutPanel
+          initialStatus={rolloutStatus}
+          startAction={startExistingItemRolloutAction}
+          resumeAction={resumeExistingItemRolloutAction}
+          statusAction={readExistingItemRolloutStatusAction}
+          canManage={permissions.canManage}
+        />
+      )}
+
       {refreshError && !refreshStatus.latestFailure && (
         <DismissibleNotice tone="error" noticeKey={refreshError}>
           Work Orders could not refresh from ServiceM8: {refreshError}
@@ -85,6 +115,7 @@ export default async function WorkOrdersPage({
         pageCount={pageCount}
         canManage={permissions.canManage}
         catalogue={catalogue}
+        specificationFilters={specificationFilters}
       />
     </div>
   )

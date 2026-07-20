@@ -1,47 +1,34 @@
 export const PRODUCTION_SPECIFICATION_SCHEMA_VERSION = 1 as const
 
-const SPECIFICATION_FIELD_NAMES = [
-  'system',
-  'structureMaterial',
-  'structureType',
-  'locationEnvironment',
-  'locationDetail',
-  'structureBuilt',
-  'glassConstruction',
-  'glassAppearance',
-  'thickness',
-  'gateRequired',
-  'doorOpeningType',
-  'fixingMethod',
-  'hardwareFinish',
-  'systemFinish',
-  'interlinkingRail',
-  'deliveryScope',
+export const PRODUCTION_SPECIFICATION_FIELD_DEFINITIONS = [
+  { field: 'system', label: 'System' },
+  { field: 'structureMaterial', label: 'Structure Material/Substrate' },
+  { field: 'structureType', label: 'Structure Type' },
+  { field: 'locationEnvironment', label: 'Location Environment' },
+  { field: 'locationDetail', label: 'Location Detail/Area' },
+  { field: 'structureBuilt', label: 'Structure Built' },
+  { field: 'glassConstruction', label: 'Glass Construction' },
+  { field: 'glassAppearance', label: 'Glass Appearance' },
+  { field: 'thickness', label: 'Thickness' },
+  { field: 'gateRequired', label: 'Gate Required' },
+  { field: 'doorOpeningType', label: 'Door/Opening Type' },
+  { field: 'fixingMethod', label: 'Fixing Method' },
+  { field: 'hardwareFinish', label: 'Hardware/Fittings Finish' },
+  { field: 'systemFinish', label: 'System/Channel Finish' },
+  { field: 'interlinkingRail', label: 'Interlinking Rail' },
+  { field: 'deliveryScope', label: 'Delivery Scope' },
 ] as const
 
-export type ProductionSpecificationFieldName = typeof SPECIFICATION_FIELD_NAMES[number]
+export type ProductionSpecificationFieldName = typeof PRODUCTION_SPECIFICATION_FIELD_DEFINITIONS[number]['field']
+const SPECIFICATION_FIELD_NAMES: ProductionSpecificationFieldName[] = PRODUCTION_SPECIFICATION_FIELD_DEFINITIONS
+  .map(({ field }) => field)
 
 export function isProductionSpecificationFieldName(value: string): value is ProductionSpecificationFieldName {
-  return SPECIFICATION_FIELD_NAMES.includes(value as ProductionSpecificationFieldName)
+  return PRODUCTION_SPECIFICATION_FIELD_DEFINITIONS.some((definition) => definition.field === value)
 }
 
-const SPECIFICATION_CHANGE_LABELS: Record<ProductionSpecificationFieldName, string> = {
-  system: 'System',
-  structureMaterial: 'Structure Material/Substrate',
-  structureType: 'Structure Type',
-  locationEnvironment: 'Location Environment',
-  locationDetail: 'Location Detail/Area',
-  structureBuilt: 'Structure Built',
-  glassConstruction: 'Glass Construction',
-  glassAppearance: 'Glass Appearance',
-  thickness: 'Thickness',
-  gateRequired: 'Gate Required',
-  doorOpeningType: 'Door/Opening Type',
-  fixingMethod: 'Fixing Method',
-  hardwareFinish: 'Hardware/Fittings Finish',
-  systemFinish: 'System/Channel Finish',
-  interlinkingRail: 'Interlinking Rail',
-  deliveryScope: 'Delivery Scope',
+export function productionSpecificationFieldLabel(field: ProductionSpecificationFieldName) {
+  return PRODUCTION_SPECIFICATION_FIELD_DEFINITIONS.find((definition) => definition.field === field)?.label ?? field
 }
 
 export type ProductionSpecificationValue =
@@ -100,8 +87,11 @@ export type ProductionSpecificationCatalogueOption = {
   productionLabel: string
   psCategorySlug?: string
   psOptionSlug?: string
+  ps1Applicable?: boolean
+  ps3Applicable?: boolean
   aliases?: readonly string[]
   isActive?: boolean
+  sortOrder?: number
 }
 
 export const PRODUCTION_SPECIFICATION_CHANGE_REASONS = [
@@ -411,7 +401,7 @@ export function summarizeProductionSpecificationChanges(
 ) {
   const changes = SPECIFICATION_FIELD_NAMES.flatMap((field) => {
     if (JSON.stringify(previous[field]) === JSON.stringify(next[field])) return []
-    return [`${SPECIFICATION_CHANGE_LABELS[field]}: ${productionSpecificationValueLabel(previous[field], catalogue)} -> ${productionSpecificationValueLabel(next[field], catalogue)}`]
+    return [`${productionSpecificationFieldLabel(field)}: ${productionSpecificationValueLabel(previous[field], catalogue)} -> ${productionSpecificationValueLabel(next[field], catalogue)}`]
   })
   if (JSON.stringify(previous.measurements) !== JSON.stringify(next.measurements)) changes.push('Measurements updated')
   if (JSON.stringify(previous.additionalComponents) !== JSON.stringify(next.additionalComponents)) changes.push('Additional Components updated')
@@ -443,7 +433,20 @@ function option(
   psOptionSlug?: string,
   aliases?: readonly string[],
 ): ProductionSpecificationCatalogueOption {
-  return { id, field, displayLabel, productionLabel, psCategorySlug, psOptionSlug, aliases }
+  const psApplicable = Boolean(psCategorySlug && psOptionSlug)
+  return {
+    id,
+    field,
+    displayLabel,
+    productionLabel,
+    psCategorySlug,
+    psOptionSlug,
+    ps1Applicable: psApplicable,
+    ps3Applicable: psApplicable,
+    aliases,
+    isActive: true,
+    sortOrder: 0,
+  }
 }
 
 function parseSpecificationValue(
@@ -533,7 +536,7 @@ function selectedLabel(
   catalogue: readonly ProductionSpecificationCatalogueOption[],
 ) {
   if (value.state !== 'selected') return ''
-  return catalogue.find((option) => option.id === value.catalogueId && option.isActive !== false)?.productionLabel ?? ''
+  return catalogue.find((option) => option.id === value.catalogueId)?.productionLabel ?? ''
 }
 
 function formatMeasurement(measurement: ProductionSpecificationMeasurement) {

@@ -112,7 +112,7 @@ export function WorkOrderItemsSummary({
   return (
     <section aria-label="Work Order items" className="space-y-2 px-4 py-3">
       {showCount && <ItemCount count={activeItemCount} />}
-      <div className="grid gap-2">
+      <div role="table" aria-label="Work Order item details" className="grid gap-2">
         {items.map((item) => {
           const lineTotal = item.lineTotalExcludingGst
             ? `$${item.lineTotalExcludingGst}`
@@ -140,24 +140,22 @@ export function WorkOrderItemsSummary({
                 />
               )}
               {operationalFields.length > 0 && (
-                <div
-                  role="group"
-                  aria-label="Work Order item controls"
-                  className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8"
-                >
-                  {operationalFields.map(({ config, field }) => (
-                    <ItemOperationalField
-                      key={config.id}
-                      item={item}
-                      options={options}
-                      field={field}
-                      canEdit={canManage && config.editable && item.isActive}
-                    />
-                  ))}
+                <div role="cell" aria-label="Work Order item controls">
+                  <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
+                    {operationalFields.map(({ config, field }) => (
+                      <ItemOperationalField
+                        key={config.id}
+                        item={item}
+                        options={options}
+                        field={field}
+                        canEdit={canManage && config.editable && item.isActive}
+                      />
+                    ))}
+                  </dl>
                 </div>
               )}
               {!item.isActive && !visibleFields.some((field) => field.id === 'item') && (
-                <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">Removed</span>
+                <span role="cell" className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">Removed</span>
               )}
             </div>
           )
@@ -356,7 +354,7 @@ function ItemCompositeField({
           <span className="line-clamp-2 whitespace-pre-line">{effectiveLabel}</span>
         )}
         {isLabelPending && (
-          <span className="rounded bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800">Label pending</span>
+          <span className="rounded bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-900">Label pending</span>
         )}
         {item.labelStatus === 'source_changed' && (
           <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">Source description changed</span>
@@ -725,6 +723,7 @@ function revisionTypeLabel(revisionType: string) {
   if (revisionType === 'baseline_confirmed') return 'Baseline confirmed'
   if (revisionType === 'source_change_ignored') return 'Source change ignored'
   if (revisionType === 'source_change_draft_created') return 'Source-change draft created'
+  if (revisionType === 'catalogue_option_changed') return 'Catalogue option updated'
   return 'Specification updated'
 }
 
@@ -737,6 +736,10 @@ function revisionChangeLabel(
   catalogue: readonly ProductionSpecificationCatalogueOption[],
 ) {
   const identity = String(change.identity ?? 'Specification')
+  if (change.kind === 'catalogue') {
+    const governedAttribute = typeof change.label === 'string' ? ` — ${change.label}` : ''
+    return `Catalogue option ${identity}${governedAttribute}: ${auditValueLabel(change.previousValue, catalogue)} → ${auditValueLabel(change.newValue, catalogue)}`
+  }
   const field = SPECIFICATION_FIELDS.find(({ field }) => field === identity)
   const label = field?.label ?? identity
   return `${label}: ${auditValueLabel(change.previousValue, catalogue)} → ${auditValueLabel(change.newValue, catalogue)}`
@@ -746,6 +749,7 @@ function auditValueLabel(
   value: unknown,
   catalogue: readonly ProductionSpecificationCatalogueOption[],
 ) {
+  if (typeof value === 'string') return value
   if (value && typeof value === 'object' && !Array.isArray(value) && 'state' in value) {
     return productionSpecificationValueLabel(value as ProductionSpecificationValue, catalogue)
   }
@@ -1303,7 +1307,7 @@ function EditableOperationalField({
 
   return (
     <div>
-      <dt className="text-[11px] font-medium uppercase tracking-wide text-gray-500">{label}</dt>
+      <dt className="text-[11px] font-medium uppercase tracking-wide text-gray-600">{label}</dt>
       <dd className="mt-1">
         {type === 'date' ? (
           <input

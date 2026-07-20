@@ -23,6 +23,20 @@ function summaryConfigSource() {
   );
 }
 
+function catalogueEditorSource() {
+  return readFileSync(
+    join(process.cwd(), "modules/work-orders/ProductionSpecificationCatalogueEditor.tsx"),
+    "utf8",
+  );
+}
+
+function specificationFiltersEditorSource() {
+  return readFileSync(
+    join(process.cwd(), "modules/work-orders/SpecificationFiltersEditor.tsx"),
+    "utf8",
+  );
+}
+
 describe("work order admin page", () => {
   it("lets admins deactivate controlled options instead of deleting them", () => {
     const source = pageSource();
@@ -67,5 +81,34 @@ describe("work order admin page", () => {
     expect(source).toContain("Billing line exclusions");
     expect(source).toContain("saveWorkOrderBillingExclusionsAction");
     expect(source).toContain("One case-insensitive term per line");
+  });
+
+  it("governs stable Specification Catalogue options with impact preview and explicit confirmation", () => {
+    const source = `${pageSource()}\n${catalogueEditorSource()}`;
+
+    expect(source).toContain("Specification Catalogue");
+    expect(source).toContain("Production Label wording");
+    expect(source).toContain("Aliases");
+    expect(source).toContain("PS1");
+    expect(source).toContain("PS3");
+    expect(source).toContain("Not used for PS");
+    expect(source).toContain("Affected confirmed items");
+    expect(source).toContain("confirmImpact");
+    expect(source).toContain("Saving catalogue option");
+    expect(source).not.toContain("Delete catalogue option");
+  });
+
+  it("lets Configure users globally enable and order every Production Specification filter", () => {
+    const source = `${pageSource()}\n${specificationFiltersEditorSource()}`;
+
+    expect(source).toContain("Production Specification filters");
+    expect(source).toContain("saveWorkOrderSpecificationFilterConfigAction");
+    expect(source).toContain("DataPanel");
+    expect(source).toContain("FeedbackState");
+    expect(source).toContain("PrecisionButton");
+    expect(source).toContain("Enable the canonical fields staff can filter by");
+    expect(source).toContain('name={`enabled:${field.field}`}');
+    expect(source).toContain('name={`order:${field.field}`}');
+    expect(source).not.toContain("filter limit");
   });
 });

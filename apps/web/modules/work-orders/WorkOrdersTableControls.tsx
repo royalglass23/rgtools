@@ -10,8 +10,11 @@ import type { WorkOrderSummaryFieldConfig } from './summary-config'
 import { WorkOrderItemsSummary } from './WorkOrderItemsSummary'
 import {
   INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE,
+  PRODUCTION_SPECIFICATION_FIELD_DEFINITIONS,
+  productionSpecificationFieldLabel,
   type ProductionSpecificationCatalogueOption,
 } from './production-specifications'
+import type { WorkOrderSpecificationFilterConfig } from './specification-filter-config'
 
 type FilterOption = { id: string; label: string }
 
@@ -33,6 +36,7 @@ export function WorkOrdersTableControls({
   isAdmin = false,
   canManage = false,
   catalogue = INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE,
+  specificationFilters = [],
 }: {
   rows: WorkOrderRow[]
   filters: WorkOrderListFilters
@@ -45,6 +49,7 @@ export function WorkOrdersTableControls({
   isAdmin?: boolean
   canManage?: boolean
   catalogue?: readonly ProductionSpecificationCatalogueOption[]
+  specificationFilters?: readonly WorkOrderSpecificationFilterConfig[]
 }) {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds])
@@ -68,6 +73,8 @@ export function WorkOrdersTableControls({
         filters={filters}
         options={options}
         fields={fields}
+        catalogue={catalogue}
+        specificationFilters={specificationFilters}
         basePath={basePath}
         paramPrefix={paramPrefix}
       />
@@ -140,23 +147,30 @@ function WorkOrderFilters({
   filters,
   options,
   fields,
+  catalogue,
+  specificationFilters,
   basePath,
   paramPrefix,
 }: {
   filters: WorkOrderListFilters
   options: WorkOrderFilterOptions
   fields: WorkOrderSummaryFieldConfig[]
+  catalogue: readonly ProductionSpecificationCatalogueOption[]
+  specificationFilters: readonly WorkOrderSpecificationFilterConfig[]
   basePath: string
   paramPrefix: string
 }) {
   const searchParams = useSearchParams()
-  const owned = new Set(['q', 'current', 'risk', 'importance', 'stage', 'hardware', 'maintenanceProgram', 'showRemovedItems', 'sort', 'size', 'page'].map((name) => `${paramPrefix}${name}`))
+  const owned = ownedFilterParamNames(paramPrefix)
   const carryOver = Array.from(searchParams.entries()).filter(([key]) => !owned.has(key))
   const resetParams = new URLSearchParams(carryOver)
   resetParams.set(`${paramPrefix}size`, String(filters.size))
   resetParams.set(`${paramPrefix}page`, '1')
   const resetHref = resetParams.toString() ? `${basePath}?${resetParams}` : basePath
   const filterable = new Set(fields.filter((field) => field.filterable).map((field) => field.id))
+  const enabledSpecificationFilters = specificationFilters
+    .filter((filter) => filter.enabled)
+    .sort((left, right) => left.order - right.order)
 
   return (
     <form action={basePath} className="grid items-end gap-3 rounded border border-gray-200 bg-white p-4 shadow-sm md:grid-cols-2 xl:grid-cols-[minmax(320px,1.6fr)_repeat(6,minmax(135px,1fr))_auto]">
@@ -185,6 +199,21 @@ function WorkOrderFilters({
       {filterable.has('stage') && <Select name={`${paramPrefix}stage`} label="Stage" value={filters.stage} options={[['all', 'All'], ...options.stages.map((option) => [option.id, option.label] as [string, string])]} />}
       {filterable.has('hardware') && <Select name={`${paramPrefix}hardware`} label="Hardware" value={filters.hardware} options={[['all', 'All'], ...options.hardwareStatuses.map((option) => [option.id, option.label] as [string, string])]} />}
       {filterable.has('maintenanceProgram') && <Select name={`${paramPrefix}maintenanceProgram`} label="Maintenance Program" value={filters.maintenanceProgram} options={[['all', 'All'], ['yes', 'Yes'], ['no', 'No']]} />}
+      {enabledSpecificationFilters.map(({ field }) => (
+        <Select
+          key={field}
+          name={`${paramPrefix}spec_${field}`}
+          label={productionSpecificationFieldLabel(field)}
+          value={filters.specification?.[field] ?? 'all'}
+          options={[
+            ['all', 'All'],
+            ...catalogue
+              .filter((option) => option.field === field && option.isActive !== false)
+              .sort((left, right) => (left.sortOrder ?? 0) - (right.sortOrder ?? 0))
+              .map((option) => [option.id, option.displayLabel] as [string, string]),
+          ]}
+        />
+      ))}
       <Select
         name={`${paramPrefix}sort`}
         label="Sort"
@@ -483,7 +512,7 @@ function PageSizeSelect({ filters, basePath, paramPrefix }: { filters: WorkOrder
 function paramsFor(filters: WorkOrderListFilters, paramPrefix: string, searchParams?: ReturnType<typeof useSearchParams>) {
   const params = new URLSearchParams()
   if (searchParams) {
-    const owned = new Set(['q', 'current', 'risk', 'importance', 'stage', 'hardware', 'maintenanceProgram', 'showRemovedItems', 'sort', 'size', 'page'].map((name) => `${paramPrefix}${name}`))
+    const owned = ownedFilterParamNames(paramPrefix)
     for (const [key, value] of searchParams.entries()) {
       if (!owned.has(key)) params.append(key, value)
     }
@@ -495,11 +524,31 @@ function paramsFor(filters: WorkOrderListFilters, paramPrefix: string, searchPar
   params.set(`${paramPrefix}stage`, filters.stage)
   params.set(`${paramPrefix}hardware`, filters.hardware)
   params.set(`${paramPrefix}maintenanceProgram`, filters.maintenanceProgram)
+  for (const [field, catalogueId] of Object.entries(filters.specification ?? {})) {
+    if (catalogueId) params.set(`${paramPrefix}spec_${field}`, catalogueId)
+  }
   if (filters.showRemovedItems) params.set(`${paramPrefix}showRemovedItems`, '1')
   params.set(`${paramPrefix}sort`, filters.sort)
   params.set(`${paramPrefix}size`, String(filters.size))
   params.set(`${paramPrefix}page`, String(filters.page))
   return params
+}
+
+function ownedFilterParamNames(paramPrefix: string) {
+  return new Set([
+    'q',
+    'current',
+    'risk',
+    'importance',
+    'stage',
+    'hardware',
+    'maintenanceProgram',
+    'showRemovedItems',
+    'sort',
+    'size',
+    'page',
+    ...PRODUCTION_SPECIFICATION_FIELD_DEFINITIONS.map(({ field }) => `spec_${field}`),
+  ].map((name) => `${paramPrefix}${name}`))
 }
 
 function formatNullableDate(value: string | null) {

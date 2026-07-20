@@ -12,6 +12,7 @@ const isolatedWorkOrderEnv = isolatedDatabaseUrl
       SERVICEM8_API_BASE_URL: `http://127.0.0.1:${adapterPort}/api_1.0`,
       OPENAI_API_KEY: "controlled-e2e-key",
       OPENAI_RESPONSES_URL: `http://127.0.0.1:${adapterPort}/v1/responses`,
+      WORK_ORDER_EXISTING_ITEM_ROLLOUT_ENABLED: "true",
     }
   : undefined;
 const webServerEnvironment = {
@@ -41,7 +42,7 @@ export default defineConfig({
     command: `node node_modules/next/dist/bin/next dev --hostname 127.0.0.1 --port ${port}`,
     url: `${baseURL}/login`,
     reuseExistingServer: !process.env.CI && !isolatedDatabaseUrl,
-    timeout: 180_000,
+    timeout: 300_000,
     env: webServerEnvironment,
   },
   projects: [
