@@ -3,6 +3,7 @@ import {
   index,
   integer,
   jsonb,
+  pgEnum,
   numeric,
   pgTable,
   text,
@@ -11,6 +12,35 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { users } from "./schema";
+
+export const quoteMovementProjectComplexityEnum = pgEnum(
+  "quote_movement_project_complexity",
+  ["unassessed", "easy", "normal", "tight", "very_difficult"],
+);
+export type QuoteMovementProjectComplexity =
+  (typeof quoteMovementProjectComplexityEnum.enumValues)[number];
+
+export type QuoteMovementSummaryStatement = {
+  text: string;
+  evidenceSourceIdentities: string[];
+};
+
+export type QuoteMovementImportantDetailsSummary = {
+  currentPosition: QuoteMovementSummaryStatement;
+  materialFacts: QuoteMovementSummaryStatement[];
+  importantDates: QuoteMovementSummaryStatement[];
+  participants: QuoteMovementSummaryStatement[];
+  unresolvedMatters: QuoteMovementSummaryStatement[];
+  latestMeaningfulMovement: QuoteMovementSummaryStatement | null;
+  consentState:
+    | (QuoteMovementSummaryStatement & {
+        status:
+          | "resolved_not_required"
+          | "resolved_approved"
+          | "unresolved_awaiting_confirmation";
+      })
+    | null;
+};
 
 export const quoteMovementRecords = pgTable(
   "quote_movement_records",
@@ -27,8 +57,12 @@ export const quoteMovementRecords = pgTable(
       precision: 12,
       scale: 2,
     }),
+    projectComplexity: quoteMovementProjectComplexityEnum("project_complexity")
+      .default("unassessed")
+      .notNull(),
     sourceUpdatedAt: timestamp("source_updated_at", { withTimezone: true }),
     latestActivityAt: timestamp("latest_activity_at", { withTimezone: true }),
+    convertedAt: timestamp("converted_at", { withTimezone: true }),
     sourceCoverage: text("source_coverage").default("incomplete").notNull(),
     sourceDiscoveredCount: integer("source_discovered_count")
       .default(0)
@@ -42,6 +76,17 @@ export const quoteMovementRecords = pgTable(
       .$type<string[]>()
       .default([])
       .notNull(),
+    importantDetailsSummary: jsonb(
+      "important_details_summary",
+    ).$type<QuoteMovementImportantDetailsSummary>(),
+    summarySourceFingerprint: text("summary_source_fingerprint"),
+    summaryGeneratedAt: timestamp("summary_generated_at", {
+      withTimezone: true,
+    }),
+    summaryLastAttemptedAt: timestamp("summary_last_attempted_at", {
+      withTimezone: true,
+    }),
+    summaryLastError: text("summary_last_error"),
     lastServiceM8SyncedAt: timestamp("last_servicem8_synced_at", {
       withTimezone: true,
     }).notNull(),

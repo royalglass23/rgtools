@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const requireModule = vi.hoisted(() => vi.fn())
 const auth = vi.hoisted(() => vi.fn())
 const refreshQuoteMovementFromServiceM8 = vi.hoisted(() => vi.fn())
+const updateQuoteMovementProjectComplexity = vi.hoisted(() => vi.fn())
 const revalidatePath = vi.hoisted(() => vi.fn())
 const redirect = vi.hoisted(() => vi.fn((url: string) => {
   throw Object.assign(new Error('NEXT_REDIRECT'), { url })
@@ -13,10 +14,14 @@ const redirect = vi.hoisted(() => vi.fn((url: string) => {
 vi.mock('@/lib/guard', () => ({ requireModule }))
 vi.mock('@/lib/auth', () => ({ auth }))
 vi.mock('../service', () => ({ refreshQuoteMovementFromServiceM8 }))
+vi.mock('../repository', () => ({ updateQuoteMovementProjectComplexity }))
 vi.mock('next/cache', () => ({ revalidatePath }))
 vi.mock('next/navigation', () => ({ redirect }))
 
-import { refreshQuoteMovementAction } from '../actions'
+import {
+  refreshQuoteMovementAction,
+  updateQuoteMovementComplexityAction,
+} from '../actions'
 
 describe('refreshQuoteMovementAction', () => {
   beforeEach(() => {
@@ -58,5 +63,77 @@ describe('refreshQuoteMovementAction', () => {
         'Quote Movement could not refresh from ServiceM8. The previous cached list was kept.',
       )}`,
     })
+  })
+})
+
+describe('updateQuoteMovementComplexityAction', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    requireModule.mockResolvedValue(undefined)
+    updateQuoteMovementProjectComplexity.mockResolvedValue(undefined)
+  })
+
+  it('persists an approved Project Complexity and revalidates the list', async () => {
+    const formData = new FormData()
+    formData.set('recordId', 'record-1')
+    formData.set('projectComplexity', 'very_difficult')
+
+    await updateQuoteMovementComplexityAction(formData)
+
+    expect(requireModule).toHaveBeenCalledWith('quote-tracker')
+    expect(updateQuoteMovementProjectComplexity).toHaveBeenCalledWith(
+      'record-1',
+      'very_difficult',
+    )
+    expect(revalidatePath).toHaveBeenCalledWith('/quote-movement')
+  })
+
+  it('rejects an invalid Project Complexity before persistence', async () => {
+    const formData = new FormData()
+    formData.set('recordId', 'record-1')
+    formData.set('projectComplexity', 'urgent')
+
+    await expect(
+      updateQuoteMovementComplexityAction(formData),
+    ).rejects.toThrow('Invalid Project Complexity.')
+    expect(updateQuoteMovementProjectComplexity).not.toHaveBeenCalled()
+    expect(revalidatePath).not.toHaveBeenCalled()
+  })
+
+  it('rejects a missing record ID before persistence', async () => {
+    const formData = new FormData()
+    formData.set('projectComplexity', 'normal')
+
+    await expect(
+      updateQuoteMovementComplexityAction(formData),
+    ).rejects.toThrow('Quote Movement record ID is required.')
+    expect(updateQuoteMovementProjectComplexity).not.toHaveBeenCalled()
+    expect(revalidatePath).not.toHaveBeenCalled()
+  })
+
+  it('rejects a missing Project Complexity before persistence', async () => {
+    const formData = new FormData()
+    formData.set('recordId', 'record-1')
+
+    await expect(
+      updateQuoteMovementComplexityAction(formData),
+    ).rejects.toThrow('Invalid Project Complexity.')
+    expect(updateQuoteMovementProjectComplexity).not.toHaveBeenCalled()
+    expect(revalidatePath).not.toHaveBeenCalled()
+  })
+
+  it('stops before persistence when Quote Tracker access is denied', async () => {
+    requireModule.mockRejectedValue(Object.assign(new Error('NEXT_REDIRECT'), {
+      url: '/?denied=quote-tracker',
+    }))
+    const formData = new FormData()
+    formData.set('recordId', 'record-1')
+    formData.set('projectComplexity', 'easy')
+
+    await expect(
+      updateQuoteMovementComplexityAction(formData),
+    ).rejects.toMatchObject({ url: '/?denied=quote-tracker' })
+    expect(updateQuoteMovementProjectComplexity).not.toHaveBeenCalled()
+    expect(revalidatePath).not.toHaveBeenCalled()
   })
 })

@@ -1,4 +1,4 @@
-import { eq, notInArray } from "drizzle-orm";
+import { eq, inArray, notInArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   quoteMovementRecords,
@@ -6,6 +6,7 @@ import {
   quoteMovementSourceEnrichment,
   quoteMovementSources,
 } from "@rgtools/db/schema-quote-movement";
+import type { QuoteMovementProjectComplexity } from "@rgtools/db/schema-quote-movement";
 import type {
   QuoteMovementSnapshotInput,
   QuoteMovementSnapshotRepository,
@@ -40,12 +41,29 @@ export type QuoteMovementPersistenceTransaction = Parameters<
   Parameters<typeof db.transaction>[0]
 >[0];
 
+export async function updateQuoteMovementProjectComplexity(
+  recordId: string,
+  projectComplexity: QuoteMovementProjectComplexity,
+) {
+  await db
+    .update(quoteMovementRecords)
+    .set({ projectComplexity, updatedAt: new Date() })
+    .where(eq(quoteMovementRecords.id, recordId));
+}
+
 export async function persistQuoteMovementSnapshot(
   tx: QuoteMovementPersistenceTransaction,
   records: QuoteMovementSnapshotInput[],
   context: QuoteMovementRefreshContext,
 ) {
-  const seenJobUuids = records.map((record) => record.servicem8JobUuid);
+  const activeJobUuids = records.map((record) => record.servicem8JobUuid);
+  const activeJobUuidSet = new Set(activeJobUuids);
+  const convertedJobUuids = Array.from(new Set(
+    (context.convertedJobUuids ?? []).filter(
+      (jobUuid) => !activeJobUuidSet.has(jobUuid),
+    ),
+  ));
+  const seenJobUuids = [...activeJobUuids, ...convertedJobUuids];
 
   for (const record of records) {
     const [savedRecord] = await tx
@@ -98,6 +116,21 @@ export async function persistQuoteMovementSnapshot(
         sourceCoverageDetails: retained.coverage.details,
       })
       .where(eq(quoteMovementRecords.id, savedRecord.id));
+  }
+
+  if (convertedJobUuids.length > 0) {
+    await tx
+      .update(quoteMovementRecords)
+      .set({
+        servicem8Status: "Work Order",
+        servicem8Active: true,
+        convertedAt: sql`coalesce(${quoteMovementRecords.convertedAt}, ${context.refreshedAt})`,
+        updatedAt: context.refreshedAt,
+      })
+      .where(inArray(
+        quoteMovementRecords.servicem8JobUuid,
+        convertedJobUuids,
+      ));
   }
 
   await tx
@@ -191,6 +224,7 @@ function quoteRecordValues(
     quoteValueExcludingGst: record.quoteValueExcludingGst,
     sourceUpdatedAt: record.sourceUpdatedAt,
     latestActivityAt: record.latestActivityAt,
+    convertedAt: null,
     sourceCoverage: record.sourceCoverage.status,
     sourceDiscoveredCount: record.sourceCoverage.discoveredCount,
     sourceUnreadCount: record.sourceCoverage.unreadCount,

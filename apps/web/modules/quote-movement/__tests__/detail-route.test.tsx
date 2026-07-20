@@ -3,7 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const requireModule = vi.hoisted(() => vi.fn())
 const getQuoteMovementRecord = vi.hoisted(() => vi.fn())
-const notFound = vi.hoisted(() => vi.fn(() => { throw new Error('NEXT_NOT_FOUND') }))
+const notFound = vi.hoisted(() =>
+  vi.fn(() => {
+    throw new Error('NEXT_NOT_FOUND')
+  }),
+)
 
 vi.mock('@/lib/guard', () => ({ requireModule }))
 vi.mock('../queries', () => ({ getQuoteMovementRecord }))
@@ -24,23 +28,164 @@ describe('Quote Movement detail route shell', () => {
       jobAddress: '1 Glass Lane',
       quoteValueExcludingGst: '1250.00',
       lastServiceM8SyncedAt: new Date('2026-07-17T03:00:00Z'),
+      convertedAt: null,
+      workOrderId: null,
     })
   })
 
   it('opens a protected detail shell from the cached record identity', async () => {
-    render(await QuoteMovementDetailPage({ params: Promise.resolve({ id: 'record-1' }) }))
+    render(
+      await QuoteMovementDetailPage({
+        params: Promise.resolve({ id: 'record-1' }),
+      }),
+    )
 
     expect(requireModule).toHaveBeenCalledWith('quote-tracker')
     expect(screen.getByRole('heading', { name: 'Q260101' })).toBeInTheDocument()
     expect(screen.getByText('Alpha Homes')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'What Matters Now' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'What Matters Now' }),
+    ).toBeInTheDocument()
+  })
+
+  it('presents material summary sections, contextual evidence, and Source Coverage', async () => {
+    getQuoteMovementRecord.mockResolvedValue({
+      id: 'record-1',
+      servicem8Status: 'Quote',
+      servicem8Active: true,
+      jobNumber: 'Q260223',
+      customerName: 'Aroha Glass',
+      jobAddress: '1 Example Road',
+      quoteValueExcludingGst: '1200.00',
+      lastServiceM8SyncedAt: new Date('2026-07-20T03:00:00Z'),
+      convertedAt: null,
+      workOrderId: null,
+      sourceCoverage: 'incomplete',
+      sourceUnreadCount: 2,
+      sourceCoverageDetails: ['2 ServiceM8 sources could not be read.'],
+      importantDetailsSummary: {
+        currentPosition: {
+          text: 'Low-iron glass is confirmed; opening size is unresolved.',
+          evidenceSourceIdentities: ['note-current'],
+        },
+        materialFacts: [
+          {
+            text: 'The customer selected low-iron glass.',
+            evidenceSourceIdentities: ['email-selection'],
+          },
+        ],
+        importantDates: [],
+        participants: [],
+        unresolvedMatters: [
+          {
+            text: 'Confirm the final opening dimensions.',
+            evidenceSourceIdentities: ['note-current'],
+          },
+        ],
+        latestMeaningfulMovement: {
+          text: 'The low-iron selection was recorded.',
+          evidenceSourceIdentities: ['email-selection'],
+        },
+        consentState: null,
+      },
+    })
+
+    render(
+      await QuoteMovementDetailPage({
+        params: Promise.resolve({ id: 'record-1' }),
+      }),
+    )
+
+    expect(
+      screen.getByRole('heading', { name: 'Current Position' }),
+    ).toBeVisible()
+    expect(
+      screen.getByRole('heading', { name: 'Material Facts' }),
+    ).toBeVisible()
+    expect(
+      screen.getByRole('heading', { name: 'Unresolved Matters' }),
+    ).toBeVisible()
+    expect(
+      screen.queryByRole('heading', { name: 'Important Dates' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'Consent State' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByText('Incomplete Source Coverage')).toBeVisible()
+    expect(screen.getByText('2 unread sources')).toBeVisible()
+    expect(
+      screen
+        .getAllByRole('link', { name: 'View supporting evidence' })
+        .map((link) => link.getAttribute('href')),
+    ).toEqual([
+      '/quote-movement/record-1/evidence/note-current',
+      '/quote-movement/record-1/evidence/note-current',
+      '/quote-movement/record-1/evidence/email-selection',
+      '/quote-movement/record-1/evidence/email-selection',
+    ])
+    expect(screen.queryByText('note-current')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(/score|ranking|recommended action/i),
+    ).not.toBeInTheDocument()
   })
 
   it('does not expose a detail shell for an unknown cached record', async () => {
     getQuoteMovementRecord.mockResolvedValue(null)
 
-    await expect(QuoteMovementDetailPage({
-      params: Promise.resolve({ id: 'missing' }),
-    })).rejects.toThrow('NEXT_NOT_FOUND')
+    await expect(
+      QuoteMovementDetailPage({
+        params: Promise.resolve({ id: 'missing' }),
+      }),
+    ).rejects.toThrow('NEXT_NOT_FOUND')
+  })
+
+  it('continues a converted record into its current Work Order', async () => {
+    getQuoteMovementRecord.mockResolvedValue({
+      id: 'record-1',
+      servicem8Status: 'Work Order',
+      servicem8Active: true,
+      jobNumber: 'Q260101',
+      customerName: 'Alpha Homes',
+      jobAddress: '1 Glass Lane',
+      quoteValueExcludingGst: '1250.00',
+      lastServiceM8SyncedAt: new Date('2026-07-20T03:00:00Z'),
+      convertedAt: new Date('2026-07-20T02:00:00Z'),
+      workOrderId: 'work-order-1',
+    })
+
+    render(
+      await QuoteMovementDetailPage({
+        params: Promise.resolve({ id: 'record-1' }),
+      }),
+    )
+
+    expect(
+      screen.getByRole('link', { name: 'Open Work Order' }),
+    ).toHaveAttribute('href', '/work-orders/work-order-1')
+  })
+
+  it('reports when a converted record has no current Work Order match', async () => {
+    getQuoteMovementRecord.mockResolvedValue({
+      id: 'record-1',
+      servicem8Status: 'Work Order',
+      servicem8Active: true,
+      jobNumber: 'Q260101',
+      customerName: 'Alpha Homes',
+      jobAddress: '1 Glass Lane',
+      quoteValueExcludingGst: '1250.00',
+      lastServiceM8SyncedAt: new Date('2026-07-20T03:00:00Z'),
+      convertedAt: new Date('2026-07-20T02:00:00Z'),
+      workOrderId: null,
+    })
+
+    render(
+      await QuoteMovementDetailPage({
+        params: Promise.resolve({ id: 'record-1' }),
+      }),
+    )
+
+    expect(
+      screen.getByText('Work Order record not yet available'),
+    ).toBeVisible()
   })
 })

@@ -2,6 +2,7 @@ import { getTableConfig } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
 
 import {
+  quoteMovementProjectComplexityEnum,
   quoteMovementRecords,
   quoteMovementRefreshRuns,
   quoteMovementSourceEnrichment,
@@ -9,6 +10,37 @@ import {
 } from "@rgtools/db/schema-quote-movement";
 
 describe("Quote Movement persistence", () => {
+  it("stores RG-owned Project Complexity with the approved values and Unassessed default", () => {
+    const config = getTableConfig(quoteMovementRecords);
+    const projectComplexity = config.columns.find(
+      (column) => column.name === "project_complexity",
+    );
+
+    expect(quoteMovementProjectComplexityEnum.enumValues).toEqual([
+      "unassessed",
+      "easy",
+      "normal",
+      "tight",
+      "very_difficult",
+    ]);
+    expect(projectComplexity).toMatchObject({
+      notNull: true,
+      default: "unassessed",
+    });
+  });
+
+  it("stores explicit Work Order conversion evidence separately from active state", () => {
+    const config = getTableConfig(quoteMovementRecords);
+    const convertedAt = config.columns.find(
+      (column) => column.name === "converted_at",
+    );
+
+    expect(convertedAt).toMatchObject({
+      notNull: false,
+      dataType: "date",
+    });
+  });
+
   it("uses the ServiceM8 job UUID as the stable cached-list identity", () => {
     const config = getTableConfig(quoteMovementRecords);
 
@@ -98,5 +130,22 @@ describe("Quote Movement persistence", () => {
         "created_at",
       ]),
     );
+  });
+
+  it("stores the structured cached summary and its safe generation state", () => {
+    const columns = Object.fromEntries(
+      getTableConfig(quoteMovementRecords).columns.map((column) => [
+        column.name,
+        column.dataType,
+      ]),
+    );
+
+    expect(columns).toMatchObject({
+      important_details_summary: "json",
+      summary_source_fingerprint: "string",
+      summary_generated_at: "date",
+      summary_last_attempted_at: "date",
+      summary_last_error: "string",
+    });
   });
 });
