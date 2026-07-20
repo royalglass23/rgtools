@@ -224,6 +224,35 @@ export const workOrderItemProductionSpecifications = pgTable('work_order_item_pr
   index('work_order_item_production_specifications_status_idx').on(table.status),
 ])
 
+export const workOrderExistingItemRolloutRuns = pgTable('work_order_existing_item_rollout_runs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  actorId: uuid('actor_id').references(() => users.id, { onDelete: 'set null' }),
+  correlationId: text('correlation_id').notNull(),
+  state: text('state').default('running').notNull(),
+  activeRunKey: boolean('active_run_key'),
+  totalCount: integer('total_count').default(0).notNull(),
+  queuedCount: integer('queued_count').default(0).notNull(),
+  processingCount: integer('processing_count').default(0).notNull(),
+  draftedCount: integer('drafted_count').default(0).notNull(),
+  needsReviewCount: integer('needs_review_count').default(0).notNull(),
+  unmappedCount: integer('unmapped_count').default(0).notNull(),
+  failedCount: integer('failed_count').default(0).notNull(),
+  retriedCount: integer('retried_count').default(0).notNull(),
+  skippedRemovedCount: integer('skipped_removed_count').default(0).notNull(),
+  skippedConfirmedCount: integer('skipped_confirmed_count').default(0).notNull(),
+  skippedCurrentKeyCount: integer('skipped_current_key_count').default(0).notNull(),
+  safeFailureClass: text('safe_failure_class'),
+  startedAt: timestamp('started_at', { withTimezone: true }).defaultNow().notNull(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  durationMs: integer('duration_ms').default(0).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('work_order_existing_item_rollout_runs_correlation_uq').on(table.correlationId),
+  uniqueIndex('work_order_existing_item_rollout_runs_active_uq').on(table.activeRunKey),
+  index('work_order_existing_item_rollout_runs_started_idx').on(table.startedAt),
+])
+
 export const workOrderItemEnrichmentJobs = pgTable('work_order_item_enrichment_jobs', {
   id: uuid('id').primaryKey().defaultRandom(),
   workOrderItemId: uuid('work_order_item_id').notNull().references(() => workOrderItems.id, { onDelete: 'cascade' }),
@@ -233,12 +262,14 @@ export const workOrderItemEnrichmentJobs = pgTable('work_order_item_enrichment_j
   promptVersion: text('prompt_version').notNull(),
   status: workOrderItemEnrichmentStatusEnum('status').default('queued').notNull(),
   attemptCount: integer('attempt_count').default(0).notNull(),
+  rolloutWasRetried: boolean('rollout_was_retried').default(false).notNull(),
   availableAt: timestamp('available_at', { withTimezone: true }).defaultNow().notNull(),
   lockedAt: timestamp('locked_at', { withTimezone: true }),
   leaseExpiresAt: timestamp('lease_expires_at', { withTimezone: true }),
   modelIdentifier: text('model_identifier'),
   lastSafeError: text('last_safe_error'),
   generatedAt: timestamp('generated_at', { withTimezone: true }),
+  rolloutRunId: uuid('rollout_run_id').references(() => workOrderExistingItemRolloutRuns.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
@@ -250,6 +281,7 @@ export const workOrderItemEnrichmentJobs = pgTable('work_order_item_enrichment_j
   ),
   index('work_order_item_enrichment_jobs_status_available_idx').on(table.status, table.availableAt),
   index('work_order_item_enrichment_jobs_item_created_idx').on(table.workOrderItemId, table.createdAt),
+  index('work_order_item_enrichment_jobs_rollout_run_idx').on(table.rolloutRunId),
 ])
 
 export const workOrderItemProductionSpecificationRevisions = pgTable('work_order_item_production_specification_revisions', {

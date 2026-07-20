@@ -77,6 +77,15 @@ describe('work orders server page', () => {
     expect(source).toContain('<WorkOrderRefreshButton />')
   })
 
+  it('restores rollout progress for staff while passing mutation access separately', () => {
+    const source = pageSource()
+
+    expect(source).toContain('getLatestExistingItemRolloutStatus')
+    expect(source).toContain('<ExistingItemRolloutPanel')
+    expect(source).toContain('initialStatus={rolloutStatus}')
+    expect(source).toContain('canManage={permissions.canManage}')
+  })
+
   it('offers filtered CSV export without carrying page-only params', () => {
     const source = pageSource()
 

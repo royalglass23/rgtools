@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import AxeBuilder from '@axe-core/playwright'
 import { hash } from 'bcryptjs'
 import { neon } from '@neondatabase/serverless'
-import { expect, test, type Download, type Page } from '@playwright/test'
+import { expect, test, type Download, type Locator, type Page } from '@playwright/test'
 import {
   createWorkOrderAcceptanceCredentials,
   readWorkOrderAcceptanceDatabaseProof,
@@ -48,6 +48,7 @@ let previousModuleStates: Array<{
 }> = []
 const createdRefreshRunIds = new Set<string>()
 const knownRefreshRunIds = new Set<string>()
+const createdRolloutRunIds = new Set<string>()
 let refreshMeasurementNumber = 0
 
 test.describe('MT-199 Work Order Items release acceptance', () => {
@@ -133,6 +134,9 @@ test.describe('MT-199 Work Order Items release acceptance', () => {
     for (const refreshRunId of createdRefreshRunIds) {
       await sql`DELETE FROM work_order_refresh_runs WHERE id = ${refreshRunId}::uuid`
     }
+    for (const rolloutRunId of createdRolloutRunIds) {
+      await sql`DELETE FROM work_order_existing_item_rollout_runs WHERE id = ${rolloutRunId}::uuid`
+    }
     if (previousSummaryConfig === null) {
       await sql`DELETE FROM settings WHERE key = 'work_orders.summary_fields'`
     } else {
@@ -194,41 +198,60 @@ test.describe('MT-199 Work Order Items release acceptance', () => {
     const firstItem = primaryRows.filter({ hasText: 'SHOWER-001' })
     await expect(firstItem).toContainText('Qty 2')
     await expect(firstItem).toContainText('SHOWER-001')
-    await expect(firstItem.getByLabel('Short label for SHOWER-001')).toHaveValue('Frameless shower screen, 1200 x 2100, matte black')
+    await expect(firstItem.getByLabel('Short label for SHOWER-001')).toHaveValue(primaryShowerDescription)
     await expect(firstItem).toHaveAttribute('title', /Supply and install frameless shower screen[\s\S]*Line total excluding GST: \$2501\.00/)
+
+    await prepareExistingItemRolloutFixture()
+    await page.reload()
+    const rolloutPanel = page.getByRole('region', { name: 'Existing-item enrichment' })
+    await rolloutPanel.getByRole('button', { name: 'Start existing-item enrichment' }).click()
+    await expect(rolloutPanel).toContainText('Rollout running.')
+    await expect(rolloutPanel.locator('[data-count="total"]')).toHaveText('1')
+    await expect(rolloutPanel.locator('[data-count="queued"]')).toHaveText('1')
+    const rolloutRunId = await failLatestExistingItemRollout()
+    createdRolloutRunIds.add(rolloutRunId)
+    await expect(rolloutPanel).toContainText('Rollout failed.', { timeout: 15_000 })
+    await expect(rolloutPanel.locator('[data-count="failed"]')).toHaveText('1')
+    await rolloutPanel.getByRole('button', { name: 'Resume failed enrichment' }).click()
+    await expect(rolloutPanel).toContainText('Rollout running.')
+    await expect(rolloutPanel.locator('[data-count="queued"]')).toHaveText('1')
+    await expect(rolloutPanel.locator('[data-count="retried"]')).toHaveText('1')
 
     await seedConfirmedChromeProductionSpecification()
     await page.reload()
-    await firstItem.getByText('View specification').click()
+    await openProductionSpecification(firstItem)
     await firstItem.getByRole('button', { name: 'Change specification' }).click()
     await firstItem.getByLabel('Hardware/Fittings Finish for SHOWER-001').selectOption('finish.matte-black')
     await firstItem.getByLabel('Change reason').selectOption('client_request')
     await firstItem.getByLabel('Change note (optional)').fill('Client approved Matte Black.')
     await firstItem.getByRole('button', { name: 'Confirm specification' }).click()
-    await expect(firstItem.getByText('Specification confirmed')).toBeVisible()
+    await expect(firstItem.getByText('Specification confirmed')).toBeVisible({ timeout: 30_000 })
 
     await page.reload()
     await expect(firstItem.getByLabel('Short label for SHOWER-001')).toHaveValue(/Matte Black/)
-    await firstItem.getByText('View specification').click()
+    await openProductionSpecification(firstItem)
     await expect(firstItem.getByText(/Client request/)).toBeVisible()
     await expect(firstItem.getByText('Hardware/Fittings Finish: Chrome → Matte Black')).toBeVisible()
 
     primaryShowerDescription = 'ServiceM8 revised shower description with new Matte Black source wording'
     await refreshWorkOrders(page)
     await expect(firstItem.getByText('Source Changed')).toBeVisible()
-    await firstItem.getByText('View specification').click()
+    await openProductionSpecification(firstItem)
     await firstItem.getByText('Compare ServiceM8 source').click()
-    await expect(firstItem.getByText(primaryShowerDescription)).toBeVisible()
+    await expect(
+      firstItem.getByLabel('Current ServiceM8 source').getByText(primaryShowerDescription),
+    ).toBeVisible()
     await firstItem.getByRole('button', { name: 'Ignore source change' }).click()
     await expect(firstItem.getByText('Source Changed')).toHaveCount(0)
 
     primaryShowerDescription = 'ServiceM8 second revision requiring a reviewable draft'
     await refreshWorkOrders(page)
-    await firstItem.getByText('View specification').click()
+    await expect(firstItem.getByText('Source Changed')).toBeVisible()
+    await openProductionSpecification(firstItem)
     await firstItem.getByText('Compare ServiceM8 source').click()
     await firstItem.getByRole('button', { name: 'Create new draft' }).click()
     await expect(firstItem.getByText('Review and correct draft')).toBeVisible()
-    await expect(firstItem.getByText('Confirmed')).toBeVisible()
+    await expect(firstItem.getByText('Confirmed', { exact: true })).toBeVisible()
 
     const manualLabel = 'Manual MT199 shower label'
     await firstItem.getByLabel('Short label for SHOWER-001').fill(manualLabel)
@@ -295,9 +318,20 @@ async function login(page: Page) {
   await page.waitForURL((url) => !url.pathname.startsWith('/login'))
 }
 
+async function openProductionSpecification(item: Locator) {
+  const details = item.locator('details').first()
+  const isOpen = await details.evaluate((element) => (element as HTMLDetailsElement).open)
+  if (!isOpen) {
+    const summary = details.locator('summary').first()
+    await summary.focus()
+    await summary.press('Enter')
+  }
+  await expect(details).toHaveAttribute('open', '')
+}
+
 async function refreshWorkOrders(page: Page) {
   const refreshStartedAt = Date.now()
-  await page.getByRole('button', { name: 'Refresh from ServiceM8' }).click()
+  await page.getByRole('button', { name: 'Refresh all jobs' }).click()
   await expect(page.getByRole('status').filter({ hasText: 'Last successful sync' })).toBeVisible()
 
   if (!isolatedDatabaseUrl) return
@@ -331,6 +365,43 @@ async function readDownload(download: Download) {
   const chunks: Buffer[] = []
   for await (const chunk of stream) chunks.push(Buffer.from(chunk))
   return Buffer.concat(chunks).toString('utf8')
+}
+
+async function prepareExistingItemRolloutFixture() {
+  if (!isolatedDatabaseUrl) return
+  const sql = neon(isolatedDatabaseUrl)
+  await sql`
+    DELETE FROM work_order_item_production_specifications
+    WHERE work_order_item_id = (
+      SELECT id FROM work_order_items WHERE servicem8_item_uuid = ${secondaryItemUuid} LIMIT 1
+    )
+  `
+  await sql`
+    DELETE FROM work_order_item_enrichment_jobs
+    WHERE work_order_item_id = (
+      SELECT id FROM work_order_items WHERE servicem8_item_uuid = ${secondaryItemUuid} LIMIT 1
+    )
+  `
+}
+
+async function failLatestExistingItemRollout() {
+  if (!isolatedDatabaseUrl) throw new Error('The isolated Work Orders database is required.')
+  const sql = neon(isolatedDatabaseUrl)
+  const runs = await sql`
+    SELECT id
+    FROM work_order_existing_item_rollout_runs
+    WHERE actor_id = ${userId}::uuid
+    ORDER BY started_at DESC
+    LIMIT 1
+  ` as Array<{ id: string }>
+  const rolloutRunId = runs[0]?.id
+  if (!rolloutRunId) throw new Error('The browser did not create an existing-item rollout run.')
+  await sql`
+    UPDATE work_order_item_enrichment_jobs
+    SET status = 'failed', last_safe_error = 'Controlled E2E provider failure.'
+    WHERE rollout_run_id = ${rolloutRunId}::uuid
+  `
+  return rolloutRunId
 }
 
 async function seedConfirmedChromeProductionSpecification() {

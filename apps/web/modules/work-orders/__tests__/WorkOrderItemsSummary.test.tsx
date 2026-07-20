@@ -951,7 +951,9 @@ describe('WorkOrderItemsSummary', () => {
       expect(screen.getByLabelText(label)).toBeInTheDocument()
     }
 
-    const operationalLine = screen.getByRole('group', { name: 'Work Order item controls' })
+    const operationalCell = screen.getByRole('cell', { name: 'Work Order item controls' })
+    const operationalLine = operationalCell.querySelector('dl')
+    if (!operationalLine) throw new Error('The Work Order item controls list was not rendered.')
     expect(operationalLine).toHaveClass('xl:grid-cols-8')
     expect(operationalLine.querySelectorAll('select, input[type="date"]')).toHaveLength(8)
     expect(screen.queryByText('Item')).not.toBeInTheDocument()
