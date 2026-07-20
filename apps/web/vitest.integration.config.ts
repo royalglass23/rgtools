@@ -35,6 +35,13 @@ export default defineConfig({
         ),
       },
       {
+        find: "@rgtools/db/schema-quote-movement",
+        replacement: path.resolve(
+          __dirname,
+          "../../packages/db/src/schema-quote-movement.ts",
+        ),
+      },
+      {
         find: "@rgtools/db/schema",
         replacement: path.resolve(__dirname, "../../packages/db/src/schema.ts"),
       },

@@ -31,6 +31,7 @@ All notable changes to rgtools are recorded here, grouped by release.
 
 ### Added
 
+- **Quote Movement complete source history (MT-220)** - retains accessible ServiceM8 notes, emails, files, photos, quote changes, and rgtools tracked engagement by stable identity; stores RG interpretation separately; preserves sources missing from later refreshes; and calculates meaningful latest activity with explicit complete/incomplete coverage counts.
 - **Quote Movement foundation** - cached active ServiceM8 Quote jobs now appear under the Quotes menu at `/quote-movement`, with read-only inbound refresh, last-refreshed metadata, list/detail shells, and the existing Quote Tracker access boundary.
 - **Audited Work Order specification changes** - confirmed item specifications can now be revised only with an approved reason and immutable field-level history; stale edits are rejected, and changed ServiceM8 source descriptions can be compared, ignored, or copied into a new draft without altering the confirmed specification.
 - **Safe Work Order AI enrichment** - successful ServiceM8 refreshes now queue versioned item-level enrichment jobs after reconciliation commits; a protected Vercel Cron creates schema-validated Needs Review drafts from the active Production Specification catalogue, with privacy redaction, bounded retries, safe failure states, Manage-only retry, and attributable retry events.
