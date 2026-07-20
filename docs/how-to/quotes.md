@@ -25,24 +25,27 @@ The viewer and tracker are Cloudflare Workers. The dashboard is the rgtools app 
 
 ## Quote Movement
 
-Quote Movement is the active ServiceM8 Quote list inside rgtools. It is read-only: rgtools pulls current active Quote jobs from ServiceM8 into its own cache and never writes Quote Movement changes back to ServiceM8.
+Quote Movement is the ServiceM8 Quote monitoring list inside rgtools. ServiceM8 data is read-only: rgtools pulls Quote jobs into its own cache and never writes Quote Movement changes back to ServiceM8. Project Complexity is an RG-owned assessment stored only in rgtools.
 
 Open **Quotes -> Quote Movement** to see active Quote jobs with:
 
-| Field                 | What it means                                                                |
-| --------------------- | ---------------------------------------------------------------------------- |
-| Job number            | The ServiceM8 generated job ID, linked to the Quote Movement detail shell    |
-| Customer              | The ServiceM8 company name, with a safe fallback when the company is missing |
-| Address               | The job address from ServiceM8                                               |
-| Quote value excl. GST | Sum of active ServiceM8 job material lines before GST                        |
-| Status                | Whether the cached ServiceM8 job is still active                             |
-| Last synced           | When rgtools last refreshed that row from ServiceM8                          |
+| Field                     | What it means                                                                                           |
+| ------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Job                       | The ServiceM8 job number, customer, and address, linked to the Quote Movement detail shell              |
+| Quote Value excluding GST | Sum of active ServiceM8 job material lines before GST                                                   |
+| Project Complexity        | Staff-selected Unassessed, Easy, Normal, Tight, or Very Difficult; refreshes never overwrite this value |
+| Latest Activity           | The latest meaningful retained source activity, with missing activity shown honestly                    |
+| Important Now             | The cached Current Position from What Matters Now, plus Complete or Incomplete Source Coverage          |
 
-Use **Refresh now** when you want the cache updated from ServiceM8. The page shows **Last refreshed** and keeps the previous cached list and retained source history available if ServiceM8 cannot be reached. A source missing from a later refresh remains in history. If there are no active Quote jobs in the cache, the page says **No active ServiceM8 Quote jobs.**
+Use Search, Complexity, Active/Converted, and Sort to change the list. Active is the default. Converted contains only monitored Quotes that a refresh has since found as active ServiceM8 Work Orders; an inactive cached Quote is not treated as converted without that evidence. Sort defaults to Latest Activity; Quote Value and Customer sorts are also available.
 
-MT-220 stores meaningful latest activity and complete/incomplete source-coverage evidence for later Quote Movement screens. The current list does not present those fields yet, so do not infer complete coverage from the list alone.
+Use **Refresh now** when you want the cache updated from ServiceM8. The page reads active Quotes and active Work Orders separately, shows **Last refreshed**, and keeps the previous cached list, Project Complexity, retained source history, and last valid What Matters Now summary available if ServiceM8 or summarisation cannot be reached. A source missing from a later refresh remains in history. If there are no active Quote jobs in the cache, the page says **No active ServiceM8 Quote jobs.**
 
-The detail page at **Quotes -> Quote Movement -> [job]** remains the presentation shell for later slices. MT-220 retains the underlying source history and coverage evidence; later slices add the staff-facing history and summaries.
+What Matters Now runs automatically when a Quote first appears or its meaningful retained history changes; there is no Generate button. Open a Quote Movement row to see Current Position first, followed only by populated material sections such as unresolved matters, facts, dates, participants, latest meaningful movement, or relevant consent. **View supporting evidence** opens the single retained source supporting that statement without recreating the complete ServiceM8 timeline.
+
+**Complete Source Coverage** means every discovered source was retained and interpreted. **Incomplete Source Coverage** shows the unread count and safe details; check ServiceM8 manually when coverage is incomplete. Routine or duplicate media may remain retained without appearing in What Matters Now.
+
+Open a converted job through its normal Quote Movement link to keep reviewing the retained Quote summary and evidence. When the matching current rgtools Work Order is available, **Open Work Order** continues into it; otherwise the list and detail page state **Work Order record not yet available**.
 
 ## Quote Tracker step-by-step workflow
 

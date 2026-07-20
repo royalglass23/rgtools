@@ -6,8 +6,13 @@ import {
   latestQuoteMovementActivity,
   quoteMovementSourceNoun,
 } from "./source-history";
+import type {
+  QuoteMovementSummarizer,
+  QuoteMovementSummaryRepository,
+} from "./summary";
 
 const ACTIVE_QUOTE_FILTER = "active eq 1 and status eq 'Quote'";
+const ACTIVE_WORK_ORDER_FILTER = "active eq 1 and status eq 'Work Order'";
 const ACTIVE_FILTER = "active eq 1";
 const SERVICEM8_MAX_PAGES = 25;
 const SOURCE_COLLECTION_CONCURRENCY = 4;
@@ -154,6 +159,7 @@ export type QuoteMovementSnapshotInput = {
 export type QuoteMovementRefreshContext = {
   actorId: string | null;
   refreshedAt: Date;
+  convertedJobUuids?: string[];
 };
 
 export interface QuoteMovementSnapshotRepository {
@@ -170,6 +176,8 @@ export interface QuoteMovementSnapshotRepository {
 export async function syncQuoteMovementFromServiceM8({
   request = createServiceM8RequestFromEnv(),
   repository,
+  summaryRepository,
+  summarize,
   interpretAttachments = async () => ({ files: [] }),
   readTrackedEngagement = async () => [],
   actorId = null,
@@ -177,6 +185,8 @@ export async function syncQuoteMovementFromServiceM8({
 }: {
   request?: ServiceM8FetchRequest;
   repository: QuoteMovementSnapshotRepository;
+  summaryRepository?: QuoteMovementSummaryRepository;
+  summarize?: QuoteMovementSummarizer;
   interpretAttachments?: QuoteMovementAttachmentInterpreter;
   readTrackedEngagement?: QuoteMovementTrackedEngagementReader;
   actorId?: string | null;
@@ -185,11 +195,16 @@ export async function syncQuoteMovementFromServiceM8({
   const refreshedAt = now();
 
   try {
-    const [jobs, companies, materials] = await Promise.all([
+    const [jobs, workOrderJobs, companies, materials] = await Promise.all([
       readServiceM8Array<ServiceM8QuoteJob>(
         request,
         `/job.json${odataFilter(ACTIVE_QUOTE_FILTER)}`,
         "job",
+      ),
+      readServiceM8Array<ServiceM8QuoteJob>(
+        request,
+        `/job.json${odataFilter(ACTIVE_WORK_ORDER_FILTER)}`,
+        "Work Order job",
       ),
       readServiceM8Array<ServiceM8Company>(request, "/company.json", "company"),
       readServiceM8Array<ServiceM8JobMaterial>(
@@ -208,7 +223,42 @@ export async function syncQuoteMovementFromServiceM8({
       readTrackedEngagement,
     );
 
-    await repository.replaceActiveSnapshot(records, { actorId, refreshedAt });
+    const convertedJobUuids = Array.from(
+      new Set(
+        workOrderJobs.flatMap((job) => {
+          const uuid = clean(job.uuid);
+          return uuid ? [uuid] : [];
+        }),
+      ),
+    );
+
+    await repository.replaceActiveSnapshot(records, {
+      actorId,
+      refreshedAt,
+      convertedJobUuids,
+    });
+    if (summaryRepository && summarize) {
+      const candidates = await summaryRepository.listPendingSummaries(
+        records.map((record) => record.servicem8JobUuid),
+      );
+      for (const candidate of candidates) {
+        try {
+          const summary = await summarize(candidate);
+          await summaryRepository.saveValidSummary({
+            recordId: candidate.recordId,
+            sourceFingerprint: candidate.sourceFingerprint,
+            generatedAt: refreshedAt,
+            summary,
+          });
+        } catch {
+          await summaryRepository.recordSummaryFailure(
+            candidate.recordId,
+            "What Matters Now could not update. The previous valid summary was kept.",
+            refreshedAt,
+          );
+        }
+      }
+    }
     return { synced: records.length, refreshedAt };
   } catch (error) {
     const safeMessage = safeQuoteMovementRefreshError(error);

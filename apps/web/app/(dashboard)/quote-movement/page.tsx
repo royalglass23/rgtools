@@ -1,24 +1,30 @@
-import Link from "next/link";
 import {
   DataPanel,
-  FeedbackState,
   PageHeader,
   SectionHeading,
-  StatusBadge,
-  TableShell,
 } from "@/components/precision-ui/PrecisionUI";
 import { requireModule } from "@/lib/guard";
-import { refreshQuoteMovementAction } from "@/modules/quote-movement/actions";
 import {
-  formatQuoteMovementCurrency,
-  formatQuoteMovementDate,
-} from "@/modules/quote-movement/presentation";
+  refreshQuoteMovementAction,
+  updateQuoteMovementComplexityAction,
+} from "@/modules/quote-movement/actions";
+import { formatQuoteMovementDate } from "@/modules/quote-movement/presentation";
 import {
   getQuoteMovementRefreshStatus,
-  listActiveQuoteMovementRecords,
+  listQuoteMovementRecords,
 } from "@/modules/quote-movement/queries";
+import { QuoteMovementList } from "@/modules/quote-movement/QuoteMovementList";
 import { QuoteMovementRefreshButton } from "@/modules/quote-movement/QuoteMovementRefreshButton";
 import { DismissibleNotice } from "@/modules/ui/DismissibleNotice";
+import type { QuoteMovementProjectComplexity } from "@rgtools/db/schema-quote-movement";
+
+const PROJECT_COMPLEXITIES: QuoteMovementProjectComplexity[] = [
+  "unassessed",
+  "easy",
+  "normal",
+  "tight",
+  "very_difficult",
+];
 
 export default async function QuoteMovementPage({
   searchParams,
@@ -31,8 +37,30 @@ export default async function QuoteMovementPage({
     typeof resolvedSearchParams.refreshError === "string"
       ? resolvedSearchParams.refreshError
       : null;
+  const search = stringParam(resolvedSearchParams.search);
+  const requestedComplexity = stringParam(
+    resolvedSearchParams.projectComplexity,
+  );
+  const projectComplexity = PROJECT_COMPLEXITIES.includes(
+    requestedComplexity as QuoteMovementProjectComplexity,
+  )
+    ? (requestedComplexity as QuoteMovementProjectComplexity)
+    : "all";
+  const lifecycle = stringParam(resolvedSearchParams.lifecycle) === "converted"
+    ? "converted"
+    : "active";
+  const requestedSort = stringParam(resolvedSearchParams.sort);
+  const sort = requestedSort === "quote_value" || requestedSort === "customer"
+    ? requestedSort
+    : "latest_activity";
   const [records, refreshStatus] = await Promise.all([
-    listActiveQuoteMovementRecords(),
+    listQuoteMovementRecords({
+      search,
+      projectComplexity:
+        projectComplexity === "all" ? undefined : projectComplexity,
+      lifecycle,
+      sort,
+    }),
     getQuoteMovementRefreshStatus(),
   ]);
 
@@ -41,7 +69,11 @@ export default async function QuoteMovementPage({
       <PageHeader
         eyebrow="Quotes"
         title="Quote Movement"
-        description={`${records.length} active ServiceM8 Quote jobs shown from the RG Tools cache`}
+        description={
+          lifecycle === "active"
+            ? `${records.length} active ServiceM8 Quote jobs shown from the RG Tools cache`
+            : `${records.length} inactive cached Quote jobs shown as the transitional Converted view`
+        }
         actions={
           <form action={refreshQuoteMovementAction}>
             <QuoteMovementRefreshButton />
@@ -88,68 +120,30 @@ export default async function QuoteMovementPage({
 
       <section className="space-y-3" aria-label="Active quotes">
         <div className="flex flex-wrap items-end justify-between gap-3">
-          <SectionHeading title="Active quotes" eyebrow="Quote movement" />
-          <StatusBadge tone="info">
+          <SectionHeading
+            title={lifecycle === "active" ? "Active quotes" : "Converted quotes"}
+            eyebrow="Quote movement"
+          />
+          <span className="text-sm text-text-muted">
             {records.length} {records.length === 1 ? "job" : "jobs"}
-          </StatusBadge>
+          </span>
         </div>
 
-        {records.length === 0 ? (
-          <FeedbackState tone="empty">
-            No active ServiceM8 Quote jobs.
-          </FeedbackState>
-        ) : (
-          <TableShell label="Active ServiceM8 Quote jobs">
-            <table className="min-w-full divide-y divide-border text-sm">
-              <thead className="bg-surface-subtle text-left text-xs font-semibold text-text-muted">
-                <tr>
-                  <th className="px-4 py-3">Job number</th>
-                  <th className="px-4 py-3">Customer</th>
-                  <th className="px-4 py-3">Address</th>
-                  <th className="px-4 py-3 text-right">
-                    Quote value excl. GST
-                  </th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Last synced</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {records.map((record) => (
-                  <tr key={record.id} className="text-text-secondary">
-                    <td className="whitespace-nowrap px-4 py-3 font-medium">
-                      <Link
-                        className="text-brand underline-offset-2 hover:underline"
-                        href={`/quote-movement/${record.id}`}
-                      >
-                        {record.jobNumber ?? "Open quote"}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-text-primary">
-                      {record.customerName}
-                    </td>
-                    <td className="px-4 py-3">{record.jobAddress ?? "-"}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">
-                      {formatQuoteMovementCurrency(
-                        record.quoteValueExcludingGst,
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusBadge
-                        tone={record.servicem8Active ? "positive" : "muted"}
-                      >
-                        {record.servicem8Active ? "Active" : "Inactive"}
-                      </StatusBadge>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-text-muted">
-                      {formatQuoteMovementDate(record.lastServiceM8SyncedAt)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </TableShell>
-        )}
+        <QuoteMovementList
+          records={records}
+          selectedControls={{
+            search,
+            projectComplexity,
+            lifecycle,
+            sort,
+          }}
+          updateComplexityAction={updateQuoteMovementComplexityAction}
+        />
       </section>
     </div>
   );
+}
+
+function stringParam(value: string | string[] | undefined) {
+  return typeof value === "string" ? value : "";
 }

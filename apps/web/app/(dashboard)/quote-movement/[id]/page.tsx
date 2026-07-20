@@ -13,6 +13,7 @@ import {
   quoteMovementDisplayName,
 } from "@/modules/quote-movement/presentation";
 import { getQuoteMovementRecord } from "@/modules/quote-movement/queries";
+import type { QuoteMovementSummaryStatement } from "@rgtools/db/schema-quote-movement";
 
 export default async function QuoteMovementDetailPage({
   params,
@@ -34,8 +35,26 @@ export default async function QuoteMovementDetailPage({
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge tone={record.servicem8Active ? "positive" : "muted"}>
-              {record.servicem8Active ? "Active" : "Inactive"}
+              {record.convertedAt
+                ? "Converted"
+                : record.servicem8Active
+                  ? "Active"
+                  : "Inactive"}
             </StatusBadge>
+            {record.convertedAt ? (
+              record.workOrderId ? (
+                <Link
+                  href={`/work-orders/${record.workOrderId}`}
+                  className={precisionSecondaryLinkClassName}
+                >
+                  Open Work Order
+                </Link>
+              ) : (
+                <span className="text-sm text-text-muted">
+                  Work Order record not yet available
+                </span>
+              )
+            ) : null}
             <Link
               href="/quote-movement"
               className={precisionSecondaryLinkClassName}
@@ -59,13 +78,151 @@ export default async function QuoteMovementDetailPage({
         </dl>
       </DataPanel>
 
-      <DataPanel title="What Matters Now" eyebrow="Next slices">
-        <p className="max-w-[70ch] text-sm text-text-secondary">
-          Conversion history, quote summaries, complexity, and follow-up timing
-          land here in the next Quote Movement slices.
-        </p>
+      <DataPanel title="What Matters Now" eyebrow="Complete source history">
+        {record.importantDetailsSummary ? (
+          <div className="space-y-5">
+            <SourceCoverage
+              status={record.sourceCoverage}
+              unreadCount={record.sourceUnreadCount}
+              details={record.sourceCoverageDetails}
+            />
+            {record.summaryLastError ? (
+              <p className="rounded-md border border-warning-border bg-warning-surface px-3 py-2 text-sm text-text-secondary">
+                {record.summaryLastError}
+              </p>
+            ) : null}
+            <SummarySection
+              title="Current Position"
+              statements={[record.importantDetailsSummary.currentPosition]}
+              recordId={record.id}
+            />
+            <SummarySection
+              title="Unresolved Matters"
+              statements={record.importantDetailsSummary.unresolvedMatters}
+              recordId={record.id}
+            />
+            <SummarySection
+              title="Material Facts"
+              statements={record.importantDetailsSummary.materialFacts}
+              recordId={record.id}
+            />
+            <SummarySection
+              title="Important Dates"
+              statements={record.importantDetailsSummary.importantDates}
+              recordId={record.id}
+            />
+            <SummarySection
+              title="Participants"
+              statements={record.importantDetailsSummary.participants}
+              recordId={record.id}
+            />
+            <SummarySection
+              title="Latest Meaningful Movement"
+              statements={
+                record.importantDetailsSummary.latestMeaningfulMovement
+                  ? [record.importantDetailsSummary.latestMeaningfulMovement]
+                  : []
+              }
+              recordId={record.id}
+            />
+            <SummarySection
+              title="Consent State"
+              statements={
+                record.importantDetailsSummary.consentState
+                  ? [record.importantDetailsSummary.consentState]
+                  : []
+              }
+              recordId={record.id}
+            />
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <SourceCoverage
+              status={record.sourceCoverage}
+              unreadCount={record.sourceUnreadCount}
+              details={record.sourceCoverageDetails}
+            />
+            <p className="max-w-[70ch] text-sm text-text-secondary">
+              Not yet summarised. What Matters Now updates automatically after
+              meaningful source activity.
+            </p>
+          </div>
+        )}
       </DataPanel>
     </div>
+  );
+}
+
+function SummarySection({
+  title,
+  statements,
+  recordId,
+}: {
+  title: string;
+  statements: QuoteMovementSummaryStatement[];
+  recordId: string;
+}) {
+  if (statements.length === 0) return null;
+  return (
+    <section aria-label={title} className="space-y-2">
+      <h3 className="text-sm font-semibold text-text-primary">{title}</h3>
+      <ul className="space-y-3">
+        {statements.map((statement, index) => (
+          <li key={`${title}-${index}`} className="text-sm text-text-secondary">
+            <p>{statement.text}</p>
+            {statement.evidenceSourceIdentities.length > 0 ? (
+              <div className="mt-1 flex flex-wrap gap-2 text-xs">
+                {statement.evidenceSourceIdentities.map((identity) => (
+                  <Link
+                    key={identity}
+                    href={`/quote-movement/${recordId}/evidence/${encodeURIComponent(identity)}`}
+                    className="text-brand underline-offset-2 hover:underline"
+                  >
+                    View supporting evidence
+                  </Link>
+                ))}
+              </div>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function SourceCoverage({
+  status,
+  unreadCount,
+  details,
+}: {
+  status?: string;
+  unreadCount?: number;
+  details?: string[];
+}) {
+  const complete = status === "complete";
+  const safeUnreadCount = unreadCount ?? 0;
+  const safeDetails = details ?? [];
+  return (
+    <aside
+      aria-label="Source Coverage"
+      className="rounded-md border border-border bg-surface-subtle px-3 py-2 text-sm"
+    >
+      <p className="font-semibold text-text-primary">
+        {complete ? "Complete Source Coverage" : "Incomplete Source Coverage"}
+      </p>
+      {!complete ? (
+        <p className="text-text-secondary">
+          {safeUnreadCount} unread {safeUnreadCount === 1 ? "source" : "sources"}
+        </p>
+      ) : null}
+      {safeDetails.length > 0 ? (
+        <ul className="mt-1 list-disc pl-5 text-xs text-text-muted">
+          {safeDetails.map((detail) => (
+            <li key={detail}>{detail}</li>
+          ))}
+        </ul>
+      ) : null}
+    </aside>
   );
 }
 

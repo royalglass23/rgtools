@@ -34,6 +34,243 @@ function createMemoryRepository() {
 }
 
 describe("syncQuoteMovementFromServiceM8", () => {
+  it("automatically stores What Matters Now when a quote first appears", async () => {
+    let retainedRecords: QuoteMovementSnapshotInput[] = [];
+    const repository: QuoteMovementSnapshotRepository = {
+      async replaceActiveSnapshot(records) {
+        retainedRecords = records;
+      },
+      async recordFailure() {},
+    };
+    const savedSummaries: unknown[] = [];
+    const summaryRepository = {
+      async listPendingSummaries() {
+        const record = retainedRecords[0]!;
+        return [
+          {
+            recordId: "record-1",
+            sourceFingerprint: "first-source-set",
+            record,
+          },
+        ];
+      },
+      async saveValidSummary(summary: unknown) {
+        savedSummaries.push(summary);
+      },
+      async recordSummaryFailure() {},
+    };
+    const request = vi.fn(async (path: string) => {
+      const url = new URL(path, "https://servicem8.example");
+      const filter = url.searchParams.get("$filter") ?? "";
+      if (
+        url.pathname === "/job.json" &&
+        filter.includes("status eq 'Quote'")
+      ) {
+        return Response.json([
+          {
+            uuid: "job-1",
+            active: 1,
+            status: "Quote",
+            company_uuid: "company-1",
+            generated_job_id: "Q260223",
+            edit_date: "2026-07-20T01:00:00Z",
+          },
+        ]);
+      }
+      if (url.pathname === "/job.json") return Response.json([]);
+      if (url.pathname === "/company.json") {
+        return Response.json([{ uuid: "company-1", name: "Aroha Glass" }]);
+      }
+      if (url.pathname === "/note.json") {
+        return Response.json([
+          {
+            uuid: "note-1",
+            note: "Use low-iron glass; final opening size is still unconfirmed.",
+            create_date: "2026-07-20T00:30:00Z",
+          },
+        ]);
+      }
+      if (
+        url.pathname === "/jobmaterial.json" ||
+        url.pathname === "/email.json" ||
+        url.pathname === "/attachment.json"
+      ) {
+        return Response.json([]);
+      }
+      return Response.json([], { status: 404 });
+    });
+    const generatedAt = new Date("2026-07-20T02:00:00Z");
+
+    await syncQuoteMovementFromServiceM8({
+      request,
+      repository,
+      summaryRepository,
+      summarize: async () => ({
+        currentPosition: {
+          text: "Low-iron glass is required; the opening size remains unresolved.",
+          evidenceSourceIdentities: ["note-1"],
+        },
+        materialFacts: [],
+        importantDates: [],
+        participants: [],
+        unresolvedMatters: [
+          {
+            text: "Confirm the final opening size.",
+            evidenceSourceIdentities: ["note-1"],
+          },
+        ],
+        latestMeaningfulMovement: {
+          text: "Low-iron glass requirement recorded.",
+          evidenceSourceIdentities: ["note-1"],
+        },
+        consentState: null,
+      }),
+      now: () => generatedAt,
+    });
+
+    expect(savedSummaries).toEqual([
+      {
+        recordId: "record-1",
+        sourceFingerprint: "first-source-set",
+        generatedAt,
+        summary: expect.objectContaining({
+          currentPosition: expect.objectContaining({
+            text: "Low-iron glass is required; the opening size remains unresolved.",
+          }),
+        }),
+      },
+    ]);
+  });
+
+  it("keeps the last valid summary when background summarisation fails", async () => {
+    let retainedRecord: QuoteMovementSnapshotInput | undefined;
+    const repository: QuoteMovementSnapshotRepository = {
+      async replaceActiveSnapshot(records) {
+        retainedRecord = records[0];
+      },
+      async recordFailure() {},
+    };
+    const savedSummaries: unknown[] = [];
+    const summaryFailures: unknown[] = [];
+    const request = vi.fn(async (path: string) => {
+      const url = new URL(path, "https://servicem8.example");
+      const filter = url.searchParams.get("$filter") ?? "";
+      if (
+        url.pathname === "/job.json" &&
+        filter.includes("status eq 'Quote'")
+      ) {
+        return Response.json([
+          {
+            uuid: "job-1",
+            active: 1,
+            status: "Quote",
+            generated_job_id: "Q260223",
+          },
+        ]);
+      }
+      return Response.json([]);
+    });
+    const refreshedAt = new Date("2026-07-20T03:00:00Z");
+
+    const result = await syncQuoteMovementFromServiceM8({
+      request,
+      repository,
+      summaryRepository: {
+        async listPendingSummaries() {
+          return [
+            {
+              recordId: "record-1",
+              sourceFingerprint: "changed-source-set",
+              record: retainedRecord!,
+            },
+          ];
+        },
+        async saveValidSummary(summary) {
+          savedSummaries.push(summary);
+        },
+        async recordSummaryFailure(recordId, message, attemptedAt) {
+          summaryFailures.push({ recordId, message, attemptedAt });
+        },
+      },
+      summarize: async () => {
+        throw new Error("provider secret response body");
+      },
+      now: () => refreshedAt,
+    });
+
+    expect({ result, savedSummaries, summaryFailures }).toEqual({
+      result: { synced: 1, refreshedAt },
+      savedSummaries: [],
+      summaryFailures: [
+        {
+          recordId: "record-1",
+          message:
+            "What Matters Now could not update. The previous valid summary was kept.",
+          attemptedAt: refreshedAt,
+        },
+      ],
+    });
+  });
+
+  it("reports active Work Order identities while caching only active Quotes", async () => {
+    const replaceActiveSnapshot = vi.fn(async () => undefined);
+    const repository: QuoteMovementSnapshotRepository = {
+      replaceActiveSnapshot,
+      recordFailure: vi.fn(async () => undefined),
+    };
+    const request = vi.fn(async (path: string) => {
+      const url = new URL(path, "https://servicem8.example");
+      const filter = url.searchParams.get("$filter") ?? "";
+      if (
+        url.pathname === "/job.json" &&
+        filter.includes("status eq 'Quote'")
+      ) {
+        return Response.json([
+          {
+            uuid: "job-quote",
+            active: 1,
+            status: "Quote",
+            generated_job_id: "Q260222",
+          },
+        ]);
+      }
+      if (
+        url.pathname === "/job.json" &&
+        filter.includes("status eq 'Work Order'")
+      ) {
+        return Response.json([
+          { uuid: "job-converted", active: 1, status: "Work Order" },
+        ]);
+      }
+      if (
+        url.pathname === "/company.json" ||
+        url.pathname === "/jobmaterial.json" ||
+        url.pathname === "/note.json" ||
+        url.pathname === "/email.json" ||
+        url.pathname === "/attachment.json"
+      ) {
+        return Response.json([]);
+      }
+      return Response.json([], { status: 404 });
+    });
+    const refreshedAt = new Date("2026-07-20T05:00:00Z");
+
+    await syncQuoteMovementFromServiceM8({
+      request,
+      repository,
+      now: () => refreshedAt,
+    });
+
+    expect(replaceActiveSnapshot).toHaveBeenCalledWith(
+      [expect.objectContaining({ servicem8JobUuid: "job-quote" })],
+      {
+        actorId: null,
+        refreshedAt,
+        convertedJobUuids: ["job-converted"],
+      },
+    );
+  });
+
   it("bounds per-job source collection concurrency", async () => {
     const memory = createMemoryRepository();
     let sourceRequestsInFlight = 0;
