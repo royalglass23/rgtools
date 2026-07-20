@@ -2,15 +2,18 @@ import { render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const requireModule = vi.hoisted(() => vi.fn())
-const listActiveQuoteMovementRecords = vi.hoisted(() => vi.fn())
+const listQuoteMovementRecords = vi.hoisted(() => vi.fn())
 const getQuoteMovementRefreshStatus = vi.hoisted(() => vi.fn())
 
 vi.mock('@/lib/guard', () => ({ requireModule }))
 vi.mock('../queries', () => ({
-  listActiveQuoteMovementRecords,
+  listQuoteMovementRecords,
   getQuoteMovementRefreshStatus,
 }))
-vi.mock('../actions', () => ({ refreshQuoteMovementAction: vi.fn() }))
+vi.mock('../actions', () => ({
+  refreshQuoteMovementAction: vi.fn(),
+  updateQuoteMovementComplexityAction: vi.fn(),
+}))
 
 import QuoteMovementLayout from '@/app/(dashboard)/quote-movement/layout'
 import QuoteMovementPage from '@/app/(dashboard)/quote-movement/page'
@@ -19,7 +22,7 @@ describe('Quote Movement routes', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     requireModule.mockResolvedValue(undefined)
-    listActiveQuoteMovementRecords.mockResolvedValue([])
+    listQuoteMovementRecords.mockResolvedValue([])
     getQuoteMovementRefreshStatus.mockResolvedValue({
       lastSuccessfulAt: null,
       lastSuccessfulCount: 0,
@@ -43,8 +46,20 @@ describe('Quote Movement routes', () => {
     })
   })
 
+  it('stops before list persistence reads when page access is denied', async () => {
+    requireModule.mockRejectedValue(Object.assign(new Error('NEXT_REDIRECT'), {
+      url: '/?denied=quote-tracker',
+    }))
+
+    await expect(
+      QuoteMovementPage({ searchParams: Promise.resolve({}) }),
+    ).rejects.toMatchObject({ url: '/?denied=quote-tracker' })
+    expect(listQuoteMovementRecords).not.toHaveBeenCalled()
+    expect(getQuoteMovementRefreshStatus).not.toHaveBeenCalled()
+  })
+
   it('renders cached active Quote jobs with refresh metadata and detail links', async () => {
-    listActiveQuoteMovementRecords.mockResolvedValue([{
+    listQuoteMovementRecords.mockResolvedValue([{
       id: 'record-1',
       servicem8JobUuid: 'job-1',
       servicem8CompanyUuid: 'company-1',
@@ -54,7 +69,9 @@ describe('Quote Movement routes', () => {
       customerName: 'Alpha Homes',
       jobAddress: '1 Glass Lane',
       quoteValueExcludingGst: '1250.00',
+      projectComplexity: 'unassessed',
       sourceUpdatedAt: new Date('2026-07-17T01:00:00Z'),
+      latestActivityAt: new Date('2026-07-17T02:00:00Z'),
       lastServiceM8SyncedAt: new Date('2026-07-17T03:00:00Z'),
       createdAt: new Date('2026-07-17T03:00:00Z'),
       updatedAt: new Date('2026-07-17T03:00:00Z'),
@@ -81,5 +98,27 @@ describe('Quote Movement routes', () => {
     render(await QuoteMovementPage({ searchParams: Promise.resolve({}) }))
 
     expect(screen.getByText('No active ServiceM8 Quote jobs.')).toBeInTheDocument()
+  })
+
+  it('uses validated URL controls to load and present the selected list', async () => {
+    render(await QuoteMovementPage({
+      searchParams: Promise.resolve({
+        search: 'Alpha',
+        projectComplexity: 'tight',
+        lifecycle: 'converted',
+        sort: 'quote_value',
+      }),
+    }))
+
+    expect(listQuoteMovementRecords).toHaveBeenCalledWith({
+      search: 'Alpha',
+      projectComplexity: 'tight',
+      lifecycle: 'converted',
+      sort: 'quote_value',
+    })
+    expect(screen.getByRole('searchbox', { name: 'Search' })).toHaveValue('Alpha')
+    expect(screen.getByRole('combobox', { name: 'Complexity' })).toHaveValue('tight')
+    expect(screen.getByRole('combobox', { name: 'Active/Converted' })).toHaveValue('converted')
+    expect(screen.getByRole('combobox', { name: 'Sort' })).toHaveValue('quote_value')
   })
 })

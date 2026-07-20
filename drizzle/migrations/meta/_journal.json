@@ -430,6 +430,41 @@
       "breakpoints": true
     },
     {
+      "idx": 61,
+      "version": "7",
+      "when": 1784498672934,
+      "tag": "0061_quote_movement_source_history",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1784501388245,
+      "tag": "0062_quote_movement_source_enrichment",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1784508785193,
+      "tag": "0063_quote_movement_project_complexity",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1784511138274,
+      "tag": "0064_quote_movement_conversion",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1784514000000,
+      "tag": "0065_quote_movement_summaries",
+      "breakpoints": true
+    },
+    {
       "idx": 66,
       "version": "7",
       "when": 1784517000000,
