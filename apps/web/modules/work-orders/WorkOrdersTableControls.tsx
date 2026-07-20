@@ -296,9 +296,9 @@ function WorkOrdersTable({
   }
 
   return (
-    <div className="overflow-hidden rounded border border-gray-200 bg-white shadow-sm">
+    <div className="overflow-hidden rounded border border-border bg-surface shadow-sm">
       {isAdmin && rows.length > 0 && (
-        <div className="border-b border-gray-200 bg-gray-50 px-4 py-3">
+        <div className="border-b border-border bg-surface-subtle px-4 py-3">
           <label className="inline-flex items-center gap-2 text-sm text-gray-700">
             <input
               type="checkbox"
@@ -312,12 +312,12 @@ function WorkOrdersTable({
         </div>
       )}
 
-      <div className="divide-y divide-gray-200">
+      <div className="divide-y divide-border">
         {rows.map((row, rowIndex) => {
           const isExpanded = !collapsedWorkOrderIds.includes(row.id)
           const workOrderLabel = row.jobNumber ?? row.id
           const jobTone = rowIndex % 2 === 0 ? 'white' : 'tint'
-          const jobHeaderTone = jobTone === 'tint' ? 'bg-[#E8EEF1]' : 'bg-white'
+          const jobHeaderTone = jobTone === 'tint' ? 'bg-surface-subtle' : 'bg-surface'
 
           return (
             <section key={row.id} role="group" aria-label={`Work Order ${workOrderLabel}`}>

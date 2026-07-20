@@ -94,9 +94,14 @@ test.describe("Royal Glass Precision themes", () => {
     ).toBeVisible();
     await chooseTheme(page, "Dark");
 
-    const leadsLink = page.getByRole("link", { name: "Leads", exact: true });
-    await expect(leadsLink).toBeVisible();
-    await leadsLink.click();
+    const leadIntakeMenu = page.getByRole("button", {
+      name: "Lead Intake",
+      exact: true,
+    });
+    await leadIntakeMenu.click();
+    const leadsListLink = page.getByRole("link", { name: "List", exact: true });
+    await expect(leadsListLink).toBeVisible();
+    await leadsListLink.click();
     await expect(page).toHaveURL(/\/leads(?:\?|$)/);
     await expect
       .poll(() =>

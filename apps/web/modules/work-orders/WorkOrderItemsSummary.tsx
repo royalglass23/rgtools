@@ -106,8 +106,8 @@ export function WorkOrderItemsSummary({
     return operationalField ? [{ config: field, field: operationalField }] : []
   })
   const activeTone = tone === 'tint'
-    ? 'border-[#142B3A]/25 bg-[#E8EEF1]'
-    : 'border-[#142B3A]/20 bg-white'
+    ? 'border-border bg-surface-subtle'
+    : 'border-border bg-surface'
 
   return (
     <section aria-label="Work Order items" className="space-y-2 px-4 py-3">

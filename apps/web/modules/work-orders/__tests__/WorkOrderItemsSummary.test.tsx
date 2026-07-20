@@ -757,8 +757,8 @@ describe('WorkOrderItemsSummary', () => {
     ]} />)
 
     const rows = screen.getAllByRole('row')
-    expect(rows[0]).toHaveClass('bg-[#E8EEF1]')
-    expect(rows[1]).toHaveClass('bg-[#E8EEF1]')
+    expect(rows[0]).toHaveClass('bg-surface-subtle', 'border-border')
+    expect(rows[1]).toHaveClass('bg-surface-subtle', 'border-border')
   })
 
   it('keeps an empty Work Order visible without inventing a child item', () => {

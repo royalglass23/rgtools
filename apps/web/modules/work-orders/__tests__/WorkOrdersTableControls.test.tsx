@@ -137,12 +137,16 @@ describe('WorkOrdersTableControls', () => {
 
     renderDashboard([firstJob, secondJob])
 
-    const firstRows = within(screen.getByRole('group', { name: 'Work Order R100' })).getAllByRole('row')
-    const secondRows = within(screen.getByRole('group', { name: 'Work Order R200' })).getAllByRole('row')
+    const firstGroup = screen.getByRole('group', { name: 'Work Order R100' })
+    const secondGroup = screen.getByRole('group', { name: 'Work Order R200' })
+    const firstRows = within(firstGroup).getAllByRole('row')
+    const secondRows = within(secondGroup).getAllByRole('row')
+    expect(firstGroup.firstElementChild).toHaveClass('bg-surface')
+    expect(secondGroup.firstElementChild).toHaveClass('bg-surface-subtle')
     expect(firstRows).toHaveLength(2)
-    expect(firstRows[0]).toHaveClass('bg-white')
-    expect(firstRows[1]).toHaveClass('bg-white')
-    expect(secondRows[0]).toHaveClass('bg-[#E8EEF1]')
+    expect(firstRows[0]).toHaveClass('bg-surface', 'border-border')
+    expect(firstRows[1]).toHaveClass('bg-surface', 'border-border')
+    expect(secondRows[0]).toHaveClass('bg-surface-subtle', 'border-border')
   })
 
   it('keeps ServiceM8 item values read-only and exposes immutable hover detail', () => {
