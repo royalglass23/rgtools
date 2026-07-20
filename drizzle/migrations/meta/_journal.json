@@ -428,6 +428,20 @@
       "when": 1784260800000,
       "tag": "0060_quote_movement_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1784498672934,
+      "tag": "0061_quote_movement_source_history",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1784501388245,
+      "tag": "0062_quote_movement_source_enrichment",
+      "breakpoints": true
     }
   ]
 }

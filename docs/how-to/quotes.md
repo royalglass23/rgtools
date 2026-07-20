@@ -29,18 +29,20 @@ Quote Movement is the active ServiceM8 Quote list inside rgtools. It is read-onl
 
 Open **Quotes -> Quote Movement** to see active Quote jobs with:
 
-| Field | What it means |
-|---|---|
-| Job number | The ServiceM8 generated job ID, linked to the Quote Movement detail shell |
-| Customer | The ServiceM8 company name, with a safe fallback when the company is missing |
-| Address | The job address from ServiceM8 |
-| Quote value excl. GST | Sum of active ServiceM8 job material lines before GST |
-| Status | Whether the cached ServiceM8 job is still active |
-| Last synced | When rgtools last refreshed that row from ServiceM8 |
+| Field                 | What it means                                                                |
+| --------------------- | ---------------------------------------------------------------------------- |
+| Job number            | The ServiceM8 generated job ID, linked to the Quote Movement detail shell    |
+| Customer              | The ServiceM8 company name, with a safe fallback when the company is missing |
+| Address               | The job address from ServiceM8                                               |
+| Quote value excl. GST | Sum of active ServiceM8 job material lines before GST                        |
+| Status                | Whether the cached ServiceM8 job is still active                             |
+| Last synced           | When rgtools last refreshed that row from ServiceM8                          |
 
-Use **Refresh now** when you want the cache updated from ServiceM8. The page shows **Last refreshed** and keeps the previous cached list available if ServiceM8 cannot be reached. If there are no active Quote jobs in the cache, the page says **No active ServiceM8 Quote jobs.**
+Use **Refresh now** when you want the cache updated from ServiceM8. The page shows **Last refreshed** and keeps the previous cached list and retained source history available if ServiceM8 cannot be reached. A source missing from a later refresh remains in history. If there are no active Quote jobs in the cache, the page says **No active ServiceM8 Quote jobs.**
 
-The detail page at **Quotes -> Quote Movement -> [job]** is a foundation shell for the next Quote Movement slices. Follow-up history, summaries, complexity, and conversion timing are not part of this release.
+MT-220 stores meaningful latest activity and complete/incomplete source-coverage evidence for later Quote Movement screens. The current list does not present those fields yet, so do not infer complete coverage from the list alone.
+
+The detail page at **Quotes -> Quote Movement -> [job]** remains the presentation shell for later slices. MT-220 retains the underlying source history and coverage evidence; later slices add the staff-facing history and summaries.
 
 ## Quote Tracker step-by-step workflow
 
@@ -52,7 +54,7 @@ Before creating a tracked link, the quote PDF must exist in ServiceM8.
 2. Go to **Quote** and click **Generate / Produce Document** to produce the PDF.
 3. Make sure the quote line items are complete — the tracked quote value is calculated as the sum of job material line items × 1.15 GST.
 
-> If you skip this step the tracker will return an error: *"Generate the quote in ServiceM8 first."*
+> If you skip this step the tracker will return an error: _"Generate the quote in ServiceM8 first."_
 
 ### 2. Create a tracked quote
 
@@ -61,7 +63,7 @@ From the **Quotes -> Track Quotes** page:
 1. Go to **Quotes -> Track Quotes** in the dashboard sidebar.
 2. Click **Track Quote** (top-right of the page).
 3. In the dialog, type the ServiceM8 **Job ID** (e.g. `R260210`) and click **Create** (or press Enter).
-4. The dialog shows *Fetching quote from ServiceM8…* while it pulls the PDF, uploads it to R2, and mints a short link. This takes a few seconds.
+4. The dialog shows _Fetching quote from ServiceM8…_ while it pulls the PDF, uploads it to R2, and mints a short link. This takes a few seconds.
 5. On success it shows **Quote found** with the client name, job address, the quote link, and the expiry. Click **Copy** to grab the link, then **Done** — the list refreshes with the new quote.
 
 If something is wrong, the dialog shows an inline message and keeps the Job ID field editable so you can fix it and retry:
@@ -110,13 +112,13 @@ Open the quote in the dashboard (**Quote Tracker → [quote name]**).
 
 **Engagement section** shows:
 
-| Field | What it means |
-|---|---|
-| Total opens | How many times the PDF was loaded |
-| Unique viewers | Distinct browser sessions |
-| Total time | Cumulative active reading time across all sessions |
-| Max scroll | How far down the page the client scrolled (%) |
-| Forwarding | Flagged when more than one IP address opened the link |
+| Field          | What it means                                              |
+| -------------- | ---------------------------------------------------------- |
+| Total opens    | How many times the PDF was loaded                          |
+| Unique viewers | Distinct browser sessions                                  |
+| Total time     | Cumulative active reading time across all sessions         |
+| Max scroll     | How far down the page the client scrolled (%)              |
+| Forwarding     | Flagged when more than one IP address opened the link      |
 | Interest score | 0–100 computed from opens, scroll, devices, and CTA clicks |
 
 **Viewers section** shows per-session or per-recipient details (depending on whether the email gate is on).
@@ -127,12 +129,12 @@ Open the quote in the dashboard (**Quote Tracker → [quote name]**).
 
 Each quote is automatically tagged based on engagement. Manual overrides are available on the quote detail page.
 
-| Status | Computed when… |
-|---|---|
-| **Hot** | 3+ opens, return visit on a different day, CTA click, or >5 min reading time |
-| **Warm** | 1–2 opens with >50% scroll depth |
-| **Cold** | Opened but engagement is still low |
-| **Dead** | Never opened after 3+ days since creation |
+| Status   | Computed when…                                                               |
+| -------- | ---------------------------------------------------------------------------- |
+| **Hot**  | 3+ opens, return visit on a different day, CTA click, or >5 min reading time |
+| **Warm** | 1–2 opens with >50% scroll depth                                             |
+| **Cold** | Opened but engagement is still low                                           |
+| **Dead** | Never opened after 3+ days since creation                                    |
 
 The KPI cards at the top of the Quote Tracker list summarise counts across all quotes.
 
@@ -189,21 +191,21 @@ IP addresses in events are purged after 90 days by the same cron job.
 
 Admins can toggle individual tracking signals at **Quote Tracker -> Configuration**.
 
-| Setting key | What it controls |
-|---|---|
-| `track.ip` | Whether raw IP is stored (hashed copy always kept) |
-| `track.geo` | Cloudflare country, city, region, and ISP |
-| `track.page_completion` | Per-page view events |
-| `track.return_visits` | Whether return visits count toward status |
-| `track.distinct_viewers` | Forwarding detection (requires `track.ip`) |
-| `track.download_print` | Download and print button events |
-| `track.active_time` | Focused active reading time |
-| `track.time_to_open` | Time from link creation to first open |
-| `track.cta_clicks` | Accept / Contact Us button clicks |
-| `viewer.download` | Show Download button in viewer |
-| `viewer.print` | Show Print button in viewer |
-| `viewer.accept` | Show Accept button (off by default, coming soon) |
-| `viewer.contact_us` | Show Contact Us button (off by default, coming soon) |
+| Setting key              | What it controls                                     |
+| ------------------------ | ---------------------------------------------------- |
+| `track.ip`               | Whether raw IP is stored (hashed copy always kept)   |
+| `track.geo`              | Cloudflare country, city, region, and ISP            |
+| `track.page_completion`  | Per-page view events                                 |
+| `track.return_visits`    | Whether return visits count toward status            |
+| `track.distinct_viewers` | Forwarding detection (requires `track.ip`)           |
+| `track.download_print`   | Download and print button events                     |
+| `track.active_time`      | Focused active reading time                          |
+| `track.time_to_open`     | Time from link creation to first open                |
+| `track.cta_clicks`       | Accept / Contact Us button clicks                    |
+| `viewer.download`        | Show Download button in viewer                       |
+| `viewer.print`           | Show Print button in viewer                          |
+| `viewer.accept`          | Show Accept button (off by default, coming soon)     |
+| `viewer.contact_us`      | Show Contact Us button (off by default, coming soon) |
 
 Settings are cached for 60 seconds in the tracker worker. Changes take up to a minute to propagate to new events.
 
@@ -211,10 +213,10 @@ Settings are cached for 60 seconds in the tracker worker. Changes take up to a m
 
 The same **Quote Tracker -> Configuration** page controls the email alerts (see [step 7](#7-get-notified-by-email-optional)):
 
-| Setting key | What it controls |
-|---|---|
-| `notifications.enabled` | Master on/off for "Quote opened" and "High interest" emails |
-| `notifications.to` | Who receives them — one or more addresses, comma-separated (defaults to `support@royalglass.co.nz`) |
+| Setting key             | What it controls                                                                                    |
+| ----------------------- | --------------------------------------------------------------------------------------------------- |
+| `notifications.enabled` | Master on/off for "Quote opened" and "High interest" emails                                         |
+| `notifications.to`      | Who receives them — one or more addresses, comma-separated (defaults to `support@royalglass.co.nz`) |
 
 Notifications are sent by the `rg-notifier` worker on a schedule (every ~10 minutes) via Resend, so there is a short delay between an open and the email.
 
@@ -226,15 +228,15 @@ On a quote detail page, staff may see **AI Guidance** when the feature is config
 
 AI Guidance can include:
 
-| Field | What it means |
-|---|---|
-| Next viable move | The recommended follow-up action |
-| Suggested timing | When to follow up and why |
-| Confidence | Low, Medium, or High confidence with a reason |
-| Likely customer state | A plain-English read of the client's current position |
-| Phone talking points | Bullets for a call |
-| Email draft | Draft follow-up copy staff can review and send manually |
-| Use care guidance | Notes about where to be careful |
+| Field                 | What it means                                           |
+| --------------------- | ------------------------------------------------------- |
+| Next viable move      | The recommended follow-up action                        |
+| Suggested timing      | When to follow up and why                               |
+| Confidence            | Low, Medium, or High confidence with a reason           |
+| Likely customer state | A plain-English read of the client's current position   |
+| Phone talking points  | Bullets for a call                                      |
+| Email draft           | Draft follow-up copy staff can review and send manually |
+| Use care guidance     | Notes about where to be careful                         |
 
 AI Guidance is advisory. It does not send email, call clients, change the status badge, or update ServiceM8. Staff should review and edit any copied email content before sending it.
 
@@ -346,18 +348,18 @@ pnpm quote:create --uuid <jobUuid>
 
 ## Where things live
 
-| Thing | Location |
-|---|---|
-| Quote Movement dashboard | `/quote-movement` in rgtools |
-| Quote tracker dashboard | `/quote-tracker` in rgtools |
-| Viewer worker code | `workers/viewer/src/index.ts` |
-| Tracker worker code | `workers/tracker/src/index.ts` |
-| Cleanup cron worker | `workers/cleanup/src/index.ts` |
-| Notifier cron worker (open emails) | `workers/notifier/src/index.ts` |
-| Quote creation logic | `apps/web/modules/quote-tracker/create-tracked-quote.ts` |
-| Engagement scoring | `apps/web/modules/quote-tracker/score.ts` |
-| Email gate logic | `apps/web/modules/quote-tracker/email-gate.ts` |
-| Tracking settings | Quote Tracker -> Configuration in the dashboard |
-| AI Guidance | Quote detail page in rgtools |
-| PDFs at rest | Cloudflare R2 bucket `quotes/<shortcode>.pdf` |
-| Database | Neon (Postgres) — `quotes`, `quote_events`, `quote_engagement`, `quote_recipients`, `quote_viewer_emails`, quote AI snapshot/suggestion/failure tables |
+| Thing                              | Location                                                                                                                                               |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Quote Movement dashboard           | `/quote-movement` in rgtools                                                                                                                           |
+| Quote tracker dashboard            | `/quote-tracker` in rgtools                                                                                                                            |
+| Viewer worker code                 | `workers/viewer/src/index.ts`                                                                                                                          |
+| Tracker worker code                | `workers/tracker/src/index.ts`                                                                                                                         |
+| Cleanup cron worker                | `workers/cleanup/src/index.ts`                                                                                                                         |
+| Notifier cron worker (open emails) | `workers/notifier/src/index.ts`                                                                                                                        |
+| Quote creation logic               | `apps/web/modules/quote-tracker/create-tracked-quote.ts`                                                                                               |
+| Engagement scoring                 | `apps/web/modules/quote-tracker/score.ts`                                                                                                              |
+| Email gate logic                   | `apps/web/modules/quote-tracker/email-gate.ts`                                                                                                         |
+| Tracking settings                  | Quote Tracker -> Configuration in the dashboard                                                                                                        |
+| AI Guidance                        | Quote detail page in rgtools                                                                                                                           |
+| PDFs at rest                       | Cloudflare R2 bucket `quotes/<shortcode>.pdf`                                                                                                          |
+| Database                           | Neon (Postgres) — `quotes`, `quote_events`, `quote_engagement`, `quote_recipients`, `quote_viewer_emails`, quote AI snapshot/suggestion/failure tables |
