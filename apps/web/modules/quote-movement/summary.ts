@@ -25,6 +25,7 @@ export type QuoteMovementSummary = {
 export type QuoteMovementSummaryCandidate = {
   recordId: string;
   sourceFingerprint: string;
+  hasValidSummary?: boolean;
   record: QuoteMovementSnapshotInput;
 };
 

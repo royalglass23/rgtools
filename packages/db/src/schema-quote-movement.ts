@@ -188,9 +188,19 @@ export const quoteMovementRefreshRuns = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
   },
   (table) => [
     index("quote_movement_refresh_runs_created_at_idx").on(table.createdAt),
     index("quote_movement_refresh_runs_status_idx").on(table.status),
   ],
 );
+
+export const quoteMovementRefreshLocks = pgTable("quote_movement_refresh_locks", {
+  lockName: text("lock_name").primaryKey(),
+  ownerId: uuid("owner_id").notNull(),
+  leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});

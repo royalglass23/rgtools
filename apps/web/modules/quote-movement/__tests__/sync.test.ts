@@ -2,6 +2,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import {
+  safeQuoteMovementRefreshError,
   syncQuoteMovementFromServiceM8,
   type QuoteMovementSnapshotInput,
   type QuoteMovementSnapshotRepository,
@@ -142,7 +143,7 @@ describe("syncQuoteMovementFromServiceM8", () => {
     ]);
   });
 
-  it("keeps the last valid summary when background summarisation fails", async () => {
+  it("reports whether a valid summary was retained when background summarisation fails", async () => {
     let retainedRecord: QuoteMovementSnapshotInput | undefined;
     const repository: QuoteMovementSnapshotRepository = {
       async replaceActiveSnapshot(records) {
@@ -181,6 +182,13 @@ describe("syncQuoteMovementFromServiceM8", () => {
             {
               recordId: "record-1",
               sourceFingerprint: "changed-source-set",
+              hasValidSummary: true,
+              record: retainedRecord!,
+            },
+            {
+              recordId: "record-2",
+              sourceFingerprint: "first-source-set",
+              hasValidSummary: false,
               record: retainedRecord!,
             },
           ];
@@ -206,6 +214,12 @@ describe("syncQuoteMovementFromServiceM8", () => {
           recordId: "record-1",
           message:
             "What Matters Now could not update. The previous valid summary was kept.",
+          attemptedAt: refreshedAt,
+        },
+        {
+          recordId: "record-2",
+          message:
+            "What Matters Now could not update. No summary is available yet; cached quote data was kept.",
           attemptedAt: refreshedAt,
         },
       ],
@@ -1112,7 +1126,9 @@ describe("syncQuoteMovementFromServiceM8", () => {
         repository: memory.repository,
         actorId: "user-1",
       }),
-    ).rejects.toThrow("ServiceM8 Quote Movement refresh failed with HTTP 503.");
+    ).rejects.toThrow(
+      "Quote Movement could not refresh from ServiceM8. The previous cached list was kept.",
+    );
 
     expect(memory.activeRows()).toEqual([
       expect.objectContaining({
@@ -1121,7 +1137,22 @@ describe("syncQuoteMovementFromServiceM8", () => {
       }),
     ]);
     expect(memory.failures).toEqual([
-      "ServiceM8 Quote Movement refresh failed with HTTP 503.",
+      "Quote Movement could not refresh from ServiceM8. The previous cached list was kept.",
     ]);
+  });
+
+  it("never returns provider cursors, UUIDs, secrets, or raw bodies in staff errors", () => {
+    const unsafe = [
+      "ServiceM8 Quote Movement note pagination repeated cursor secret-token-job-550e8400-e29b-41d4-a716-446655440000.",
+      "ServiceM8 Quote Movement refresh failed: postgres://secret@provider/raw-body",
+    ];
+
+    for (const message of unsafe) {
+      const safe = safeQuoteMovementRefreshError(new Error(message));
+      expect(safe).toBe(
+        "Quote Movement could not refresh from ServiceM8. The previous cached list was kept.",
+      );
+      expect(safe).not.toMatch(/secret|550e8400|postgres:\/\//i);
+    }
   });
 });

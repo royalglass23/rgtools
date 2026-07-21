@@ -4,6 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const requireModule = vi.hoisted(() => vi.fn())
 const listQuoteMovementRecords = vi.hoisted(() => vi.fn())
 const getQuoteMovementRefreshStatus = vi.hoisted(() => vi.fn())
+const refreshQuoteMovementAction = vi.hoisted(() => vi.fn())
+const routerRefresh = vi.hoisted(() => vi.fn())
+
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: routerRefresh }) }))
 
 vi.mock('@/lib/guard', () => ({ requireModule }))
 vi.mock('../queries', () => ({
@@ -11,8 +15,15 @@ vi.mock('../queries', () => ({
   getQuoteMovementRefreshStatus,
 }))
 vi.mock('../actions', () => ({
-  refreshQuoteMovementAction: vi.fn(),
+  refreshQuoteMovementAction,
   updateQuoteMovementComplexityAction: vi.fn(),
+}))
+vi.mock('../QuoteMovementRefreshButton', () => ({
+  QuoteMovementRefreshButton: ({ refreshPending }: { refreshPending: boolean }) => (
+    <button type="button" disabled={refreshPending}>
+      {refreshPending ? 'Refresh pending' : 'Refresh now'}
+    </button>
+  ),
 }))
 
 import QuoteMovementLayout from '@/app/(dashboard)/quote-movement/layout'
@@ -27,7 +38,11 @@ describe('Quote Movement routes', () => {
       lastSuccessfulAt: null,
       lastSuccessfulCount: 0,
       latestFailure: null,
+      pendingSince: null,
+      isPending: false,
+      isStale: true,
     })
+    refreshQuoteMovementAction.mockResolvedValue({ status: 'requested' })
   })
 
   it('reuses Quote Tracker access for the complete route family', async () => {
@@ -80,6 +95,9 @@ describe('Quote Movement routes', () => {
       lastSuccessfulAt: new Date('2026-07-17T03:00:00Z'),
       lastSuccessfulCount: 1,
       latestFailure: null,
+      pendingSince: null,
+      isPending: false,
+      isStale: false,
     })
 
     render(await QuoteMovementPage({ searchParams: Promise.resolve({}) }))
@@ -92,6 +110,34 @@ describe('Quote Movement routes', () => {
     expect(screen.getByText('Active')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Q260101' })).toHaveAttribute('href', '/quote-movement/record-1')
     expect(screen.getByText(/Last refreshed/)).toBeInTheDocument()
+  })
+
+  it('keeps cached rows visible while refresh and stale states are explicit', async () => {
+    listQuoteMovementRecords.mockResolvedValue([{
+      id: 'record-1',
+      jobNumber: 'Q260224',
+      customerName: 'Cached Customer',
+      jobAddress: '24 Glass Lane',
+      quoteValueExcludingGst: '2400.00',
+      projectComplexity: 'normal',
+      latestActivityAt: new Date('2026-07-20T02:00:00Z'),
+      convertedAt: null,
+      workOrderId: null,
+    }])
+    getQuoteMovementRefreshStatus.mockResolvedValue({
+      lastSuccessfulAt: new Date('2026-07-20T01:00:00Z'),
+      lastSuccessfulCount: 1,
+      latestFailure: null,
+      pendingSince: new Date('2026-07-21T01:00:00Z'),
+      isPending: true,
+      isStale: true,
+    })
+
+    render(await QuoteMovementPage({ searchParams: Promise.resolve({}) }))
+
+    expect(screen.getByText('Cached Customer')).toBeVisible()
+    expect(screen.getByText(/cached quotes remain available while/i)).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Refresh pending' })).toBeDisabled()
   })
 
   it('shows a clear empty state when the cached active list is empty', async () => {

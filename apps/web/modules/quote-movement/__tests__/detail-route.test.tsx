@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const requireModule = vi.hoisted(() => vi.fn())
 const getQuoteMovementRecord = vi.hoisted(() => vi.fn())
+const getQuoteMovementRefreshStatus = vi.hoisted(() => vi.fn())
+const refreshQuoteMovementAction = vi.hoisted(() => vi.fn())
+const routerRefresh = vi.hoisted(() => vi.fn())
 const notFound = vi.hoisted(() =>
   vi.fn(() => {
     throw new Error('NEXT_NOT_FOUND')
@@ -10,8 +13,19 @@ const notFound = vi.hoisted(() =>
 )
 
 vi.mock('@/lib/guard', () => ({ requireModule }))
-vi.mock('../queries', () => ({ getQuoteMovementRecord }))
-vi.mock('next/navigation', () => ({ notFound }))
+vi.mock('../queries', () => ({ getQuoteMovementRecord, getQuoteMovementRefreshStatus }))
+vi.mock('../actions', () => ({ refreshQuoteMovementAction }))
+vi.mock('../QuoteMovementRefreshButton', () => ({
+  QuoteMovementRefreshButton: ({ refreshPending }: { refreshPending: boolean }) => (
+    <button type="button" disabled={refreshPending}>
+      {refreshPending ? 'Refresh pending' : 'Refresh now'}
+    </button>
+  ),
+}))
+vi.mock('next/navigation', () => ({
+  notFound,
+  useRouter: () => ({ refresh: routerRefresh }),
+}))
 
 import QuoteMovementDetailPage from '@/app/(dashboard)/quote-movement/[id]/page'
 
@@ -19,6 +33,15 @@ describe('Quote Movement detail route shell', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     requireModule.mockResolvedValue(undefined)
+    refreshQuoteMovementAction.mockResolvedValue({ status: 'requested' })
+    getQuoteMovementRefreshStatus.mockResolvedValue({
+      lastSuccessfulAt: new Date('2026-07-17T03:00:00Z'),
+      lastSuccessfulCount: 1,
+      latestFailure: null,
+      pendingSince: null,
+      isPending: false,
+      isStale: false,
+    })
     getQuoteMovementRecord.mockResolvedValue({
       id: 'record-1',
       servicem8Status: 'Quote',
@@ -162,6 +185,75 @@ describe('Quote Movement detail route shell', () => {
     expect(
       screen.getByRole('link', { name: 'Open Work Order' }),
     ).toHaveAttribute('href', '/work-orders/work-order-1')
+  })
+
+  it('keeps the last valid detail summary visible when refresh is stale and summarisation failed', async () => {
+    getQuoteMovementRefreshStatus.mockResolvedValue({
+      lastSuccessfulAt: new Date('2026-07-20T01:00:00Z'),
+      lastSuccessfulCount: 1,
+      latestFailure: null,
+      pendingSince: null,
+      isPending: false,
+      isStale: true,
+    })
+    getQuoteMovementRecord.mockResolvedValue({
+      id: 'record-1',
+      servicem8Status: 'Quote',
+      servicem8Active: true,
+      jobNumber: 'Q260224',
+      customerName: 'Cached Customer',
+      jobAddress: '24 Glass Lane',
+      quoteValueExcludingGst: '2400.00',
+      lastServiceM8SyncedAt: new Date('2026-07-20T01:00:00Z'),
+      convertedAt: null,
+      workOrderId: null,
+      sourceCoverage: 'incomplete',
+      sourceUnreadCount: 1,
+      sourceCoverageDetails: ['1 source could not be interpreted.'],
+      summaryLastError: 'What Matters Now could not update. The previous valid summary was kept.',
+      importantDetailsSummary: {
+        currentPosition: { text: 'Cached current position.', evidenceSourceIdentities: [] },
+        materialFacts: [],
+        importantDates: [],
+        participants: [],
+        unresolvedMatters: [],
+        latestMeaningfulMovement: null,
+        consentState: null,
+      },
+    })
+
+    render(await QuoteMovementDetailPage({ params: Promise.resolve({ id: 'record-1' }) }))
+
+    expect(screen.getByText('Cached current position.')).toBeVisible()
+    expect(screen.getByText(/cached data may be out of date/i)).toBeVisible()
+    expect(screen.getByText(/previous valid summary was kept/i)).toBeVisible()
+    expect(screen.queryByText(/job-[0-9a-f]|postgres:\/\//i)).not.toBeInTheDocument()
+  })
+
+  it('shows a safe first-summary failure while no prior summary exists', async () => {
+    getQuoteMovementRecord.mockResolvedValue({
+      id: 'record-1',
+      servicem8Status: 'Quote',
+      servicem8Active: true,
+      jobNumber: 'Q260224',
+      customerName: 'Cached Customer',
+      jobAddress: '24 Glass Lane',
+      quoteValueExcludingGst: '2400.00',
+      lastServiceM8SyncedAt: new Date('2026-07-21T01:00:00Z'),
+      convertedAt: null,
+      workOrderId: null,
+      sourceCoverage: 'incomplete',
+      sourceUnreadCount: 1,
+      sourceCoverageDetails: ['1 source could not be interpreted.'],
+      summaryLastError: 'What Matters Now could not update. The previous valid summary was kept.',
+      importantDetailsSummary: null,
+    })
+
+    render(await QuoteMovementDetailPage({ params: Promise.resolve({ id: 'record-1' }) }))
+
+    expect(screen.getByText('Not yet summarised. What Matters Now updates automatically after meaningful source activity.')).toBeVisible()
+    expect(screen.getByText(/What Matters Now could not update/)).toBeVisible()
+    expect(screen.getByText('Incomplete Source Coverage')).toBeVisible()
   })
 
   it('reports when a converted record has no current Work Order match', async () => {
