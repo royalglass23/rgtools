@@ -7,12 +7,18 @@ import {
   precisionSecondaryLinkClassName,
 } from "@/components/precision-ui/PrecisionUI";
 import { requireModule } from "@/lib/guard";
+import { refreshQuoteMovementAction } from "@/modules/quote-movement/actions";
 import {
   formatQuoteMovementCurrency,
   formatQuoteMovementDate,
   quoteMovementDisplayName,
 } from "@/modules/quote-movement/presentation";
-import { getQuoteMovementRecord } from "@/modules/quote-movement/queries";
+import {
+  getQuoteMovementRecord,
+  getQuoteMovementRefreshStatus,
+} from "@/modules/quote-movement/queries";
+import { QuoteMovementRefreshButton } from "@/modules/quote-movement/QuoteMovementRefreshButton";
+import { QuoteMovementRefreshStatus } from "@/modules/quote-movement/QuoteMovementRefreshStatus";
 import type { QuoteMovementSummaryStatement } from "@rgtools/db/schema-quote-movement";
 
 export default async function QuoteMovementDetailPage({
@@ -22,7 +28,10 @@ export default async function QuoteMovementDetailPage({
 }) {
   await requireModule("quote-tracker");
   const { id } = await params;
-  const record = await getQuoteMovementRecord(id);
+  const [record, refreshStatus] = await Promise.all([
+    getQuoteMovementRecord(id),
+    getQuoteMovementRefreshStatus(),
+  ]);
 
   if (!record) notFound();
 
@@ -34,6 +43,10 @@ export default async function QuoteMovementDetailPage({
         description={`Cached from ServiceM8 on ${formatQuoteMovementDate(record.lastServiceM8SyncedAt)}`}
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <QuoteMovementRefreshButton
+              action={refreshQuoteMovementAction}
+              refreshPending={refreshStatus.isPending}
+            />
             <StatusBadge tone={record.servicem8Active ? "positive" : "muted"}>
               {record.convertedAt
                 ? "Converted"
@@ -64,6 +77,8 @@ export default async function QuoteMovementDetailPage({
           </div>
         }
       />
+
+      <QuoteMovementRefreshStatus status={refreshStatus} showCount={false} />
 
       <DataPanel title="Quote summary" eyebrow="ServiceM8 source">
         <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -142,6 +157,11 @@ export default async function QuoteMovementDetailPage({
               unreadCount={record.sourceUnreadCount}
               details={record.sourceCoverageDetails}
             />
+            {record.summaryLastError ? (
+              <p className="rounded-md border border-warning-border bg-warning-surface px-3 py-2 text-sm text-text-secondary">
+                {record.summaryLastError}
+              </p>
+            ) : null}
             <p className="max-w-[70ch] text-sm text-text-secondary">
               Not yet summarised. What Matters Now updates automatically after
               meaningful source activity.

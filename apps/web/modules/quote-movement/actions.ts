@@ -2,9 +2,10 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { after } from 'next/server'
 import { auth } from '@/lib/auth'
 import { requireModule } from '@/lib/guard'
-import { refreshQuoteMovementFromServiceM8 } from './service'
+import { requestQuoteMovementRefresh } from './service'
 import { safeQuoteMovementRefreshError } from './sync'
 import { updateQuoteMovementProjectComplexity } from './repository'
 import {
@@ -17,15 +18,17 @@ export async function refreshQuoteMovementAction() {
   const session = await auth()
 
   try {
-    await refreshQuoteMovementFromServiceM8({
+    const result = await requestQuoteMovementRefresh({
       actorId: session?.user?.id ?? null,
+      schedule: after,
     })
+    revalidatePath('/quote-movement')
+    return result
   } catch (error) {
     const message = safeQuoteMovementRefreshError(error)
     redirect(`/quote-movement?refreshError=${encodeURIComponent(message)}`)
   }
 
-  revalidatePath('/quote-movement')
 }
 
 export async function updateQuoteMovementComplexityAction(

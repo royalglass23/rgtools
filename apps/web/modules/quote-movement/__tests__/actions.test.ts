@@ -4,19 +4,21 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const requireModule = vi.hoisted(() => vi.fn())
 const auth = vi.hoisted(() => vi.fn())
-const refreshQuoteMovementFromServiceM8 = vi.hoisted(() => vi.fn())
+const requestQuoteMovementRefresh = vi.hoisted(() => vi.fn())
 const updateQuoteMovementProjectComplexity = vi.hoisted(() => vi.fn())
 const revalidatePath = vi.hoisted(() => vi.fn())
 const redirect = vi.hoisted(() => vi.fn((url: string) => {
   throw Object.assign(new Error('NEXT_REDIRECT'), { url })
 }))
+const after = vi.hoisted(() => vi.fn())
 
 vi.mock('@/lib/guard', () => ({ requireModule }))
 vi.mock('@/lib/auth', () => ({ auth }))
-vi.mock('../service', () => ({ refreshQuoteMovementFromServiceM8 }))
+vi.mock('../service', () => ({ requestQuoteMovementRefresh }))
 vi.mock('../repository', () => ({ updateQuoteMovementProjectComplexity }))
 vi.mock('next/cache', () => ({ revalidatePath }))
 vi.mock('next/navigation', () => ({ redirect }))
+vi.mock('next/server', () => ({ after }))
 
 import {
   refreshQuoteMovementAction,
@@ -28,17 +30,17 @@ describe('refreshQuoteMovementAction', () => {
     vi.clearAllMocks()
     requireModule.mockResolvedValue(undefined)
     auth.mockResolvedValue({ user: { id: 'user-1' } })
-    refreshQuoteMovementFromServiceM8.mockResolvedValue({
-      synced: 1,
-      refreshedAt: new Date('2026-07-17T03:00:00Z'),
-    })
+    requestQuoteMovementRefresh.mockResolvedValue({ status: 'requested' })
   })
 
-  it('refreshes through the existing Quote Tracker permission', async () => {
-    await refreshQuoteMovementAction()
+  it('requests non-blocking refresh work through the existing Quote Tracker permission', async () => {
+    await expect(refreshQuoteMovementAction()).resolves.toEqual({ status: 'requested' })
 
     expect(requireModule).toHaveBeenCalledWith('quote-tracker')
-    expect(refreshQuoteMovementFromServiceM8).toHaveBeenCalledWith({ actorId: 'user-1' })
+    expect(requestQuoteMovementRefresh).toHaveBeenCalledWith({
+      actorId: 'user-1',
+      schedule: after,
+    })
     expect(revalidatePath).toHaveBeenCalledWith('/quote-movement')
   })
 
@@ -50,12 +52,12 @@ describe('refreshQuoteMovementAction', () => {
     await expect(refreshQuoteMovementAction()).rejects.toMatchObject({
       url: '/?denied=quote-tracker',
     })
-    expect(refreshQuoteMovementFromServiceM8).not.toHaveBeenCalled()
+    expect(requestQuoteMovementRefresh).not.toHaveBeenCalled()
   })
 
-  it('returns a staff-safe refresh error while leaving the cached list route available', async () => {
-    refreshQuoteMovementFromServiceM8.mockRejectedValue(new Error(
-      'Quote Movement could not refresh from ServiceM8. The previous cached list was kept.',
+  it('returns a staff-safe request error while leaving the cached list route available', async () => {
+    requestQuoteMovementRefresh.mockRejectedValue(new Error(
+      'postgres://secret@provider/unsafe-body',
     ))
 
     await expect(refreshQuoteMovementAction()).rejects.toMatchObject({

@@ -158,6 +158,7 @@ export type QuoteMovementSnapshotInput = {
 
 export type QuoteMovementRefreshContext = {
   actorId: string | null;
+  runId?: string;
   refreshedAt: Date;
   convertedJobUuids?: string[];
 };
@@ -181,6 +182,7 @@ export async function syncQuoteMovementFromServiceM8({
   interpretAttachments = async () => ({ files: [] }),
   readTrackedEngagement = async () => [],
   actorId = null,
+  runId,
   now = () => new Date(),
 }: {
   request?: ServiceM8FetchRequest;
@@ -190,6 +192,7 @@ export async function syncQuoteMovementFromServiceM8({
   interpretAttachments?: QuoteMovementAttachmentInterpreter;
   readTrackedEngagement?: QuoteMovementTrackedEngagementReader;
   actorId?: string | null;
+  runId?: string;
   now?: () => Date;
 }) {
   const refreshedAt = now();
@@ -234,6 +237,7 @@ export async function syncQuoteMovementFromServiceM8({
 
     await repository.replaceActiveSnapshot(records, {
       actorId,
+      runId,
       refreshedAt,
       convertedJobUuids,
     });
@@ -253,7 +257,9 @@ export async function syncQuoteMovementFromServiceM8({
         } catch {
           await summaryRepository.recordSummaryFailure(
             candidate.recordId,
-            "What Matters Now could not update. The previous valid summary was kept.",
+            candidate.hasValidSummary
+              ? "What Matters Now could not update. The previous valid summary was kept."
+              : "What Matters Now could not update. No summary is available yet; cached quote data was kept.",
             refreshedAt,
           );
         }
@@ -263,7 +269,7 @@ export async function syncQuoteMovementFromServiceM8({
   } catch (error) {
     const safeMessage = safeQuoteMovementRefreshError(error);
     try {
-      await repository.recordFailure(safeMessage, { actorId, refreshedAt });
+      await repository.recordFailure(safeMessage, { actorId, runId, refreshedAt });
     } catch {
       // The original refresh failure is the useful operator signal.
     }
@@ -272,8 +278,7 @@ export async function syncQuoteMovementFromServiceM8({
 }
 
 export function safeQuoteMovementRefreshError(error: unknown) {
-  const message = error instanceof Error ? error.message : "";
-  if (message.startsWith("ServiceM8 Quote Movement")) return message;
+  void error;
   return "Quote Movement could not refresh from ServiceM8. The previous cached list was kept.";
 }
 

@@ -47,7 +47,7 @@ This repo is a pnpm workspace:
 - [Security policy](docs/SECURITY.md) - reporting and operational security expectations
 - [Security runbook](docs/dev/security.md) - auth, access control, secrets, data boundaries, and incident response
 - [Quote tracking privacy note](docs/dev/quote-tracking.md) - what is collected, retention, access
-- [Quote Movement developer notes](docs/dev/quote-movement.md) - cached ServiceM8 Quote monitoring, retained evidence, automatic summaries, conversion, and refresh behavior
+- [Quote Movement developer notes](docs/dev/quote-movement.md) - cached ServiceM8 Quote monitoring, retained evidence, automatic summaries, conversion, and durable non-blocking refresh behavior
 - [ServiceM8 sync architecture](docs/dev/servicem8-sync-architecture.md) - lead-to-ServiceM8 sync model
 - [Work Order enrichment operations](docs/dev/work-order-enrichment.md) - manual Hobby processing, privacy boundary, retry, monitoring, and rollback
 - [ServiceM8 MCP notes](docs/dev/servicem8-mcp.md) - ServiceM8 MCP setup and limits

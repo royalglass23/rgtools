@@ -1,4 +1,4 @@
-import { eq, inArray, notInArray, sql } from "drizzle-orm";
+import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   quoteMovementRecords,
@@ -19,6 +19,18 @@ import {
   quoteMovementSourceNoun,
 } from "./source-history";
 
+export type QuoteMovementPersistenceTransaction = Parameters<
+  Parameters<typeof db.transaction>[0]
+>[0];
+
+type QuoteMovementRefreshExecutor =
+  | typeof db
+  | QuoteMovementPersistenceTransaction;
+
+type QuoteMovementRefreshOutcome =
+  | { status: "success"; syncedCount: number }
+  | { status: "failed"; errorMessage: string };
+
 export const quoteMovementSnapshotRepository: QuoteMovementSnapshotRepository =
   {
     async replaceActiveSnapshot(records, context) {
@@ -28,18 +40,12 @@ export const quoteMovementSnapshotRepository: QuoteMovementSnapshotRepository =
     },
 
     async recordFailure(message, context) {
-      await db.insert(quoteMovementRefreshRuns).values({
-        actorId: context.actorId,
+      await persistQuoteMovementRefreshOutcome(db, context, {
         status: "failed",
         errorMessage: message,
-        createdAt: context.refreshedAt,
       });
     },
   };
-
-export type QuoteMovementPersistenceTransaction = Parameters<
-  Parameters<typeof db.transaction>[0]
->[0];
 
 export async function updateQuoteMovementProjectComplexity(
   recordId: string,
@@ -142,11 +148,45 @@ export async function persistQuoteMovementSnapshot(
         : undefined,
     );
 
-  await tx.insert(quoteMovementRefreshRuns).values({
-    actorId: context.actorId,
+  await persistQuoteMovementRefreshOutcome(tx, context, {
     status: "success",
     syncedCount: records.length,
+  });
+}
+
+async function persistQuoteMovementRefreshOutcome(
+  executor: QuoteMovementRefreshExecutor,
+  context: QuoteMovementRefreshContext,
+  outcome: QuoteMovementRefreshOutcome,
+) {
+  const values = outcome.status === "success"
+    ? {
+        status: outcome.status,
+        syncedCount: outcome.syncedCount,
+        errorMessage: null,
+      }
+    : {
+        status: outcome.status,
+        syncedCount: 0,
+        errorMessage: outcome.errorMessage,
+      };
+
+  if (context.runId) {
+    await executor
+      .update(quoteMovementRefreshRuns)
+      .set({ ...values, completedAt: context.refreshedAt })
+      .where(and(
+        eq(quoteMovementRefreshRuns.id, context.runId),
+        eq(quoteMovementRefreshRuns.status, "pending"),
+      ));
+    return;
+  }
+
+  await executor.insert(quoteMovementRefreshRuns).values({
+    ...values,
+    actorId: context.actorId,
     createdAt: context.refreshedAt,
+    completedAt: context.refreshedAt,
   });
 }
 
