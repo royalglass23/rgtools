@@ -138,7 +138,7 @@ export function createWorkOrderEnrichmentRuntimeStore(
         }
 
         if (current) {
-          await tx
+          const updated = await tx
             .update(workOrderItemProductionSpecifications)
             .set({
               ...specificationValues,
@@ -148,7 +148,32 @@ export function createWorkOrderEnrichmentRuntimeStore(
             .where(and(
               eq(workOrderItemProductionSpecifications.id, current.id),
               eq(workOrderItemProductionSpecifications.status, 'needs_review'),
+              isNull(workOrderItemProductionSpecifications.draftUpdatedBy),
             ))
+            .returning({ id: workOrderItemProductionSpecifications.id })
+          if (updated.length === 0) {
+            const [latest] = await tx
+              .select({
+                status: workOrderItemProductionSpecifications.status,
+                draftUpdatedBy: workOrderItemProductionSpecifications.draftUpdatedBy,
+              })
+              .from(workOrderItemProductionSpecifications)
+              .where(eq(workOrderItemProductionSpecifications.id, current.id))
+              .limit(1)
+            await tx
+              .update(workOrderItemEnrichmentJobs)
+              .set({
+                status: 'completed',
+                lockedAt: null,
+                leaseExpiresAt: null,
+                lastSafeError: null,
+                updatedAt: generatedAt,
+              })
+              .where(eq(workOrderItemEnrichmentJobs.id, job.id))
+            return latest?.status === 'needs_review' && latest.draftUpdatedBy
+              ? 'skipped_staff_edited'
+              : 'skipped_confirmed'
+          }
         } else {
           await tx.insert(workOrderItemProductionSpecifications).values({
             workOrderItemId: job.workOrderItemId,

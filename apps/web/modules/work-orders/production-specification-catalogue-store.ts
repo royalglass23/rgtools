@@ -167,7 +167,6 @@ export async function saveProductionSpecificationCatalogueOption(input: {
     await logAudit({
       actorId: input.actorId,
       entityType: 'work_order',
-      targetId: next.id,
       action: current
         ? 'work_order.specification_catalogue.updated'
         : 'work_order.specification_catalogue.created',
