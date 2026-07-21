@@ -147,23 +147,18 @@ function renderCustomerEstimateEmail(input: CustomerEstimateEmailInput): string 
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Your Royal Glass Estimate</title>
 </head>
-<body bgcolor="#f0f2f5" style="margin:0;padding:0;background-color:#f0f2f5;-webkit-font-smoothing:antialiased;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f0f2f5" style="width:100%;background-color:#f0f2f5;border-collapse:collapse;">
-<tr>
-<td align="center" style="padding:32px 12px 40px;">
-<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:100%;border-collapse:separate;border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,0.10);">
+<body style="margin:0;padding:0;background:#f0f2f5;-webkit-font-smoothing:antialiased;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<div style="max-width:600px;margin:32px auto;padding:0 12px 40px;">
+<div style="border-radius:16px;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,0.10);">
 
 <!-- Header -->
-<tr>
-<td bgcolor="#1a3c5e" style="background-color:#1a3c5e;background-image:linear-gradient(135deg,#152f4a 0%,#1a3c5e 55%,#20496f 100%);padding:40px 36px 36px;border-radius:16px 16px 0 0;">
+<div style="background:linear-gradient(135deg,#152f4a 0%,#1a3c5e 55%,#20496f 100%);padding:40px 36px 36px;">
   <p style="color:#7cb9f5;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;margin:0 0 10px 0;">Royal Glass Limited</p>
   <h1 style="color:#ffffff;font-size:27px;font-weight:700;margin:0;line-height:1.3;">Your ${escapeHtml(project)} estimate<br>is ready, ${name}.</h1>
-</td>
-</tr>
+</div>
 
 <!-- Body -->
-<tr>
-<td bgcolor="#ffffff" style="background-color:#ffffff;padding:36px;">
+<div style="background:#ffffff;padding:36px;">
 
   <p style="font-size:15px;color:#374151;line-height:1.75;margin:0 0 26px 0;">
     We've looked at your project details and we know exactly what needs to happen to make this a success.
@@ -171,15 +166,11 @@ function renderCustomerEstimateEmail(input: CustomerEstimateEmailInput): string 
   </p>
 
   <!-- Estimate band -->
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;margin:0 0 30px 0;border-collapse:separate;">
-    <tr>
-      <td align="center" bgcolor="#1a3c5e" style="background-color:#1a3c5e;background-image:linear-gradient(135deg,#152f4a 0%,#1a3c5e 100%);border-radius:14px;padding:30px 28px;text-align:center;">
-        <p style="color:#7cb9f5;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;margin:0 0 12px 0;">Your indicative estimate</p>
-        <p style="color:#ffffff;font-size:38px;font-weight:700;margin:0 0 4px 0;letter-spacing:-0.02em;">${low} &ndash; ${high}</p>
-        <p style="color:#7cb9f5;font-size:13px;margin:6px 0 0 0;">${escapeHtml(estSub)}</p>
-      </td>
-    </tr>
-  </table>
+  <div style="background:linear-gradient(135deg,#152f4a 0%,#1a3c5e 100%);border-radius:14px;margin:0 0 30px 0;padding:30px 28px;text-align:center;">
+    <p style="color:#7cb9f5;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;margin:0 0 12px 0;">Your indicative estimate</p>
+    <p style="color:#ffffff;font-size:38px;font-weight:700;margin:0 0 4px 0;letter-spacing:-0.02em;">${low} &ndash; ${high}</p>
+    <p style="color:#7cb9f5;font-size:13px;margin:6px 0 0 0;">${escapeHtml(estSub)}</p>
+  </div>
 
   <p style="font-size:15px;color:#374151;line-height:1.75;margin:0 0 16px 0;">
     <strong style="color:#1a3c5e;">You don't need to worry about a thing from here.</strong>
@@ -226,14 +217,10 @@ function renderCustomerEstimateEmail(input: CustomerEstimateEmailInput): string 
   </div>
 
   <!-- CTA -->
-  <table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto 10px;border-collapse:separate;">
-    <tr>
-      <td align="center" bgcolor="#1a3c5e" style="background-color:#1a3c5e;border-radius:9px;">
-        <a href="tel:0800769254" style="display:inline-block;color:#ffffff;font-size:15px;font-weight:600;padding:15px 34px;text-decoration:none;letter-spacing:0.01em;">Call us: 0800 769 254</a>
-      </td>
-    </tr>
-  </table>
-  <p align="center" style="font-size:13px;color:#9ca3af;text-align:center;margin:0 0 36px 0;">Or just reply to this email &mdash; we read every one.</p>
+  <div style="text-align:center;margin:0 0 36px 0;">
+    <a href="tel:0800769254" style="display:inline-block;background:#1a3c5e;color:#ffffff;font-size:15px;font-weight:600;padding:15px 34px;border-radius:9px;text-decoration:none;letter-spacing:0.01em;">Call us: 0800 769 254</a>
+    <p style="font-size:13px;color:#9ca3af;margin:10px 0 0 0;">Or just reply to this email &mdash; we read every one.</p>
+  </div>
 
   <!-- Project summary -->
   ${rowsHtml ? `<div style="border-top:1px solid #e5e7eb;padding-top:24px;">
@@ -243,12 +230,10 @@ function renderCustomerEstimateEmail(input: CustomerEstimateEmailInput): string 
     </table>
   </div>` : ''}
 
-</td>
-</tr>
+</div>
 
 <!-- Footer -->
-<tr>
-<td align="center" bgcolor="#f8fafc" style="background-color:#f8fafc;border-top:1px solid #e5eaf0;padding:22px 36px;text-align:center;border-radius:0 0 16px 16px;">
+<div style="background:#f8fafc;border-top:1px solid #e5eaf0;padding:22px 36px;text-align:center;">
   <p style="font-size:13px;color:#374151;font-weight:600;margin:0 0 5px 0;">Royal Glass Limited</p>
   <p style="font-size:12px;color:#9ca3af;margin:0 0 5px 0;">13E Paul Matthews Road, Rosedale, Auckland 0632</p>
   <p style="font-size:12px;margin:0 0 12px 0;">
@@ -257,12 +242,10 @@ function renderCustomerEstimateEmail(input: CustomerEstimateEmailInput): string 
     <a href="https://royalglass.co.nz" style="color:#1a3c5e;text-decoration:none;font-weight:500;">royalglass.co.nz</a>
   </p>
   <p style="font-size:11px;color:#d1d5db;margin:0;">This is an indicative estimate only. Final pricing is confirmed after our free site visit. Prices exclude GST.</p>
-</td>
-</tr>
-</table>
-</td>
-</tr>
-</table>
+</div>
+
+</div>
+</div>
 </body>
 </html>`
 }

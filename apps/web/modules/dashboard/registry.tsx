@@ -10,7 +10,6 @@ import { parseQuoteListFilters } from '@/modules/quote-tracker/list-filters'
 import { QuoteTableControls } from '@/modules/quote-tracker/QuoteTableControls'
 import { parseWorkOrderListFilters } from '@/modules/work-orders/list-filters'
 import { getWorkOrderFilterOptions, listWorkOrders } from '@/modules/work-orders/queries'
-import { loadProductionSpecificationCatalogue } from '@/modules/work-orders/production-specification-catalogue'
 import { getWorkOrderSummaryConfig } from '@/modules/work-orders/summary-config'
 import { WorkOrdersTableControls } from '@/modules/work-orders/WorkOrdersTableControls'
 import { getTableMeta, type DashboardTableKey } from './tables'
@@ -79,11 +78,10 @@ const workOrdersTable: ServerTable = {
       prefix: meta.paramPrefix,
       defaults: filter,
     })
-    const [{ rows, total, pageCount }, options, fields, catalogue] = await Promise.all([
+    const [{ rows, total, pageCount }, options, fields] = await Promise.all([
       listWorkOrders(filters),
       getWorkOrderFilterOptions(),
       getWorkOrderSummaryConfig(),
-      loadProductionSpecificationCatalogue(),
     ])
 
     return (
@@ -97,7 +95,6 @@ const workOrdersTable: ServerTable = {
         basePath="/"
         paramPrefix={meta.paramPrefix}
         isAdmin={isAdmin}
-        catalogue={catalogue}
       />
     )
   },

@@ -1,19 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Manrope } from "next/font/google";
-import { getThemeBootstrapScript } from "@/components/theme/theme-bootstrap";
 import "./globals.css";
-
-const uiFont = Inter({
-  subsets: ["latin"],
-  variable: "--font-ui-family",
-  display: "swap",
-});
-
-const displayFont = Manrope({
-  subsets: ["latin"],
-  variable: "--font-display-family",
-  display: "swap",
-});
 
 export function generateMetadata(): Metadata {
   // Production (rgtools.co.nz, main) shows the Royal Glass brand;
@@ -35,15 +21,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      data-theme="light"
-      suppressHydrationWarning
-      className={`h-full antialiased ${uiFont.variable} ${displayFont.variable}`}
-    >
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: getThemeBootstrapScript() }} />
-      </head>
+    <html lang="en" className="h-full antialiased">
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

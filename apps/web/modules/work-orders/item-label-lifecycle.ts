@@ -24,7 +24,6 @@ export async function refreshWorkOrderItemLabels(
   items: WorkOrderItemLabelRecord[],
   store: WorkOrderItemLabelStore,
   generateLabel: WorkOrderItemLabelGenerator,
-  generateLabelForItem: (itemId: string, originalDescription: string) => Promise<string> = (_itemId, originalDescription) => generateLabel(originalDescription),
 ) {
   let generated = 0
   let failed = 0
@@ -43,7 +42,7 @@ export async function refreshWorkOrderItemLabels(
 
     await store.markPending(item.id)
     try {
-      const label = validateWorkOrderItemLabel(await generateLabelForItem(item.id, item.originalDescription))
+      const label = validateWorkOrderItemLabel(await generateLabel(item.originalDescription))
       await store.saveGenerated(item.id, label, currentFingerprint)
       generated += 1
     } catch {

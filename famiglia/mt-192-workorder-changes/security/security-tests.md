@@ -1,24 +1,42 @@
-# Security tests - mt-192-workorder-changes
+# Security tests — mt-192-workorder-changes
 
-- Date: 2026-07-16
+- Date: 2026-07-15
 - Browser framework: Playwright 1.61.1
-- Verdict: **PASS**
 
-| Control | Evidence | Result |
+## Current automated evidence
+
+| Control | Evidence | Current result |
 |---|---|---|
-| Direct refresh authorization | `actions-permissions.test.ts` rejects callers without Manage before provider/database work | PASS |
-| View/Manage/Configure separation | permission, server-page, detail-page, and component suites | PASS |
-| Forged/invalid input | field names, UUIDs, options, dates, labels, cursors, and generated output tests | PASS |
-| Provider abuse bounds | 25-page cap, repeated-cursor rejection, 30-second ServiceM8/OpenAI/attachment timeouts | PASS |
-| Durable abuse controls | refresh/label leases and per-user refresh/AI windows at SQL seam | PASS |
-| Active-resource race | sentinel-protected two-connection integration test | PASS |
-| CSV injection and size abuse | hostile formula/control prefixes, quoting, and 10,000-row/413 tests | PASS |
-| Test target isolation | strong sentinel, distinct-host check, scoped fixture cleanup | PASS |
-| Retention endpoint authentication | missing/wrong bearer secret returns 401; matching secret executes cleanup | PASS |
-| Authenticated acceptance | MT-199 Playwright journey with real session and isolated database | PASS |
-| Accessibility semantics | named heading/groups/controls and programmatic keyboard focus in Chromium | PASS |
-| Automated accessibility rules | axe WCAG 2.0/2.1 A/AA scan | PASS: zero violations after disabled-pagination contrast repair |
-| Runtime budgets | three refreshes below 30s; export below 10s | PASS |
-| Dependency audit | fresh `pnpm audit --prod --json`: 0 at all severities | PASS |
+| Direct registered refresh boundary requires Manage | `actions-permissions.test.ts:124` | PASS |
+| Every cursor page accumulated before reconciliation | `refresh-work-orders.test.ts:151` | PASS |
+| Repeated ServiceM8 cursor fails before transaction | `refresh-work-orders.test.ts:191` | PASS |
+| ServiceM8 response header crosses adapter | `lib/servicem8/__tests__/client.test.ts:34-58` | PASS |
+| Conditional active-write rejection for manual/operational/AI changes | `actions-permissions.test.ts` late-removal cases | PASS |
+| Real read-committed two-connection removal race | `active-item-write.integration.test.ts` | **SKIPPED: isolated sentinel DB unavailable** |
+| CSV hostile formula/control prefixes | `lib/__tests__/audit-export.test.ts` | PASS |
+| E2E sentinel/credential safety | `lib/__tests__/work-order-acceptance-safety.test.ts` | PASS |
+| Stable UUID, active options, removed items, atomic label history | Work Orders focused suites | PASS |
 
-Full post-repair regression evidence: 137 web files passed and 3 skipped; 826 tests passed and 17 skipped. The skips are unrelated environment-gated suites, not MT-192 failures. Axe 4.12.1 is installed and its authenticated Work Orders scan reports zero WCAG 2.0/2.1 A/AA violations.
+Security-focused rerun on the current worktree: **5 files, 84 tests passed**. The dedicated database integration discovery completed with **1 test skipped** because `E2E_DATABASE_URL` and matching `E2E_DATABASE_SENTINEL` are not configured.
+
+The latest execute slices also record the full web regression at **135 files / 810 tests passed, 3 files / 17 tests skipped**, with typecheck, focused lint, build, and diff checks passing.
+
+## Retired test gaps
+
+- Direct-action authorization: now covered and green.
+- Valid-looking paginated ServiceM8 response: now covered across multiple pages and repeated-cursor failure.
+- Conditional active-item write: now covered for all three actions by unit tests and by a sentinel-protected real DB test definition.
+
+## Remaining missing or blocked security tests
+
+| Required test | Status | Consequence |
+|---|---|---|
+| Real database active-write concurrency test execution | BLOCKED | Strong conditional SQL is statically/unit proven, but live DB race proof remains unavailable |
+| Mutating Playwright acceptance journey | BLOCKED | Dedicated migrated sentinel DB unavailable |
+| Live unauthenticated/expired/forged session rejection | Missing | Static guards and direct grant-negative units only |
+| Refresh single-flight and per-user throttle | **MISSING / FAIL** | No implementation |
+| ServiceM8/OpenAI timeout and safe provider-error translation | **MISSING / FAIL** | No implementation |
+| Bounded/streamed maximum export | **MISSING / FAIL** | No implementation |
+| No sensitive data in production logs | Missing | Static secret scan only |
+
+The E2E harness itself now fails closed before mutation unless an exact strong DB sentinel matches. That safety control passes; execution evidence remains blocked.

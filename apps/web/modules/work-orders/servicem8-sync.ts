@@ -69,7 +69,7 @@ export type WorkOrderSyncInput = {
   designStatus: string | null
   siteCondition: string | null
   remarks: string | null
-  rawServiceM8Snapshot: null
+  rawServiceM8Snapshot: ServiceM8WorkOrderJob
 }
 
 export function mapServiceM8JobsToWorkOrderInputs(jobs: ServiceM8WorkOrderJob[]): WorkOrderSyncInput[] {
@@ -233,6 +233,6 @@ function toWorkOrderSyncInput(job: ServiceM8WorkOrderJob): WorkOrderSyncInput | 
     designStatus: clean(job.design_status),
     siteCondition: clean(job.site_condition),
     remarks: clean(job.remarks),
-    rawServiceM8Snapshot: null,
+    rawServiceM8Snapshot: job,
   }
 }

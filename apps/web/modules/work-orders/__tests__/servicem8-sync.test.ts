@@ -171,7 +171,7 @@ describe('mapServiceM8JobsToWorkOrderInputs', () => {
         designStatus: 'Approved',
         siteCondition: 'Clear',
         remarks: 'Mind the driveway',
-        rawServiceM8Snapshot: null,
+        rawServiceM8Snapshot: expect.objectContaining({ uuid: 'job-1' }),
       },
     ])
   })

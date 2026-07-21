@@ -1,12 +1,4 @@
 import type { WorkOrderListFilters } from './list-filters'
-import type { WorkOrderItemEnrichmentStatusValue } from '@rgtools/db/schema-workorders'
-import {
-  INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE,
-  PRODUCTION_SPECIFICATION_FIELD_DEFINITIONS,
-  parsePersistedProductionSpecification,
-  productionSpecificationValueLabel,
-  type ProductionSpecificationCatalogueOption,
-} from './production-specifications'
 
 export type WorkOrderItemSummaryRow = {
   id: string
@@ -31,43 +23,6 @@ export type WorkOrderItemSummaryRow = {
   dateCompleted: string | null
   riskLevel: 'low' | 'medium' | 'high' | null
   importance: 'low' | 'medium' | 'high' | null
-  productionSpecification?: WorkOrderItemProductionSpecificationSummary | null
-  enrichmentStatus?: WorkOrderItemEnrichmentStatus | null
-}
-
-export type WorkOrderItemEnrichmentStatus = {
-  status: WorkOrderItemEnrichmentStatusValue
-  lastSafeError: string | null
-}
-
-export type WorkOrderItemProductionSpecificationSummary = {
-  id: string
-  status: 'needs_review' | 'confirmed'
-  draftData: unknown
-  confirmedData: unknown
-  productionLabel: string | null
-  confirmedAt: Date | null
-  confirmedRevision?: number
-  draftRevision?: number
-  sourceDescription?: string | null
-  sourceDescriptionFingerprint?: string | null
-  draftSourceDescription?: string | null
-  draftSourceDescriptionFingerprint?: string | null
-  currentSourceDescriptionFingerprint?: string | null
-  sourceChanged?: boolean
-  evidenceData?: Array<Record<string, unknown>>
-  ambiguityFlags?: string[]
-  history: Array<{
-    id: string
-    revisionType: string
-    actorUsername: string | null
-    previousSnapshot: unknown
-    newSnapshot: unknown
-    reasonCode: string | null
-    note: string | null
-    changes?: Array<Record<string, unknown>>
-    createdAt: Date
-  }>
 }
 
 export type PersistedWorkOrderItemSummaryRow = WorkOrderItemSummaryRow
@@ -103,8 +58,6 @@ export function attachActiveItemsToWorkOrders<T extends { id: string }>(
       dateCompleted: item.dateCompleted,
       riskLevel: item.riskLevel,
       importance: item.importance,
-      productionSpecification: item.productionSpecification,
-      enrichmentStatus: item.enrichmentStatus,
     }
     groupedItems.push(summaryItem)
     itemsByWorkOrderId.set(item.workOrderId, groupedItems)
@@ -133,7 +86,6 @@ type WorkOrderItemListParent = {
 export function applyWorkOrderItemListFilters<T extends WorkOrderItemListParent>(
   workOrders: T[],
   filters: WorkOrderListFilters,
-  catalogue: readonly ProductionSpecificationCatalogueOption[] = INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE,
 ): Array<T & { matchingActiveItemCount: number | null }> {
   const query = filters.q.trim().toLocaleLowerCase()
   const hasItemFilters = filters.risk !== 'all'
@@ -141,7 +93,6 @@ export function applyWorkOrderItemListFilters<T extends WorkOrderItemListParent>
     || filters.stage !== 'all'
     || filters.hardware !== 'all'
     || filters.maintenanceProgram !== 'all'
-    || Object.keys(filters.specification ?? {}).length > 0
 
   return workOrders.map((workOrder) => {
     const parentMatchesSearch = query !== '' && parentSearchValues(workOrder)
@@ -149,7 +100,7 @@ export function applyWorkOrderItemListFilters<T extends WorkOrderItemListParent>
     const items = workOrder.items.filter((item) => {
       if (!matchesConfiguredItemFilters(item, filters)) return false
       if (!query || parentMatchesSearch) return true
-      return itemSearchValues(item, catalogue).some((value) => value.toLocaleLowerCase().includes(query))
+      return itemSearchValues(item).some((value) => value.toLocaleLowerCase().includes(query))
     })
     const childrenAreNarrowed = hasItemFilters || Boolean(query && !parentMatchesSearch)
 
@@ -172,31 +123,7 @@ function matchesConfiguredItemFilters(item: WorkOrderItemSummaryRow, filters: Wo
     const expected = filters.maintenanceProgram === 'yes'
     if (item.maintenanceProgram !== expected) return false
   }
-  if (!matchesCurrentProductionSpecificationFilters(item, filters.specification ?? {})) return false
   return true
-}
-
-function matchesCurrentProductionSpecificationFilters(
-  item: WorkOrderItemSummaryRow,
-  filters: NonNullable<WorkOrderListFilters['specification']>,
-) {
-  const entries = Object.entries(filters)
-  if (entries.length === 0) return true
-
-  const confirmedData = item.productionSpecification?.confirmedData
-  if (!confirmedData || typeof confirmedData !== 'object' || Array.isArray(confirmedData)) return false
-  const specification = confirmedData as Record<string, unknown>
-
-  return entries.every(([field, catalogueId]) => {
-    const value = specification[field]
-    return Boolean(
-      value
-      && typeof value === 'object'
-      && !Array.isArray(value)
-      && (value as Record<string, unknown>).state === 'selected'
-      && (value as Record<string, unknown>).catalogueId === catalogueId,
-    )
-  })
 }
 
 function parentSearchValues(workOrder: WorkOrderItemListParent) {
@@ -209,52 +136,10 @@ function parentSearchValues(workOrder: WorkOrderItemListParent) {
   ].filter((value): value is string => Boolean(value))
 }
 
-function itemSearchValues(
-  item: WorkOrderItemSummaryRow,
-  catalogue: readonly ProductionSpecificationCatalogueOption[],
-) {
+function itemSearchValues(item: WorkOrderItemSummaryRow) {
   return [
     item.itemCode,
     item.manualLabelOverride ?? item.generatedLabel ?? item.originalDescription,
     item.originalDescription,
-    ...currentProductionSpecificationSearchValues(item, catalogue),
   ].filter((value): value is string => Boolean(value))
-}
-
-function currentProductionSpecificationSearchValues(
-  item: WorkOrderItemSummaryRow,
-  catalogue: readonly ProductionSpecificationCatalogueOption[],
-) {
-  const persisted = item.productionSpecification
-  if (!persisted?.confirmedData) return []
-
-  try {
-    const specification = parsePersistedProductionSpecification(persisted.confirmedData, catalogue)
-    return [
-      persisted.productionLabel,
-      ...PRODUCTION_SPECIFICATION_FIELD_DEFINITIONS.map(({ field }) => (
-        productionSpecificationValueLabel(specification[field], catalogue)
-      )),
-      ...specification.measurements.flatMap((measurement) => [
-        measurement.label,
-        measurement.kind,
-        measurement.value,
-        measurement.unit,
-      ]),
-      ...specification.additionalComponents.flatMap((component) => [
-        component.name,
-        component.quantity,
-        component.dimensions,
-        component.material,
-        component.finish,
-        component.notes,
-      ]),
-      ...specification.specialRequirements.flatMap((requirement) => [
-        requirement.kind,
-        requirement.detail,
-      ]),
-    ].filter((value): value is string => Boolean(value))
-  } catch {
-    return persisted.productionLabel ? [persisted.productionLabel] : []
-  }
 }

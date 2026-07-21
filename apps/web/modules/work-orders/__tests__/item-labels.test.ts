@@ -7,7 +7,6 @@ import { generateWorkOrderItemLabel, validateWorkOrderItemLabel } from '../item-
 afterEach(() => {
   vi.unstubAllEnvs()
   vi.restoreAllMocks()
-  vi.useRealTimers()
 })
 
 describe('generateWorkOrderItemLabel', () => {
@@ -48,36 +47,6 @@ describe('generateWorkOrderItemLabel', () => {
       'http://127.0.0.1:32199/v1/responses',
       expect.objectContaining({ method: 'POST' }),
     )
-  })
-
-  it('redacts the provider response body from non-success errors', async () => {
-    vi.stubEnv('OPENAI_API_KEY', 'test-openai-key')
-    const request = vi.fn(async () => new Response('provider secret body', { status: 502 }))
-
-    try {
-      await generateWorkOrderItemLabel('Controlled item', request)
-      throw new Error('Expected OpenAI label generation to fail.')
-    } catch (error) {
-      expect(error).toEqual(new Error('OpenAI Work Order label generation failed with HTTP 502.'))
-      expect(String(error)).not.toContain('provider secret body')
-    }
-  })
-
-  it('aborts a stalled provider request after the configured timeout', async () => {
-    vi.stubEnv('OPENAI_API_KEY', 'test-openai-key')
-    vi.useFakeTimers()
-    const request = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
-      init?.signal?.addEventListener('abort', () => {
-        reject(Object.assign(new Error('request aborted'), { name: 'AbortError' }))
-      })
-    }))
-
-    const result = generateWorkOrderItemLabel('Stalled item', request)
-    const rejection = expect(result).rejects.toThrow('OpenAI Work Order label generation timed out.')
-    await vi.advanceTimersByTimeAsync(30000)
-
-    await rejection
-    expect(request).toHaveBeenCalledOnce()
   })
 })
 

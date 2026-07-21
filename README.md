@@ -13,16 +13,16 @@ This repo is a pnpm workspace:
 
 ## What it does
 
-| Module           | Description                                                                                                                                                                                                        |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Dashboard**    | KPI overview for active tracked quotes, plus configurable operational tables                                                                                                                                       |
-| **Lead Intake**  | Staff form to capture and score inbound enquiries, auto-syncs to ServiceM8                                                                                                                                         |
-| **Leads**        | Paginated lead list and detail view with tier, ServiceM8, table, and date filters                                                                                                                                  |
-| **Clients**      | Canonical client records, linked lead/job context, and merge review tooling                                                                                                                                        |
-| **Quotes**       | Pull a ServiceM8 quote into a tracked short link, inspect engagement, and monitor active ServiceM8 Quote jobs with retained evidence, Source Coverage, and automatic What Matters Now summaries                    |
-| **Work Orders**  | Grouped active installation jobs and ServiceM8 item lines, with asynchronously drafted Production Specifications, review/confirmation, manual corrections, operational fields, and portal-safe timeline candidates |
-| **PS Generator** | Generate PS1 and PS3 Producer Statement PDF packages from published system, option, template, mapping, and wording configuration                                                                                   |
-| **Admin**        | User/module access, pricing/tracking settings, dashboard tables, audit/error exports, and client merge review                                                                                                      |
+| Module | Description |
+|--------|-------------|
+| **Dashboard** | KPI overview for active tracked quotes, plus configurable operational tables |
+| **Lead Intake** | Staff form to capture and score inbound enquiries, auto-syncs to ServiceM8 |
+| **Leads** | Paginated lead list and detail view with tier, ServiceM8, table, and date filters |
+| **Clients** | Canonical client records, linked lead/job context, and merge review tooling |
+| **Quote Tracker** | Pull a ServiceM8 quote into a tracked short link, share it, inspect client engagement, and generate AI follow-up guidance |
+| **Work Orders** | Grouped active installation jobs and ServiceM8 item lines, with AI-assisted production labels, manual corrections, operational fields, and portal-safe timeline candidates |
+| **PS Generator** | Generate PS1 and PS3 Producer Statement PDF packages from published system, option, template, mapping, and wording configuration |
+| **Admin** | User/module access, pricing/tracking settings, dashboard tables, audit/error exports, and client merge review |
 
 ## Tech stack
 
@@ -40,16 +40,13 @@ This repo is a pnpm workspace:
 
 - [Local setup](docs/dev/setup.md) - prerequisites, env vars, DB migration, seeding, testing
 - [Architecture](docs/dev/architecture.md) - system design, modules, auth, and lead scoring
-- [Royal Glass Precision UI](docs/dev/royal-glass-precision-ui.md) - theme contract, semantic tokens, shared presentation seams, and extension rules
 - [Deployment](docs/dev/deployment.md) - Vercel + Cloudflare Worker deployment
 - [Branch workflow](docs/dev/branch-workflow.md) - feature to staging and staging to production flow
 - [Changelog](docs/CHANGELOG.md) - release history and unreleased notes
 - [Security policy](docs/SECURITY.md) - reporting and operational security expectations
 - [Security runbook](docs/dev/security.md) - auth, access control, secrets, data boundaries, and incident response
 - [Quote tracking privacy note](docs/dev/quote-tracking.md) - what is collected, retention, access
-- [Quote Movement developer notes](docs/dev/quote-movement.md) - cached ServiceM8 Quote monitoring, retained evidence, automatic summaries, conversion, and durable non-blocking refresh behavior
 - [ServiceM8 sync architecture](docs/dev/servicem8-sync-architecture.md) - lead-to-ServiceM8 sync model
-- [Work Order enrichment operations](docs/dev/work-order-enrichment.md) - manual Hobby processing, privacy boundary, retry, monitoring, and rollback
 - [ServiceM8 MCP notes](docs/dev/servicem8-mcp.md) - ServiceM8 MCP setup and limits
 - [Domain and environment setup](docs/dev/rgtools-domain-and-env-setup.md) - Royal Glass domains, Neon branches, and env separation
 - [Cloudflare DNS migration](docs/dev/dns-migration-cloudflare.md) - DNS migration plan
@@ -58,14 +55,13 @@ This repo is a pnpm workspace:
 ## User docs
 
 - [Getting started](docs/user/getting-started.md) - login, dashboard, roles
-- [Appearance themes](docs/user/getting-started.md#appearance) - Light, Dark, and System usage
 - [Lead intake form](docs/how-to/lead-intake.md) - field-by-field guide
 - [Leads dashboard](docs/how-to/leads.md) - list, filters, detail view, ServiceM8 fetch
 - [RG Leads manual checklist](apps/web/tests/rg-leads-test-plan.md) - safe human verification for Quote-status lead workflows
 - [Client records](docs/how-to/clients.md) - client list, detail, links, and merge review
 - [Scoring guide](docs/user/scoring-guide.md) - Decision Matrix fields, tiers A-E, and follow-up actions
 - [Phone script](docs/user/phone-script-lead-intake.md) - call structure for consistent lead capture
-- [Quotes how-to](docs/how-to/quotes.md) - create tracked quotes, review Quote Movement, share links, read engagement, troubleshooting
+- [Quote Tracker how-to](docs/how-to/quotes.md) - create tracked quotes, share links, read engagement, troubleshooting
 - [PS Generator how-to](docs/how-to/ps-generator.md) - generate PS packages, understand configuration, and seed prerequisites
 
 ## Security

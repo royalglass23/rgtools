@@ -1,8 +1,4 @@
 import type { WorkOrderLevel } from './domain'
-import {
-  PRODUCTION_SPECIFICATION_FIELD_DEFINITIONS,
-  type ProductionSpecificationFieldName,
-} from './production-specifications'
 
 export type WorkOrderOptionFilter = string
 export type WorkOrderSortDirection = 'asc' | 'desc'
@@ -34,7 +30,6 @@ export type WorkOrderListFilters = {
   stage: WorkOrderOptionFilter
   hardware: WorkOrderOptionFilter
   maintenanceProgram: WorkOrderMaintenanceProgramFilter
-  specification?: Partial<Record<ProductionSpecificationFieldName, string>>
   showRemovedItems: boolean
   sort: WorkOrderSort
   page: number
@@ -46,8 +41,6 @@ export type ParseWorkOrderListFiltersOptions = {
   prefix?: string
   /** Admin-set default values used when a param is absent from the URL. */
   defaults?: Partial<Record<'current' | 'risk' | 'importance' | 'sort' | 'size', string>>
-  /** Globally enabled Production Specification fields. Omit to accept every supported field. */
-  specificationFields?: readonly ProductionSpecificationFieldName[]
 }
 
 const DEFAULT_FILTERS: WorkOrderListFilters = {
@@ -58,7 +51,6 @@ const DEFAULT_FILTERS: WorkOrderListFilters = {
   stage: 'all',
   hardware: 'all',
   maintenanceProgram: 'all',
-  specification: {},
   showRemovedItems: false,
   sort: 'lead_score_desc',
   page: 1,
@@ -107,13 +99,6 @@ export function parseWorkOrderListFilters(
   const stage = optionValue(searchParams[`${prefix}stage`])
   const hardware = optionValue(searchParams[`${prefix}hardware`])
   const maintenanceProgram = maintenanceProgramValue(searchParams[`${prefix}maintenanceProgram`])
-  const specification: Partial<Record<ProductionSpecificationFieldName, string>> = {}
-  const specificationFields = options.specificationFields
-    ?? PRODUCTION_SPECIFICATION_FIELD_DEFINITIONS.map(({ field }) => field)
-  for (const field of specificationFields) {
-    const value = stringValue(searchParams[`${prefix}spec_${field}`])?.trim()
-    if (value && value !== 'all') specification[field] = value
-  }
   const showRemovedItems = stringValue(searchParams[`${prefix}showRemovedItems`]) === '1'
   const sortCandidate = pick('sort')
   const page = Number(stringValue(searchParams[`${prefix}page`]) ?? DEFAULT_FILTERS.page)
@@ -127,7 +112,6 @@ export function parseWorkOrderListFilters(
     stage,
     hardware,
     maintenanceProgram,
-    specification,
     showRemovedItems,
     sort: sortValue(sortCandidate),
     page: Number.isInteger(page) && page > 0 ? page : DEFAULT_FILTERS.page,

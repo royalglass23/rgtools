@@ -7,11 +7,5 @@
       "main": true,
       "dev": true
     }
-  },
-  "crons": [
-    {
-      "path": "/api/cron/work-orders-retention",
-      "schedule": "0 15 * * 0"
-    }
-  ]
+  }
 }

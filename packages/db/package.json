@@ -8,7 +8,6 @@
     "./schema": "./src/schema.ts",
     "./schema-leads": "./src/schema-leads.ts",
     "./schema-ps-generator": "./src/schema-ps-generator.ts",
-    "./schema-quote-movement": "./src/schema-quote-movement.ts",
     "./schema-workorders": "./src/schema-workorders.ts"
   },
   "scripts": {

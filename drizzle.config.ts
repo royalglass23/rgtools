@@ -8,7 +8,6 @@ export default defineConfig({
     './packages/db/src/schema.ts',
     './packages/db/src/schema-leads.ts',
     './packages/db/src/schema-ps-generator.ts',
-    './packages/db/src/schema-quote-movement.ts',
     './packages/db/src/schema-workorders.ts',
   ],
   out: './drizzle/migrations',

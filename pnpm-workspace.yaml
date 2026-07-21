@@ -8,6 +8,3 @@ allowBuilds:
   sharp: true
   unrs-resolver: true
   workerd: true
-
-overrides:
-  postcss: 8.5.15

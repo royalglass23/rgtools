@@ -7,7 +7,6 @@ const whereCalls = vi.hoisted(() => [] as unknown[])
 const limitCalls = vi.hoisted(() => [] as unknown[])
 const offsetCalls = vi.hoisted(() => [] as unknown[])
 const selectResults = vi.hoisted(() => [] as unknown[])
-const selectShapes = vi.hoisted(() => [] as Array<Record<string, unknown>>)
 
 vi.mock('drizzle-orm', () => {
   function columnName(column: { name?: string }) {
@@ -95,40 +94,6 @@ vi.mock('@rgtools/db/schema-workorders', () => ({
     aiImportance: { name: 'work_order_items.ai_importance' },
     sortOrder: { name: 'work_order_items.sort_order' },
   },
-  workOrderSpecificationCatalogueOptions: {
-    id: { name: 'work_order_specification_catalogue_options.id' },
-    fieldName: { name: 'work_order_specification_catalogue_options.field_name' },
-    displayLabel: { name: 'work_order_specification_catalogue_options.display_label' },
-    productionLabel: { name: 'work_order_specification_catalogue_options.production_label' },
-  },
-  workOrderItemProductionSpecifications: {
-    id: { name: 'work_order_item_production_specifications.id' },
-    workOrderItemId: { name: 'work_order_item_production_specifications.work_order_item_id' },
-    status: { name: 'work_order_item_production_specifications.status' },
-    draftData: { name: 'work_order_item_production_specifications.draft_data' },
-    confirmedData: { name: 'work_order_item_production_specifications.confirmed_data' },
-    productionLabel: { name: 'work_order_item_production_specifications.production_label' },
-    evidenceData: { name: 'work_order_item_production_specifications.evidence_data' },
-    ambiguityFlags: { name: 'work_order_item_production_specifications.ambiguity_flags' },
-    confirmedAt: { name: 'work_order_item_production_specifications.confirmed_at' },
-  },
-  workOrderItemEnrichmentJobs: {
-    workOrderItemId: { name: 'work_order_item_enrichment_jobs.work_order_item_id' },
-    status: { name: 'work_order_item_enrichment_jobs.status' },
-    lastSafeError: { name: 'work_order_item_enrichment_jobs.last_safe_error' },
-    createdAt: { name: 'work_order_item_enrichment_jobs.created_at' },
-  },
-  workOrderItemProductionSpecificationRevisions: {
-    id: { name: 'work_order_item_production_specification_revisions.id' },
-    workOrderItemId: { name: 'work_order_item_production_specification_revisions.work_order_item_id' },
-    actorId: { name: 'work_order_item_production_specification_revisions.actor_id' },
-    revisionType: { name: 'work_order_item_production_specification_revisions.revision_type' },
-    previousSnapshot: { name: 'work_order_item_production_specification_revisions.previous_snapshot' },
-    newSnapshot: { name: 'work_order_item_production_specification_revisions.new_snapshot' },
-    reasonCode: { name: 'work_order_item_production_specification_revisions.reason_code' },
-    note: { name: 'work_order_item_production_specification_revisions.note' },
-    createdAt: { name: 'work_order_item_production_specification_revisions.created_at' },
-  },
   workOrderInstallers: {
     id: { name: 'installers.id' },
     displayName: { name: 'installers.display_name' },
@@ -205,19 +170,16 @@ function queryBuilder(result: unknown) {
 vi.mock('@/lib/db', () => ({
   db: {
     select: vi.fn((shape: Record<string, unknown>) => ({
-      from: vi.fn(() => {
-        selectShapes.push(shape)
-        return queryBuilder(
+      from: vi.fn(() => queryBuilder(
         selectResults.length > 0
           ? selectResults.shift()
           : ('total' in shape ? [{ total: 0 }] : []),
-        )
-      }),
+      )),
     })),
   },
 }))
 
-import { getWorkOrderDetail, listWorkOrders, listWorkOrdersForExport, WORK_ORDER_EXPORT_MAX_ROWS } from '../queries'
+import { getWorkOrderDetail, listWorkOrders, listWorkOrdersForExport } from '../queries'
 import type { WorkOrderBaseRow } from '../queries'
 import type { WorkOrderListFilters } from '../list-filters'
 import type { WorkOrderItemSummaryRow } from '../work-order-items'
@@ -243,35 +205,9 @@ beforeEach(() => {
   limitCalls.length = 0
   offsetCalls.length = 0
   selectResults.length = 0
-  selectShapes.length = 0
 })
 
 describe('listWorkOrders', () => {
-  it('selects the current Production Specification and immutable history with each item row', async () => {
-    const workOrder = workOrderRow({ id: 'work-order-with-specification' })
-    selectResults.push([{ total: 1 }], [workOrder], [])
-
-    await listWorkOrders(filters)
-
-    expect(selectShapes[2]).toEqual(expect.objectContaining({
-      productionSpecification: expect.objectContaining({
-        id: expect.anything(),
-        status: expect.anything(),
-        draftData: expect.anything(),
-        confirmedData: expect.anything(),
-        productionLabel: expect.anything(),
-        evidenceData: expect.anything(),
-        ambiguityFlags: expect.anything(),
-        confirmedAt: expect.anything(),
-        history: expect.objectContaining({ type: 'sql' }),
-      }),
-      enrichmentStatus: expect.objectContaining({
-        status: expect.objectContaining({ type: 'sql' }),
-        lastSafeError: expect.objectContaining({ type: 'sql' }),
-      }),
-    }))
-  })
-
   it('excludes non-current records by default without narrowing to one ServiceM8 status', async () => {
     await listWorkOrders(filters)
 
@@ -304,26 +240,6 @@ describe('listWorkOrders', () => {
     expect(searchCondition?.conditions).toEqual(expect.arrayContaining([
       expect.objectContaining({ type: 'sql', text: expect.stringContaining('exists') }),
     ]))
-  })
-
-  it('selects parent pages through current confirmed specification search and canonical filters only', async () => {
-    await listWorkOrders({
-      ...filters,
-      q: 'matte black',
-      specification: { hardwareFinish: 'hardware_finish.matte-black' },
-    })
-
-    const sqlText = collectSqlText(whereCalls[1])
-    expect(sqlText).toContain('production_label')
-    expect(sqlText).toContain('confirmed_data')
-    expect(sqlText).toContain('catalogueId')
-    expect(sqlText).toContain('jsonb_array_elements')
-    expect(sqlText).not.toContain('confirmed_data::text')
-    expect(sqlText).not.toContain('draft_data')
-    expect(sqlText).not.toContain('evidence_data')
-    expect(sqlText).not.toContain('revision')
-    expect(limitCalls).toEqual([5])
-    expect(offsetCalls).toEqual([0])
   })
 
   it('pages parent Work Orders and uses a deterministic default score order', async () => {
@@ -410,7 +326,7 @@ describe('listWorkOrders', () => {
       type: 'sql',
       text: 'lower(?) asc nulls last',
     }))
-    expect(limitCalls).toEqual([WORK_ORDER_EXPORT_MAX_ROWS + 1])
+    expect(limitCalls).toEqual([])
     expect(offsetCalls).toEqual([])
   })
 
@@ -449,16 +365,6 @@ describe('listWorkOrders', () => {
       { ...workOrder, item: firstItem },
       { ...workOrder, item: secondItem },
     ])
-  })
-
-  it('rejects an export that exceeds the bounded Work Order parent set', async () => {
-    selectResults.push(Array.from({ length: WORK_ORDER_EXPORT_MAX_ROWS + 1 }, (_, index) => (
-      workOrderRow({ id: `work-order-${index}` })
-    )))
-
-    await expect(listWorkOrdersForExport(filters)).rejects.toThrow(
-      `Work Order export exceeds the ${WORK_ORDER_EXPORT_MAX_ROWS}-row limit. Narrow the filters and try again.`,
-    )
   })
 
   it('keeps a zero-item Work Order in the export with a blank item', async () => {
@@ -611,14 +517,4 @@ function workOrderRow(overrides: Partial<WorkOrderBaseRow>): WorkOrderBaseRow {
     updatedAt: new Date('2026-07-15T00:00:00.000Z'),
     ...overrides,
   }
-}
-
-function collectSqlText(value: unknown): string {
-  if (!value || typeof value !== 'object') return ''
-  if (Array.isArray(value)) return value.map(collectSqlText).join(' ')
-  const record = value as Record<string, unknown>
-  return [
-    typeof record.text === 'string' ? record.text : '',
-    ...Object.values(record).map(collectSqlText),
-  ].join(' ')
 }

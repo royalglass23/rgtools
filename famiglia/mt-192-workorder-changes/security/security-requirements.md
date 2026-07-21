@@ -3,8 +3,8 @@
 - Mode: retrofit
 - Stack: Node.js / Next.js 16, React 19, Drizzle/PostgreSQL, NextAuth 5 beta
 - Stack source: `famiglia/profile.json` (`marker:package.json`)
-- Reviewed state: `73c3e84341c268ceb335b5a1f342b33685959916` plus the current dirty MT-192 repair/evidence delta
-- Date: 2026-07-16
+- Reviewed state: `e2c167aad9f7a77851c548afd3d33b5f7efd0224` plus the current dirty MT-199 repair delta
+- Date: 2026-07-15
 
 ## Actors and trust
 
@@ -24,8 +24,6 @@
 2. View, Manage, and Configure remain separate grants; a viewer cannot refresh, relabel, edit, delete, or configure Work Orders.
 3. Item mutations reject missing/removed resources and require active configured option IDs.
 4. Every required ServiceM8 cursor page is fetched and validated before the reconciliation transaction; repeated cursors fail closed.
-4a. Each required ServiceM8 dataset has a finite page budget so a non-terminating unique-cursor sequence cannot consume the refresh indefinitely.
-4b. Each ServiceM8 adapter request has a finite abort timeout so a stalled provider cannot hold refresh or write capacity indefinitely.
 5. Stable ServiceM8 job/item UUIDs are mandatory identities.
 6. Active item state is a write precondition, not only a prior read check.
 7. Manual and AI label mutations persist the value, item event, and global audit atomically.

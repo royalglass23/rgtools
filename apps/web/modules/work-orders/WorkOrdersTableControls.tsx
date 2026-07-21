@@ -8,13 +8,6 @@ import type { WorkOrderListFilters } from './list-filters'
 import type { WorkOrderRow } from './queries'
 import type { WorkOrderSummaryFieldConfig } from './summary-config'
 import { WorkOrderItemsSummary } from './WorkOrderItemsSummary'
-import {
-  INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE,
-  PRODUCTION_SPECIFICATION_FIELD_DEFINITIONS,
-  productionSpecificationFieldLabel,
-  type ProductionSpecificationCatalogueOption,
-} from './production-specifications'
-import type { WorkOrderSpecificationFilterConfig } from './specification-filter-config'
 
 type FilterOption = { id: string; label: string }
 
@@ -35,8 +28,6 @@ export function WorkOrdersTableControls({
   paramPrefix = '',
   isAdmin = false,
   canManage = false,
-  catalogue = INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE,
-  specificationFilters = [],
 }: {
   rows: WorkOrderRow[]
   filters: WorkOrderListFilters
@@ -48,8 +39,6 @@ export function WorkOrdersTableControls({
   paramPrefix?: string
   isAdmin?: boolean
   canManage?: boolean
-  catalogue?: readonly ProductionSpecificationCatalogueOption[]
-  specificationFilters?: readonly WorkOrderSpecificationFilterConfig[]
 }) {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds])
@@ -73,8 +62,6 @@ export function WorkOrdersTableControls({
         filters={filters}
         options={options}
         fields={fields}
-        catalogue={catalogue}
-        specificationFilters={specificationFilters}
         basePath={basePath}
         paramPrefix={paramPrefix}
       />
@@ -121,7 +108,6 @@ export function WorkOrdersTableControls({
         options={options}
         isAdmin={isAdmin}
         canManage={canManage}
-        catalogue={catalogue}
         selectedSet={selectedSet}
         allVisibleSelected={allVisibleSelected}
         onToggleWorkOrder={toggleWorkOrder}
@@ -147,30 +133,23 @@ function WorkOrderFilters({
   filters,
   options,
   fields,
-  catalogue,
-  specificationFilters,
   basePath,
   paramPrefix,
 }: {
   filters: WorkOrderListFilters
   options: WorkOrderFilterOptions
   fields: WorkOrderSummaryFieldConfig[]
-  catalogue: readonly ProductionSpecificationCatalogueOption[]
-  specificationFilters: readonly WorkOrderSpecificationFilterConfig[]
   basePath: string
   paramPrefix: string
 }) {
   const searchParams = useSearchParams()
-  const owned = ownedFilterParamNames(paramPrefix)
+  const owned = new Set(['q', 'current', 'risk', 'importance', 'stage', 'hardware', 'maintenanceProgram', 'showRemovedItems', 'sort', 'size', 'page'].map((name) => `${paramPrefix}${name}`))
   const carryOver = Array.from(searchParams.entries()).filter(([key]) => !owned.has(key))
   const resetParams = new URLSearchParams(carryOver)
   resetParams.set(`${paramPrefix}size`, String(filters.size))
   resetParams.set(`${paramPrefix}page`, '1')
   const resetHref = resetParams.toString() ? `${basePath}?${resetParams}` : basePath
   const filterable = new Set(fields.filter((field) => field.filterable).map((field) => field.id))
-  const enabledSpecificationFilters = specificationFilters
-    .filter((filter) => filter.enabled)
-    .sort((left, right) => left.order - right.order)
 
   return (
     <form action={basePath} className="grid items-end gap-3 rounded border border-gray-200 bg-white p-4 shadow-sm md:grid-cols-2 xl:grid-cols-[minmax(320px,1.6fr)_repeat(6,minmax(135px,1fr))_auto]">
@@ -199,21 +178,6 @@ function WorkOrderFilters({
       {filterable.has('stage') && <Select name={`${paramPrefix}stage`} label="Stage" value={filters.stage} options={[['all', 'All'], ...options.stages.map((option) => [option.id, option.label] as [string, string])]} />}
       {filterable.has('hardware') && <Select name={`${paramPrefix}hardware`} label="Hardware" value={filters.hardware} options={[['all', 'All'], ...options.hardwareStatuses.map((option) => [option.id, option.label] as [string, string])]} />}
       {filterable.has('maintenanceProgram') && <Select name={`${paramPrefix}maintenanceProgram`} label="Maintenance Program" value={filters.maintenanceProgram} options={[['all', 'All'], ['yes', 'Yes'], ['no', 'No']]} />}
-      {enabledSpecificationFilters.map(({ field }) => (
-        <Select
-          key={field}
-          name={`${paramPrefix}spec_${field}`}
-          label={productionSpecificationFieldLabel(field)}
-          value={filters.specification?.[field] ?? 'all'}
-          options={[
-            ['all', 'All'],
-            ...catalogue
-              .filter((option) => option.field === field && option.isActive !== false)
-              .sort((left, right) => (left.sortOrder ?? 0) - (right.sortOrder ?? 0))
-              .map((option) => [option.id, option.displayLabel] as [string, string]),
-          ]}
-        />
-      ))}
       <Select
         name={`${paramPrefix}sort`}
         label="Sort"
@@ -264,7 +228,6 @@ function WorkOrdersTable({
   options,
   isAdmin,
   canManage,
-  catalogue,
   selectedSet,
   allVisibleSelected,
   onToggleWorkOrder,
@@ -276,7 +239,6 @@ function WorkOrdersTable({
   options: WorkOrderFilterOptions
   isAdmin: boolean
   canManage: boolean
-  catalogue: readonly ProductionSpecificationCatalogueOption[]
   selectedSet: Set<string>
   allVisibleSelected: boolean
   onToggleWorkOrder: (workOrderId: string) => void
@@ -296,9 +258,9 @@ function WorkOrdersTable({
   }
 
   return (
-    <div className="overflow-hidden rounded border border-border bg-surface shadow-sm">
+    <div className="overflow-hidden rounded border border-gray-200 bg-white shadow-sm">
       {isAdmin && rows.length > 0 && (
-        <div className="border-b border-border bg-surface-subtle px-4 py-3">
+        <div className="border-b border-gray-200 bg-gray-50 px-4 py-3">
           <label className="inline-flex items-center gap-2 text-sm text-gray-700">
             <input
               type="checkbox"
@@ -312,12 +274,12 @@ function WorkOrdersTable({
         </div>
       )}
 
-      <div className="divide-y divide-border">
+      <div className="divide-y divide-gray-200">
         {rows.map((row, rowIndex) => {
           const isExpanded = !collapsedWorkOrderIds.includes(row.id)
           const workOrderLabel = row.jobNumber ?? row.id
           const jobTone = rowIndex % 2 === 0 ? 'white' : 'tint'
-          const jobHeaderTone = jobTone === 'tint' ? 'bg-surface-subtle' : 'bg-surface'
+          const jobHeaderTone = jobTone === 'tint' ? 'bg-[#E8EEF1]' : 'bg-white'
 
           return (
             <section key={row.id} role="group" aria-label={`Work Order ${workOrderLabel}`}>
@@ -370,7 +332,6 @@ function WorkOrdersTable({
                   canManage={canManage}
                   fields={fields}
                   tone={jobTone}
-                  catalogue={catalogue}
                 />
               )}
             </section>
@@ -480,7 +441,7 @@ function PageLink({
   paramPrefix: string
   children: React.ReactNode
 }) {
-  if (disabled) return <span className="rounded border border-gray-200 px-3 py-1.5 text-gray-600">{children}</span>
+  if (disabled) return <span className="rounded border border-gray-200 px-3 py-1.5 text-gray-400">{children}</span>
   const params = paramsFor(filters, paramPrefix)
   params.set(`${paramPrefix}page`, String(page))
   return <Link href={`${basePath}?${params}`} className="rounded border border-gray-300 px-3 py-1.5 text-gray-700 hover:bg-gray-50">{children}</Link>
@@ -512,7 +473,7 @@ function PageSizeSelect({ filters, basePath, paramPrefix }: { filters: WorkOrder
 function paramsFor(filters: WorkOrderListFilters, paramPrefix: string, searchParams?: ReturnType<typeof useSearchParams>) {
   const params = new URLSearchParams()
   if (searchParams) {
-    const owned = ownedFilterParamNames(paramPrefix)
+    const owned = new Set(['q', 'current', 'risk', 'importance', 'stage', 'hardware', 'maintenanceProgram', 'showRemovedItems', 'sort', 'size', 'page'].map((name) => `${paramPrefix}${name}`))
     for (const [key, value] of searchParams.entries()) {
       if (!owned.has(key)) params.append(key, value)
     }
@@ -524,31 +485,11 @@ function paramsFor(filters: WorkOrderListFilters, paramPrefix: string, searchPar
   params.set(`${paramPrefix}stage`, filters.stage)
   params.set(`${paramPrefix}hardware`, filters.hardware)
   params.set(`${paramPrefix}maintenanceProgram`, filters.maintenanceProgram)
-  for (const [field, catalogueId] of Object.entries(filters.specification ?? {})) {
-    if (catalogueId) params.set(`${paramPrefix}spec_${field}`, catalogueId)
-  }
   if (filters.showRemovedItems) params.set(`${paramPrefix}showRemovedItems`, '1')
   params.set(`${paramPrefix}sort`, filters.sort)
   params.set(`${paramPrefix}size`, String(filters.size))
   params.set(`${paramPrefix}page`, String(filters.page))
   return params
-}
-
-function ownedFilterParamNames(paramPrefix: string) {
-  return new Set([
-    'q',
-    'current',
-    'risk',
-    'importance',
-    'stage',
-    'hardware',
-    'maintenanceProgram',
-    'showRemovedItems',
-    'sort',
-    'size',
-    'page',
-    ...PRODUCTION_SPECIFICATION_FIELD_DEFINITIONS.map(({ field }) => `spec_${field}`),
-  ].map((name) => `${paramPrefix}${name}`))
 }
 
 function formatNullableDate(value: string | null) {
