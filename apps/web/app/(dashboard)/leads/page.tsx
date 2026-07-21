@@ -6,6 +6,7 @@ import { getLeadsList, parseLeadsListFilters } from '@/modules/leads/queries'
 import { loadTablePrefs } from '@/modules/leads/table-prefs'
 import { DEFAULT_LEADS_PREFS } from '@/modules/leads/table-prefs-shared'
 import { importServiceM8LeadAction } from './actions'
+import { PageHeader, precisionSecondaryLinkClassName } from '@/components/precision-ui/PrecisionUI'
 
 export default async function LeadsPage({
   searchParams,
@@ -29,18 +30,20 @@ export default async function LeadsPage({
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold text-gray-950">Leads</h1>
-        <div className="flex flex-wrap items-end gap-3">
+      <PageHeader
+        eyebrow="Sales pipeline"
+        title="Leads"
+        description="Review, prioritise and progress incoming opportunities."
+        actions={<div className="flex flex-wrap items-end gap-3">
           <ImportServiceM8LeadForm action={importServiceM8LeadAction} />
           <Link
             href="/lead-intake"
-            className="rounded bg-[#142B3A] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#1d3d52]"
+            className={precisionSecondaryLinkClassName}
           >
             New Lead
           </Link>
-        </div>
-      </div>
+        </div>}
+      />
 
       <LeadsTableControls
         filters={filters}

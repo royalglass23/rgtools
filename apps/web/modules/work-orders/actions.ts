@@ -46,12 +46,17 @@ import {
 } from './summary-config'
 import { updateActiveWorkOrderItem } from './active-item-write'
 import { canConfigureSummaryFieldAsEditable } from './summary-field-policy'
+import { acquireWorkOrderRateLimit, withWorkOrderItemLabelLock, withWorkOrderRefreshLock } from './refresh-lock'
 import {
   fingerprintSourceDescription,
-  refreshWorkOrderItemLabels,
-  type WorkOrderItemLabelStore,
 } from './item-label-lifecycle'
-import { generateWorkOrderItemLabel, type WorkOrderItemLabelGenerator } from './item-labels'
+import { generateWorkOrderItemLabel } from './item-labels'
+import {
+  queueWorkOrderItemEnrichments,
+  type WorkOrderItemEnrichmentEnqueuer,
+} from './enrichment-jobs'
+import { createWorkOrderEnrichmentRuntimeStore } from './enrichment-runtime-store'
+import { processWorkOrderEnrichmentQueue } from './enrichment-worker'
 import {
   parseWorkOrderItemOperationalValue,
   readWorkOrderItemOperationalValue,
@@ -68,9 +73,22 @@ type ServiceM8Company = {
 
 const WORK_ORDER_FILTER = "active eq 1 and status eq 'Work Order'"
 const ACTIVE_FILTER = 'active eq 1'
+const WORK_ORDER_SERVICEM8_MAX_PAGES = 25
+
+type WorkOrderRefreshResult = {
+  synced: number
+  itemsSynced: number
+  excludedLineCount: number
+}
+
+type WorkOrderRefreshScope =
+  | { kind: 'all' }
+  | { kind: 'job'; jobNumber: string }
+
+let inFlightWorkOrderRefresh: Promise<WorkOrderRefreshResult> | null = null
 
 export async function refreshWorkOrdersAction() {
-  await assertCurrentUserCanManageWorkOrders()
+  await assertRefreshManageAccessWithAudit()
 
   try {
     await refreshWorkOrdersFromServiceM8()
@@ -79,6 +97,60 @@ export async function refreshWorkOrdersAction() {
   }
 
   revalidatePath('/work-orders')
+}
+
+export async function updateWorkOrderByJobNumberAction(
+  _previousState: { status: 'idle' | 'success' | 'error'; message: string },
+  formData: FormData,
+): Promise<{ status: 'success' | 'error'; message: string }> {
+  let jobNumber: string
+  let refresh: WorkOrderRefreshResult
+  try {
+    jobNumber = normalizeServiceM8JobNumber(String(formData.get('jobNumber') ?? ''))
+    refresh = await refreshWorkOrderByJobNumberFromServiceM8(jobNumber)
+  } catch (error) {
+    return {
+      status: 'error',
+      message: safeJobUpdateErrorMessage(error),
+    }
+  }
+
+  revalidatePath('/work-orders')
+
+  let enrichment: Awaited<ReturnType<typeof processWorkOrderEnrichmentQueue>>
+  try {
+    enrichment = await processWorkOrderEnrichmentQueue({
+      store: createWorkOrderEnrichmentRuntimeStore({ jobNumber }),
+      concurrency: 3,
+      timeoutMs: 30_000,
+      leaseMs: 60_000,
+      maxAttempts: 3,
+      maxBatches: 8,
+      timeBudgetMs: 240_000,
+    })
+  } catch {
+    return {
+      status: 'success',
+      message: `Job ${jobNumber} updated: ${refresh.itemsSynced} item${refresh.itemsSynced === 1 ? '' : 's'} refreshed. AI processing could not complete; queued drafts remain available for retry.`,
+    }
+  }
+
+  const skipped = enrichment.skippedConfirmed
+    + enrichment.skippedInactive
+    + enrichment.skippedStaffEdited
+  const followUp = [
+    enrichment.failed > 0 ? 'Review failed items and use Retry.' : null,
+    enrichment.retried > 0
+      ? `${enrichment.retried} AI draft${enrichment.retried === 1 ? '' : 's'} will retry after a delay.`
+      : null,
+    enrichment.limitReached
+      ? 'More drafts may remain queued; wait one minute and update this job again.'
+      : null,
+  ].filter(Boolean).join(' ')
+  return {
+    status: 'success',
+    message: `Job ${jobNumber} updated: ${refresh.itemsSynced} item${refresh.itemsSynced === 1 ? '' : 's'} refreshed; ${enrichment.drafted} AI draft${enrichment.drafted === 1 ? '' : 's'} created; ${enrichment.failed} failed; ${skipped} skipped.${followUp ? ` ${followUp}` : ''}`,
+  }
 }
 
 export async function batchDeleteWorkOrdersAction(formData: FormData): Promise<void> {
@@ -114,9 +186,57 @@ export async function batchDeleteWorkOrdersAction(formData: FormData): Promise<v
 
 export async function refreshWorkOrdersFromServiceM8(
   request: ServiceM8FetchRequest = createServiceM8RequestFromEnv(),
-  generateLabel: WorkOrderItemLabelGenerator = generateWorkOrderItemLabel,
-) {
-  await assertCurrentUserCanManageWorkOrders()
+  enqueueEnrichments: WorkOrderItemEnrichmentEnqueuer = queueWorkOrderItemEnrichments,
+): Promise<WorkOrderRefreshResult> {
+  const actorId = await assertRefreshManageAccessWithAudit()
+
+  if (inFlightWorkOrderRefresh) return inFlightWorkOrderRefresh
+
+  if (actorId && !(await acquireWorkOrderRateLimit('refresh', actorId))) {
+    throw new Error('Work Orders refresh was requested too recently. Please wait a minute before trying again.')
+  }
+
+  const refreshPromise = withWorkOrderRefreshLock(() => performWorkOrderRefresh(
+    request,
+    enqueueEnrichments,
+    actorId,
+    { kind: 'all' },
+  ))
+  inFlightWorkOrderRefresh = refreshPromise
+
+  try {
+    return await refreshPromise
+  } finally {
+    if (inFlightWorkOrderRefresh === refreshPromise) inFlightWorkOrderRefresh = null
+  }
+}
+
+export async function refreshWorkOrderByJobNumberFromServiceM8(
+  jobNumber: string,
+  request: ServiceM8FetchRequest = createServiceM8RequestFromEnv(),
+  enqueueEnrichments: WorkOrderItemEnrichmentEnqueuer = queueWorkOrderItemEnrichments,
+): Promise<WorkOrderRefreshResult> {
+  const actorId = await assertRefreshManageAccessWithAudit()
+  const normalizedJobNumber = normalizeServiceM8JobNumber(jobNumber)
+
+  if (actorId && !(await acquireWorkOrderRateLimit('refresh-job', actorId))) {
+    throw new Error('A Work Order update was requested too recently. Please wait a minute before trying again.')
+  }
+
+  return withWorkOrderRefreshLock(() => performWorkOrderRefresh(
+    request,
+    enqueueEnrichments,
+    actorId,
+    { kind: 'job', jobNumber: normalizedJobNumber },
+  ))
+}
+
+async function performWorkOrderRefresh(
+  request: ServiceM8FetchRequest,
+  enqueueEnrichments: WorkOrderItemEnrichmentEnqueuer,
+  actorId: string | null,
+  scope: WorkOrderRefreshScope,
+): Promise<WorkOrderRefreshResult> {
 
   let jobRows: ServiceM8WorkOrderJob[]
   let companyRows: ServiceM8Company[]
@@ -125,15 +245,55 @@ export async function refreshWorkOrdersFromServiceM8(
   let billingExclusions: string[]
 
   try {
-    [jobRows, companyRows, jobMaterialRows, materialRows, billingExclusions] = await Promise.all([
-      readServiceM8Array<ServiceM8WorkOrderJob>(request, `/job.json${odataFilter(WORK_ORDER_FILTER)}`, 'job'),
-      readServiceM8Array<ServiceM8Company>(request, '/company.json', 'company'),
-      readServiceM8Array<ServiceM8JobMaterial>(request, `/jobmaterial.json${odataFilter(ACTIVE_FILTER)}`, 'jobmaterial'),
-      readServiceM8Array<ServiceM8Material>(request, '/material.json', 'material'),
-      getWorkOrderBillingExclusions(),
-    ])
+    if (scope.kind === 'job') {
+      const targetedFilter = `${WORK_ORDER_FILTER} and generated_job_id eq '${escapeOdataString(scope.jobNumber)}'`
+      jobRows = await readServiceM8Array<ServiceM8WorkOrderJob>(
+        request,
+        `/job.json${odataFilter(targetedFilter)}`,
+        'job',
+      )
+      const [targetedInput] = mapServiceM8JobsToWorkOrderInputs(jobRows)
+      if (!targetedInput?.servicem8JobUuid) {
+        throw new Error(`ServiceM8 Work Order ${scope.jobNumber} was not found.`)
+      }
+      const companyUuid = targetedInput.servicem8CompanyUuid
+      ;[companyRows, jobMaterialRows, billingExclusions] = await Promise.all([
+        companyUuid
+          ? readServiceM8Object<ServiceM8Company>(
+            request,
+            `/company/${encodeURIComponent(companyUuid)}.json`,
+            'company',
+          ).then((company) => [company])
+          : Promise.resolve([]),
+        readServiceM8Array<ServiceM8JobMaterial>(
+          request,
+          `/jobmaterial.json${odataFilter(`${ACTIVE_FILTER} and job_uuid eq '${escapeOdataString(targetedInput.servicem8JobUuid)}'`)}`,
+          'jobmaterial',
+        ),
+        getWorkOrderBillingExclusions(),
+      ])
+      const materialUuids = Array.from(new Set(jobMaterialRows.flatMap((row) => {
+        const materialUuid = String(row.material_uuid ?? '').trim()
+        return materialUuid ? [materialUuid] : []
+      })))
+      materialRows = await Promise.all(materialUuids.map((materialUuid) => (
+        readServiceM8Object<ServiceM8Material>(
+          request,
+          `/material/${encodeURIComponent(materialUuid)}.json`,
+          'material',
+        )
+      )))
+    } else {
+      [jobRows, companyRows, jobMaterialRows, materialRows, billingExclusions] = await Promise.all([
+        readServiceM8Array<ServiceM8WorkOrderJob>(request, `/job.json${odataFilter(WORK_ORDER_FILTER)}`, 'job'),
+        readServiceM8Array<ServiceM8Company>(request, '/company.json', 'company'),
+        readServiceM8Array<ServiceM8JobMaterial>(request, `/jobmaterial.json${odataFilter(ACTIVE_FILTER)}`, 'jobmaterial'),
+        readServiceM8Array<ServiceM8Material>(request, '/material.json', 'material'),
+        getWorkOrderBillingExclusions(),
+      ])
+    }
   } catch (error) {
-    await recordRefreshFailure(error)
+    await recordRefreshFailure(error, actorId)
     throw error
   }
 
@@ -165,7 +325,7 @@ export async function refreshWorkOrdersFromServiceM8(
       excludedLineCount: normalizedItems.excludedLineCount,
     }
   } catch (error) {
-    await recordRefreshFailure(error)
+    await recordRefreshFailure(error, actorId)
     throw error
   }
 
@@ -179,7 +339,24 @@ export async function refreshWorkOrdersFromServiceM8(
   const now = new Date()
   const seenIdentityKeys = inputs.map((input) => `${input.identityKind}:${input.identityValue}`)
   const seenItemUuids = itemInputs.map((input) => input.servicem8ItemUuid)
+  const existingItemRows = seenItemUuids.length > 0
+    ? await db
+      .select({
+        servicem8ItemUuid: workOrderItems.servicem8ItemUuid,
+        enrichmentHandoffPending: workOrderItems.enrichmentHandoffPending,
+      })
+      .from(workOrderItems)
+      .where(inArray(workOrderItems.servicem8ItemUuid, seenItemUuids))
+    : []
+  const existingItemUuids = new Set(existingItemRows.map((item) => item.servicem8ItemUuid))
+  const pendingHandoffUuids = new Set(existingItemRows.flatMap((item) => (
+    item.enrichmentHandoffPending ? [item.servicem8ItemUuid] : []
+  )))
+  const enrichmentHandoffInputs = itemInputs.filter((item) => (
+    !existingItemUuids.has(item.servicem8ItemUuid) || pendingHandoffUuids.has(item.servicem8ItemUuid)
+  ))
   let itemsSynced = 0
+  const persistedWorkOrderIds: string[] = []
 
   try {
     await db.transaction(async (tx) => {
@@ -266,6 +443,7 @@ export async function refreshWorkOrdersFromServiceM8(
         if (!persistedWorkOrder) {
           throw new Error(`Work Order refresh could not persist ${input.identityKind}:${input.identityValue}.`)
         }
+        persistedWorkOrderIds.push(persistedWorkOrder.id)
 
         const workOrderItemInputs = input.servicem8JobUuid
           ? itemInputsByJobUuid.get(input.servicem8JobUuid) ?? []
@@ -284,6 +462,7 @@ export async function refreshWorkOrdersFromServiceM8(
               lineTotalExcludingGst: itemInput.lineTotalExcludingGst,
               sortOrder: itemInput.sortOrder,
               isActive: true,
+              enrichmentHandoffPending: !existingItemUuids.has(itemInput.servicem8ItemUuid),
               updatedAt: now,
             })
             .onConflictDoUpdate({
@@ -304,32 +483,50 @@ export async function refreshWorkOrdersFromServiceM8(
         }
       }
 
-      await tx
-        .update(workOrders)
-        .set({
-          servicem8Active: false,
-          isCurrent: false,
-          updatedAt: now,
-        })
-        .where(
-          seenIdentityKeys.length > 0
-            ? notInArray(sql<string>`${workOrders.identityKind} || ':' || ${workOrders.identityValue}`, seenIdentityKeys)
-            : undefined,
-        )
+      if (scope.kind === 'all') {
+        await tx
+          .update(workOrders)
+          .set({
+            servicem8Active: false,
+            isCurrent: false,
+            updatedAt: now,
+          })
+          .where(
+            seenIdentityKeys.length > 0
+              ? notInArray(sql<string>`${workOrders.identityKind} || ':' || ${workOrders.identityValue}`, seenIdentityKeys)
+              : undefined,
+          )
 
-      await tx
-        .update(workOrderItems)
-        .set({
-          isActive: false,
-          updatedAt: now,
-        })
-        .where(
-          seenItemUuids.length > 0
-            ? notInArray(workOrderItems.servicem8ItemUuid, seenItemUuids)
-            : undefined,
-        )
+        await tx
+          .update(workOrderItems)
+          .set({
+            isActive: false,
+            updatedAt: now,
+          })
+          .where(
+            seenItemUuids.length > 0
+              ? notInArray(workOrderItems.servicem8ItemUuid, seenItemUuids)
+              : undefined,
+          )
+      } else {
+        for (const workOrderId of persistedWorkOrderIds) {
+          await tx
+            .update(workOrderItems)
+            .set({
+              isActive: false,
+              updatedAt: now,
+            })
+            .where(and(
+              eq(workOrderItems.workOrderId, workOrderId),
+              seenItemUuids.length > 0
+                ? notInArray(workOrderItems.servicem8ItemUuid, seenItemUuids)
+                : sql`true`,
+            ))
+        }
+      }
 
       await tx.insert(workOrderRefreshRuns).values({
+        actorId,
         status: 'success',
         syncedCount: inputs.length,
         itemSyncedCount: itemsSynced,
@@ -337,17 +534,64 @@ export async function refreshWorkOrdersFromServiceM8(
       })
     })
   } catch (error) {
-    await recordRefreshFailure(error)
+    await recordRefreshFailure(error, actorId)
     throw error
   }
 
   try {
-    await refreshPersistedWorkOrderItemLabels(generateLabel)
+    const queueResult = await enqueueEnrichments(enrichmentHandoffInputs.map((item) => ({
+      servicem8ItemUuid: item.servicem8ItemUuid,
+      originalDescription: item.originalDescription,
+    })))
+    if (enrichmentHandoffInputs.length > 0) {
+      await db
+        .update(workOrderItems)
+        .set({ enrichmentHandoffPending: false, updatedAt: new Date() })
+        .where(inArray(
+          workOrderItems.servicem8ItemUuid,
+          enrichmentHandoffInputs.map((item) => item.servicem8ItemUuid),
+        ))
+    }
+    if (typeof queueResult !== 'number' && queueResult.rejected > 0) {
+      await recordEnrichmentQueueHandoffAudit({
+        actorId,
+        action: 'work_order.enrichment_queue_handoff_partial',
+        detail: {
+          queued: queueResult.queued,
+          rejected: queueResult.rejected,
+          reconciliationCommitted: true,
+        },
+      })
+    }
   } catch {
-    // ServiceM8 reconciliation is already committed. Label processing remains retryable.
+    await recordEnrichmentQueueHandoffAudit({
+      actorId,
+      action: 'work_order.enrichment_queue_handoff_failed',
+      detail: {
+        candidateCount: enrichmentHandoffInputs.length,
+        reconciliationCommitted: true,
+      },
+    })
   }
 
   return { synced: inputs.length, itemsSynced, excludedLineCount }
+}
+
+async function recordEnrichmentQueueHandoffAudit(input: {
+  actorId: string | null
+  action: string
+  detail: Record<string, unknown>
+}) {
+  try {
+    await logAudit({
+      actorId: input.actorId,
+      entityType: 'work_order',
+      action: input.action,
+      detail: input.detail,
+    })
+  } catch {
+    // Reconciliation is already committed; observability failure must not falsify its result.
+  }
 }
 
 export async function updateWorkOrderItemLabelAction(itemId: string, formData: FormData) {
@@ -461,7 +705,11 @@ export async function regenerateWorkOrderItemLabelAction(itemId: string) {
   const session = await auth()
   const item = await getWorkOrderItemLabelRecord(itemId)
   if (!item.isActive) throw new Error(`Work Order Item ${itemId} is removed and cannot be edited.`)
-  const label = await generateWorkOrderItemLabel(item.originalDescription)
+  const actorId = session?.user?.id ?? null
+  if (actorId && !(await acquireWorkOrderRateLimit('ai-label', actorId))) {
+    throw new Error('Work Order AI label generation was requested too recently. Please wait a minute before trying again.')
+  }
+  const label = await withWorkOrderItemLabelLock(itemId, () => generateWorkOrderItemLabel(item.originalDescription))
 
   const result = await db.transaction(async (tx) => {
     const currentItem = await getWorkOrderItemLabelRecord(itemId, tx)
@@ -581,52 +829,6 @@ function revalidateWorkOrderItemPaths(workOrderId: string) {
   revalidatePath('/')
   revalidatePath('/work-orders')
   revalidatePath(`/work-orders/${workOrderId}`)
-}
-
-async function refreshPersistedWorkOrderItemLabels(generateLabel: WorkOrderItemLabelGenerator) {
-  const items = await db
-    .select({
-      id: workOrderItems.id,
-      originalDescription: workOrderItems.originalDescription,
-      generatedLabel: workOrderItems.generatedLabel,
-      manualLabelOverride: workOrderItems.manualLabelOverride,
-      labelStatus: workOrderItems.labelStatus,
-      sourceDescriptionFingerprint: workOrderItems.sourceDescriptionFingerprint,
-    })
-    .from(workOrderItems)
-    .where(eq(workOrderItems.isActive, true))
-
-  const store: WorkOrderItemLabelStore = {
-    markPending: (itemId) => updateWorkOrderItemLabelState(itemId, {
-      generatedLabel: null,
-      labelStatus: 'pending',
-    }),
-    saveGenerated: (itemId, label, sourceDescriptionFingerprint) => updateWorkOrderItemLabelState(itemId, {
-      generatedLabel: label,
-      manualLabelOverride: null,
-      labelStatus: 'generated',
-      sourceDescriptionFingerprint,
-    }),
-    markFailed: (itemId) => updateWorkOrderItemLabelState(itemId, {
-      generatedLabel: null,
-      labelStatus: 'failed',
-    }),
-    markSourceChanged: (itemId) => updateWorkOrderItemLabelState(itemId, {
-      labelStatus: 'source_changed',
-    }),
-  }
-
-  return refreshWorkOrderItemLabels(items, store, generateLabel)
-}
-
-async function updateWorkOrderItemLabelState(
-  itemId: string,
-  values: Partial<typeof workOrderItems.$inferInsert>,
-) {
-  await db
-    .update(workOrderItems)
-    .set({ ...values, updatedAt: new Date() })
-    .where(eq(workOrderItems.id, itemId))
 }
 
 export async function createWorkOrderInstallerAction(formData: FormData) {
@@ -920,11 +1122,33 @@ async function findLinkedQuote(input: {
   return quote ?? null
 }
 
-async function recordRefreshFailure(error: unknown) {
+async function recordRefreshFailure(error: unknown, actorId: string | null = null) {
   await db.insert(workOrderRefreshRuns).values({
+    actorId,
     status: 'failed',
     errorMessage: safeRefreshErrorMessage(error),
   })
+}
+
+async function assertRefreshManageAccessWithAudit(): Promise<string | null> {
+  const session = await auth()
+  try {
+    await assertCurrentUserCanManageWorkOrders()
+  } catch (error) {
+    try {
+      await logAudit({
+        actorId: session?.user?.id ?? null,
+        entityType: 'work_order',
+        action: 'work_order.refresh.denied',
+        detail: { reason: 'manage_access_required' },
+      })
+    } catch (auditError) {
+      console.warn('Work Order refresh denial audit failed.', auditError)
+    }
+    throw error
+  }
+
+  return session?.user?.id ?? null
 }
 
 async function readServiceM8Array<T>(
@@ -937,6 +1161,11 @@ async function readServiceM8Array<T>(
   let cursor: string | null = '-1'
 
   while (cursor) {
+    if (requestedCursors.size >= WORK_ORDER_SERVICEM8_MAX_PAGES) {
+      throw new Error(
+        `ServiceM8 ${datasetName} pagination exceeded the ${WORK_ORDER_SERVICEM8_MAX_PAGES}-page refresh limit.`,
+      )
+    }
     if (requestedCursors.has(cursor)) {
       throw new Error(`ServiceM8 ${datasetName} pagination was invalid: cursor ${cursor} repeated.`)
     }
@@ -962,6 +1191,20 @@ async function readServiceM8Array<T>(
   return completeRows
 }
 
+async function readServiceM8Object<T>(
+  request: ServiceM8FetchRequest,
+  path: string,
+  datasetName: string,
+): Promise<T> {
+  const response = await request(path)
+  if (!response.ok) throw new Error(`ServiceM8 request failed with HTTP ${response.status}`)
+  const row = await response.json()
+  if (!row || typeof row !== 'object' || Array.isArray(row)) {
+    throw new Error(`ServiceM8 ${datasetName} response was invalid: expected an object.`)
+  }
+  return row as T
+}
+
 function serviceM8CursorPath(path: string, cursor: string): string {
   const separator = path.includes('?') ? '&' : '?'
   return `${path}${separator}cursor=${encodeURIComponent(cursor)}`
@@ -969,6 +1212,17 @@ function serviceM8CursorPath(path: string, cursor: string): string {
 
 function odataFilter(expr: string): string {
   return `?%24filter=${encodeURIComponent(expr)}`
+}
+
+function escapeOdataString(value: string): string {
+  return value.replace(/'/g, "''")
+}
+
+function normalizeServiceM8JobNumber(value: string): string {
+  const normalized = value.trim().toUpperCase()
+  if (!normalized) throw new Error('ServiceM8 job number is required.')
+  if (normalized.length > 64) throw new Error('ServiceM8 job number is too long.')
+  return normalized
 }
 
 function errorMessage(error: unknown) {
@@ -981,4 +1235,18 @@ function safeRefreshErrorMessage(error: unknown) {
     return `${message} The previous dashboard snapshot was kept.`
   }
   return 'Work Orders refresh could not be completed. The previous dashboard snapshot was kept.'
+}
+
+function safeJobUpdateErrorMessage(error: unknown) {
+  const message = errorMessage(error)
+  if (message.startsWith('Forbidden:')) {
+    return 'You do not have permission to update Work Orders.'
+  }
+  if (message.startsWith('ServiceM8') || message.startsWith('A Work Order update')) {
+    return message
+  }
+  if (message === 'ServiceM8 job number is required.' || message === 'ServiceM8 job number is too long.') {
+    return message
+  }
+  return 'This Work Order could not be updated. The previous saved version was kept.'
 }

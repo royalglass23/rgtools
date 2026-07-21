@@ -10,6 +10,7 @@ import ws from 'ws'
 import * as schema from './schema'
 import * as leadSchema from './schema-leads'
 import * as psGeneratorSchema from './schema-ps-generator'
+import * as quoteMovementSchema from './schema-quote-movement'
 import * as workOrderSchema from './schema-workorders'
 
 function findWorkspaceRoot(start: string) {
@@ -34,4 +35,6 @@ neonConfig.webSocketConstructor = ws
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL! })
 
-export const db = drizzle(pool, { schema: { ...schema, ...leadSchema, ...psGeneratorSchema, ...workOrderSchema } })
+export const db = drizzle(pool, {
+  schema: { ...schema, ...leadSchema, ...psGeneratorSchema, ...quoteMovementSchema, ...workOrderSchema },
+})

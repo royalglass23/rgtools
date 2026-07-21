@@ -5,6 +5,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const requireModuleMock = vi.hoisted(() => vi.fn())
 const listWorkOrdersForExportMock = vi.hoisted(() => vi.fn())
 const getWorkOrderSummaryConfigMock = vi.hoisted(() => vi.fn())
+const getWorkOrderSpecificationFilterConfigMock = vi.hoisted(() => vi.fn())
+const loadProductionSpecificationCatalogueMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/lib/guard', () => ({ requireModule: requireModuleMock }))
 vi.mock('@/modules/work-orders/queries', () => ({
@@ -12,6 +14,12 @@ vi.mock('@/modules/work-orders/queries', () => ({
 }))
 vi.mock('@/modules/work-orders/summary-config', () => ({
   getWorkOrderSummaryConfig: getWorkOrderSummaryConfigMock,
+}))
+vi.mock('@/modules/work-orders/specification-filter-config', () => ({
+  getWorkOrderSpecificationFilterConfig: getWorkOrderSpecificationFilterConfigMock,
+}))
+vi.mock('@/modules/work-orders/production-specification-catalogue', () => ({
+  loadProductionSpecificationCatalogue: loadProductionSpecificationCatalogueMock,
 }))
 
 import { GET } from '../route'
@@ -26,6 +34,13 @@ beforeEach(() => {
     summaryField('item', 'Item', false, 5),
     summaryField('stage', 'Stage', true, 6),
   ])
+  getWorkOrderSpecificationFilterConfigMock.mockResolvedValue([
+    { field: 'hardwareFinish', enabled: true, order: 1 },
+    { field: 'glassConstruction', enabled: false, order: 2 },
+  ])
+  loadProductionSpecificationCatalogueMock.mockResolvedValue([
+    { id: 'hardware_finish.matte-black', field: 'hardwareFinish', displayLabel: 'Matte Black', productionLabel: 'Matt Black' },
+  ])
   listWorkOrdersForExportMock.mockResolvedValue([
     exportRow('item-1', 'Generated shower label', 'Measure'),
     exportRow('item-2', 'Manual balustrade label', 'Production'),
@@ -35,7 +50,7 @@ beforeEach(() => {
 describe('GET /api/work-orders/export', () => {
   it('exports each filtered item with repeated parent context', async () => {
     const response = await GET(new Request(
-      'http://localhost/api/work-orders/export?q=glass&showRemovedItems=1&sort=stage_desc',
+      'http://localhost/api/work-orders/export?q=glass&showRemovedItems=1&sort=stage_desc&spec_hardwareFinish=hardware_finish.matte-black&spec_glassConstruction=glass_construction.laminated',
     ))
 
     expect(requireModuleMock).toHaveBeenCalledWith('work-orders')
@@ -43,12 +58,28 @@ describe('GET /api/work-orders/export', () => {
       q: 'glass',
       showRemovedItems: true,
       sort: 'stage_desc',
-    }))
-    expect(await response.text()).toBe([
-      '"Job Number","Client","Address","Lead Score","Item","Stage"',
-      '"R260199","Aroha Glass (Royal Homes)","19 Glass Lane","88","Generated shower label","Measure"',
-      '"R260199","Aroha Glass (Royal Homes)","19 Glass Lane","88","Manual balustrade label","Production"',
-    ].join('\n'))
+      specification: { hardwareFinish: 'hardware_finish.matte-black' },
+    }), expect.arrayContaining([
+      expect.objectContaining({ id: 'hardware_finish.matte-black' }),
+    ]))
+    const body = await response.text()
+    expect(body).toContain('"Specification Review Status"')
+    expect(body).toContain('"Confirmed Hardware/Fittings Finish"')
+    expect(body).toContain('"Not Started"')
+    expect(body).not.toContain('glass_construction.laminated')
+  })
+
+  it('returns a bounded-export error instead of materializing an oversized download', async () => {
+    listWorkOrdersForExportMock.mockRejectedValueOnce(new Error(
+      'Work Order export exceeds the 10000-row limit. Narrow the filters and try again.',
+    ))
+
+    const response = await GET(new Request('http://localhost/api/work-orders/export'))
+
+    expect(response.status).toBe(413)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Work Order export exceeds the 10000-row limit. Narrow the filters and try again.',
+    })
   })
 })
 

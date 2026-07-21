@@ -1,9 +1,11 @@
 import { randomBytes, randomUUID } from 'node:crypto'
+import {
+  readE2eDatabaseProof,
+  verifyIsolatedE2eDatabase,
+  type E2eDatabaseProof,
+} from './e2e-database-safety'
 
-export type WorkOrderAcceptanceDatabaseProof = {
-  databaseName: string
-  sentinel: string | null
-}
+export type WorkOrderAcceptanceDatabaseProof = E2eDatabaseProof
 
 export function createWorkOrderAcceptanceCredentials() {
   return {
@@ -19,17 +21,15 @@ export async function verifyWorkOrderAcceptanceDatabase({
   expectedSentinel: string | undefined
   readProof: () => Promise<WorkOrderAcceptanceDatabaseProof>
 }) {
-  if (!expectedSentinel?.trim()) {
-    throw new Error('E2E_DATABASE_SENTINEL is required to verify an isolated MT-199 acceptance database.')
-  }
-  if (expectedSentinel.length < 32) {
-    throw new Error('E2E_DATABASE_SENTINEL must contain at least 32 characters.')
-  }
+  return verifyIsolatedE2eDatabase({
+    expectedSentinel,
+    purpose: 'MT-199 acceptance',
+    readProof,
+  })
+}
 
-  const proof = await readProof()
-  if (proof.sentinel !== expectedSentinel) {
-    throw new Error(`Refusing to run MT-199 acceptance against database ${proof.databaseName}: isolated database sentinel did not match.`)
-  }
-
-  return proof
+export async function readWorkOrderAcceptanceDatabaseProof(
+  query: Parameters<typeof readE2eDatabaseProof>[0],
+): Promise<WorkOrderAcceptanceDatabaseProof> {
+  return readE2eDatabaseProof(query)
 }

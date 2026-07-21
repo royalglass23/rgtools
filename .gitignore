@@ -13,6 +13,7 @@ node_modules/
 
 # testing
 /coverage
+/apps/*/test-results/
 
 # next.js
 /.next/
@@ -64,6 +65,12 @@ docs/superpowers/
 docs/codex/
 docs/adr/
 docs/dev/
+!docs/dev/
+docs/dev/*
+!docs/dev/work-order-enrichment.md
+!docs/dev/work-order-existing-item-rollout.md
+!docs/dev/work-order-existing-item-rollout-performance.md
+!docs/dev/royal-glass-precision-ui.md
 CONTEXT.md
 workers/tracker/.dev.vars
 

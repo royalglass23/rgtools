@@ -51,6 +51,16 @@ Current navigation groups include:
 
 Your name and role are shown in the top right. Use **Sign out** when you are done.
 
+## Appearance
+
+The account area includes **Light**, **Dark**, and **System** appearance choices:
+
+- **Light** uses the bright Royal Glass workspace theme.
+- **Dark** uses the matching night theme with the same pages, controls, and information.
+- **System** follows your device's light or dark setting and updates when that setting changes.
+
+Your choice is saved in this browser. It does not change another browser or device, and it does not affect your access or work data.
+
 ## Roles
 
 | Role | Access |

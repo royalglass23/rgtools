@@ -8,6 +8,7 @@ const mockInsert = vi.hoisted(() => vi.fn())
 const mockUpdate = vi.hoisted(() => vi.fn())
 const mockSelect = vi.hoisted(() => vi.fn())
 const mockDelete = vi.hoisted(() => vi.fn())
+const mockExecute = vi.hoisted(() => vi.fn(async () => ({ rows: [{}] })))
 const mockTransaction = vi.hoisted(() => vi.fn())
 const mockAuth = vi.hoisted(() => vi.fn())
 const mockLogAudit = vi.hoisted(() => vi.fn())
@@ -28,6 +29,7 @@ vi.mock('@/lib/db', () => ({
     update: mockUpdate,
     select: mockSelect,
     delete: mockDelete,
+    execute: mockExecute,
     transaction: mockTransaction,
   },
 }))
@@ -64,6 +66,7 @@ import {
   saveWorkOrderSummaryConfigAction,
   updateWorkOrderItemOperationalFieldAction,
   updateWorkOrderItemLabelAction,
+  updateWorkOrderByJobNumberAction,
 } from '../actions'
 
 beforeEach(() => {
@@ -117,6 +120,10 @@ describe('work order action permissions', () => {
     mockAssertCanManage.mockRejectedValue(new Error('Forbidden: Work Orders manage access is required.'))
 
     await expect(refreshWorkOrdersAction()).rejects.toThrow('Forbidden: Work Orders manage access is required.')
+    expect(mockLogAudit).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'work_order.refresh.denied',
+      actorId: 'user-1',
+    }))
     expect(mockInsert).not.toHaveBeenCalled()
     expect(mockRevalidatePath).not.toHaveBeenCalled()
   })
@@ -129,6 +136,25 @@ describe('work order action permissions', () => {
       'Forbidden: Work Orders manage access is required.',
     )
     expect(request).not.toHaveBeenCalled()
+    expect(mockTransaction).not.toHaveBeenCalled()
+    expect(mockLogAudit).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'work_order.refresh.denied',
+      actorId: 'user-1',
+    }))
+  })
+
+  it('returns a safe error when a view-only user tries to update one job', async () => {
+    mockAssertCanManage.mockRejectedValue(new Error('Forbidden: Work Orders manage access is required.'))
+    const formData = new FormData()
+    formData.set('jobNumber', 'R260210')
+
+    await expect(updateWorkOrderByJobNumberAction(
+      { status: 'idle', message: '' },
+      formData,
+    )).resolves.toEqual({
+      status: 'error',
+      message: 'You do not have permission to update Work Orders.',
+    })
     expect(mockTransaction).not.toHaveBeenCalled()
   })
 

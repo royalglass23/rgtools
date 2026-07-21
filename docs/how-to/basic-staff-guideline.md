@@ -64,10 +64,22 @@ Use **Work Order** once the job has moved to **Work Order** status in ServiceM8.
 Basic steps:
 
 1. Open **Work Order** from the menu.
-2. Refresh from ServiceM8 if the list needs updating.
-3. Search or filter for the job.
-4. Open the work order to view job details.
-5. Update internal operational fields such as stage, installer, install date, risk, importance, or notes when needed.
+2. Enter the ServiceM8 job number and click **Update job** to refresh that job and prepare its AI drafts.
+3. Use **Refresh all jobs** only when the complete list needs a catch-up from ServiceM8.
+4. Search or filter for the job.
+5. Open the work order to view job details.
+6. Update internal operational fields such as stage, installer, install date, risk, importance, or notes when needed.
+
+New ServiceM8 item lines may show **Enrichment queued** or **Enrichment processing** while RGTools
+prepares a Production Specification draft. A completed draft is marked **Needs Review** and must be
+checked and confirmed by a user with Manage access; AI never confirms it automatically.
+
+There is no automatic enrichment schedule on the Hobby plan. If work remains queued or a delayed
+retry becomes available, wait one minute and run **Update job** again for that job number.
+
+If an item shows **Enrichment failed - Retry**, confirm the original ServiceM8 description is safe
+and accurate, then use Retry. View-only users can see that enrichment failed but cannot retry,
+edit, or confirm the specification. The original ServiceM8 description remains visible throughout.
 
 Work Order is for managing active work, not for scoring new leads or creating quote links.
 
