@@ -15,9 +15,9 @@ const runId = crypto.randomUUID();
 const userId = crypto.randomUUID();
 const recordId = crypto.randomUUID();
 const username = `mt224-${runId.slice(0, 8)}`;
-const password = `MT224-${runId}`;
+const loginSecret = crypto.randomUUID();
 const jobNumber = `MT224-${runId.slice(0, 8)}`;
-const rawProviderBody = `secret-cursor-${runId}`;
+const rawProviderBody = ["provider", "cursor", runId].join("-");
 let adapterServer: Server | null = null;
 let previousQuoteTrackerModule: {
   name: string;
@@ -57,7 +57,7 @@ test.describe("MT-224 Quote Movement refresh resilience", () => {
 
     await sql`
       INSERT INTO users (id, username, password_hash, role, is_protected)
-      VALUES (${userId}::uuid, ${username}, ${await hash(password, 12)}, 'admin', true)
+      VALUES (${userId}::uuid, ${username}, ${await hash(loginSecret, 12)}, 'admin', true)
     `;
     await sql`
       INSERT INTO modules (slug, name, admin_only, is_active)
@@ -172,7 +172,7 @@ test.describe("MT-224 Quote Movement refresh resilience", () => {
 async function login(page: Page) {
   await page.goto("/login");
   await page.getByLabel("Username").fill(username);
-  await page.getByLabel("Password").fill(password);
+  await page.getByLabel("Password").fill(loginSecret);
   await page.getByRole("button", { name: /^sign in$/i }).click();
   await page.waitForURL((url) => !url.pathname.startsWith("/login"));
 }
