@@ -15,6 +15,7 @@ const mockUpdate = vi.hoisted(() => vi.fn())
 const mockRecordRefreshInsert = vi.hoisted(() => vi.fn())
 const refreshRunValues = vi.hoisted(() => [] as Array<Record<string, unknown>>)
 const persistedLabelRows = vi.hoisted(() => [] as Array<Record<string, unknown>>)
+const productionQueueRows = vi.hoisted(() => [] as Array<Record<string, unknown>>)
 const labelUpdates = vi.hoisted(() => [] as Array<Record<string, unknown>>)
 const mockGetWorkOrderBillingExclusions = vi.hoisted(() => vi.fn())
 const mockEnqueueEnrichments = vi.hoisted(() => vi.fn(async () => 0))
@@ -53,6 +54,7 @@ import {
   refreshWorkOrdersFromServiceM8,
   updateWorkOrderByJobNumberAction,
 } from '../actions'
+import * as enrichmentWorker from '../enrichment-worker'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -64,19 +66,37 @@ beforeEach(() => {
   transactionConflictSets.length = 0
   refreshRunValues.length = 0
   persistedLabelRows.length = 0
+  productionQueueRows.length = 0
   labelUpdates.length = 0
 
-  mockRecordRefreshInsert.mockReturnValue({
-    values: vi.fn(async (values: Record<string, unknown>) => {
+  mockRecordRefreshInsert.mockImplementation((table: Parameters<typeof getTableName>[0]) => ({
+    values: vi.fn((values: Record<string, unknown>) => {
       refreshRunValues.push(values)
-      return []
+      return {
+        onConflictDoNothing: vi.fn(() => ({
+          returning: vi.fn(async () => (
+            getTableName(table) === 'work_order_item_enrichment_jobs'
+              ? productionQueueRows.map((_, index) => ({ id: `queued-${index + 1}` }))
+              : []
+          )),
+        })),
+      }
     }),
-  })
+  }))
   mockGetWorkOrderBillingExclusions.mockResolvedValue(['invoice', 'partial invoice', 'deposit'])
 
-  mockSelect.mockReturnValue({
+  mockSelect.mockImplementation((selection?: Record<string, unknown>) => ({
     from: vi.fn((table: Parameters<typeof getTableName>[0]) => {
       if (getTableName(table) === 'work_order_items') {
+        if (selection && 'specificationId' in selection) {
+          return {
+            innerJoin: vi.fn(() => ({
+              leftJoin: vi.fn(() => ({
+                where: vi.fn(async () => productionQueueRows),
+              })),
+            })),
+          }
+        }
         return { where: vi.fn(async () => persistedLabelRows) }
       }
       if (getTableName(table) === 'work_order_specification_catalogue_options') {
@@ -88,7 +108,7 @@ beforeEach(() => {
         })),
       }
     }),
-  })
+  }))
   mockUpdate.mockReturnValue({
     set: vi.fn((values: Record<string, unknown>) => {
       labelUpdates.push(values)
@@ -313,7 +333,8 @@ describe('refreshWorkOrdersFromServiceM8', () => {
 
   it('keeps 100-item enqueue overhead within one second of the refresh baseline without invoking a provider', async () => {
     const itemCount = 100
-    const provider = vi.fn()
+    const providerBoundary = vi.spyOn(enrichmentWorker, 'processWorkOrderEnrichmentQueue')
+      .mockImplementation(() => new Promise(() => {}))
     const request = vi.fn(async (path: string) => {
       if (path.startsWith('/job.json')) {
         return Response.json([{
@@ -335,31 +356,50 @@ describe('refreshWorkOrdersFromServiceM8', () => {
       }
       return Response.json([])
     })
-    const enqueueEnrichments = vi.fn(async (items: Array<{
-      servicem8ItemUuid: string
-      originalDescription: string
-    }>) => {
-      expect(items).toHaveLength(itemCount)
-      return itemCount
-    })
+    productionQueueRows.push(...Array.from({ length: itemCount }, (_, index) => ({
+      id: `persisted-item-${index + 1}`,
+      servicem8ItemUuid: `item-${index + 1}`,
+      specificationId: null,
+      clientName: 'Performance Client',
+      companyName: 'Performance Glass Ltd',
+      jobAddress: '100 Performance Lane, Auckland',
+    })))
 
-    const measure = async (enqueue: typeof enqueueEnrichments) => {
+    const measure = async (enqueue?: typeof mockEnqueueEnrichments) => {
       const startedAt = performance.now()
-      await refreshWorkOrdersFromServiceM8(request, enqueue)
+      if (enqueue) {
+        await refreshWorkOrdersFromServiceM8(request, enqueue)
+      } else {
+        await refreshWorkOrdersFromServiceM8(request)
+      }
       return performance.now() - startedAt
     }
     const noOpEnqueue = vi.fn(async () => 0)
+    await measure(noOpEnqueue)
+    await measure()
     const baselineSamples: number[] = []
     const rolloutSamples: number[] = []
     for (let run = 0; run < 5; run += 1) {
       baselineSamples.push(await measure(noOpEnqueue))
-      rolloutSamples.push(await measure(enqueueEnrichments))
+      rolloutSamples.push(await measure())
     }
     const median = (samples: number[]) => [...samples].sort((a, b) => a - b)[2]
+    console.log(JSON.stringify({
+      fixture: '100 realistic ServiceM8 items',
+      baselineSamplesMs: baselineSamples,
+      rolloutSamplesMs: rolloutSamples,
+      baselineMedianMs: median(baselineSamples),
+      rolloutMedianMs: median(rolloutSamples),
+      enqueueOverheadMs: median(rolloutSamples) - median(baselineSamples),
+      providerCalls: providerBoundary.mock.calls.length,
+    }))
 
     expect(median(rolloutSamples) - median(baselineSamples)).toBeLessThan(1_000)
-    expect(enqueueEnrichments).toHaveBeenCalledTimes(5)
-    expect(provider).not.toHaveBeenCalled()
+    expect(mockRecordRefreshInsert.mock.calls.filter(([table]) => (
+      getTableName(table) === 'work_order_item_enrichment_jobs'
+    ))).toHaveLength(6)
+    expect(providerBoundary).not.toHaveBeenCalled()
+    providerBoundary.mockRestore()
   })
 
   it('keeps a committed refresh successful when the post-commit enrichment handoff fails', async () => {

@@ -1,0 +1,80 @@
+.panel {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-panel);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-raised);
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.heading {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-weight: 760;
+}
+
+.description,
+.status {
+  color: var(--text-muted);
+}
+
+.description {
+  margin: var(--space-1) 0 0;
+  font-size: 0.875rem;
+}
+
+.status {
+  font-size: 0.875rem;
+}
+
+.feedbackActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.counts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.count {
+  padding: var(--space-3);
+  border: 1px solid var(--border-default);
+  background: var(--surface-subtle);
+}
+
+.countLabel {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.countValue {
+  margin-top: var(--space-1);
+  color: var(--text-primary);
+  font-size: 1.125rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 760;
+}
+
+@media (min-width: 640px) {
+  .counts {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}

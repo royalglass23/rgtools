@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 
 const port = Number(process.env.E2E_PORT ?? 3010);
 const baseURL = process.env.E2E_BASE_URL ?? `http://127.0.0.1:${port}`;
+const useExternalServer = Boolean(process.env.E2E_BASE_URL);
 const adapterPort = Number(process.env.E2E_ADAPTER_PORT ?? 32199);
 const isolatedDatabaseUrl = process.env.E2E_DATABASE_URL;
 const isolatedWorkOrderEnv = isolatedDatabaseUrl
@@ -38,7 +39,7 @@ export default defineConfig({
     screenshot: "only-on-failure",
     video: "retain-on-failure",
   },
-  webServer: {
+  webServer: useExternalServer ? undefined : {
     command: `node node_modules/next/dist/bin/next dev --hostname 127.0.0.1 --port ${port}`,
     url: `${baseURL}/login`,
     reuseExistingServer: !process.env.CI && !isolatedDatabaseUrl,

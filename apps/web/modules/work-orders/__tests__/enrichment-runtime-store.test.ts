@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const selectResults = vi.hoisted(() => [] as unknown[][])
 const inserts = vi.hoisted(() => [] as Array<{ table: string; values: Record<string, unknown> }>)
 const updates = vi.hoisted(() => [] as Array<{ table: string; values: Record<string, unknown> }>)
+const updateResults = vi.hoisted(() => [] as unknown[][])
 const executeQueries = vi.hoisted(() => [] as unknown[])
 
 vi.mock('drizzle-orm', () => ({
@@ -43,6 +44,7 @@ beforeEach(() => {
   selectResults.length = 0
   inserts.length = 0
   updates.length = 0
+  updateResults.length = 0
   executeQueries.length = 0
 })
 
@@ -148,6 +150,57 @@ describe('Work Order enrichment runtime store', () => {
     expect(updates.find((write) => write.table === 'work_order_items')?.values)
       .toEqual(expect.objectContaining({ generatedLabel: 'Custom Rail | Location TBC' }))
   })
+
+  it('does not save automation over a specification confirmed during draft persistence', async () => {
+    selectResults.push(
+      [{ id: 'item-1', isActive: true }],
+      [{ id: 'specification-1', status: 'needs_review', draftUpdatedBy: null }],
+    )
+    updateResults.push([])
+
+    const result = await createWorkOrderEnrichmentRuntimeStore().saveDraft({
+      id: 'job-1',
+      workOrderItemId: 'item-1',
+      sourceDescription: 'Shower glass',
+      attemptCount: 1,
+      extractionSchemaVersion: 1,
+      promptVersion: 'production-specification-v1',
+    }, {
+      schemaVersion: 1,
+      specification: createEmptyProductionSpecification(),
+      evidence: [],
+      ambiguityFlags: [],
+    }, 'test-model')
+
+    expect(result).toBe('skipped_confirmed')
+    expect(updates.some((write) => write.table === 'work_order_items')).toBe(false)
+  })
+
+  it('does not save automation over a draft edited by staff during persistence', async () => {
+    selectResults.push(
+      [{ id: 'item-1', isActive: true }],
+      [{ id: 'specification-1', status: 'needs_review', draftUpdatedBy: null }],
+      [{ status: 'needs_review', draftUpdatedBy: 'staff-user' }],
+    )
+    updateResults.push([])
+
+    const result = await createWorkOrderEnrichmentRuntimeStore().saveDraft({
+      id: 'job-1',
+      workOrderItemId: 'item-1',
+      sourceDescription: 'Shower glass',
+      attemptCount: 1,
+      extractionSchemaVersion: 1,
+      promptVersion: 'production-specification-v1',
+    }, {
+      schemaVersion: 1,
+      specification: createEmptyProductionSpecification(),
+      evidence: [],
+      ambiguityFlags: [],
+    }, 'test-model')
+
+    expect(result).toBe('skipped_staff_edited')
+    expect(updates.some((write) => write.table === 'work_order_items')).toBe(false)
+  })
 })
 
 function table(name: string, columns: string[]) {
@@ -171,7 +224,11 @@ function transactionBoundary() {
     update: vi.fn((target: { __name: string }) => ({
       set: vi.fn((values: Record<string, unknown>) => {
         updates.push({ table: target.__name, values })
-        return { where: vi.fn(async () => undefined) }
+        return {
+          where: vi.fn(() => ({
+            returning: vi.fn(async () => updateResults.shift() ?? [{ id: 'updated' }]),
+          })),
+        }
       }),
     })),
   }

@@ -1,9 +1,11 @@
 'use client'
 
-import { useActionState, useEffect, useState } from 'react'
+import { useActionState, useCallback, useEffect, useState } from 'react'
 import { useFormStatus } from 'react-dom'
 
+import { FeedbackState, PrecisionButton } from '@/components/precision-ui/PrecisionUI'
 import type { ExistingItemRolloutStatus } from './existing-item-rollout'
+import styles from './ExistingItemRolloutPanel.module.css'
 
 export function ExistingItemRolloutPanel({
   initialStatus,
@@ -22,6 +24,7 @@ export function ExistingItemRolloutPanel({
   canManage?: boolean
 }) {
   const [status, setStatus] = useState<ExistingItemRolloutStatus | null>(initialStatus)
+  const [pollError, setPollError] = useState<string | null>(null)
   const [, startFormAction] = useActionState(
     async (previousStatus: ExistingItemRolloutStatus | null, formData: FormData) => {
       const nextStatus = await startAction(previousStatus, formData)
@@ -38,9 +41,21 @@ export function ExistingItemRolloutPanel({
     },
     null,
   )
+  const statusId = status?.id
+
+  const refreshStatus = useCallback(async () => {
+    if (!statusId) return
+    try {
+      const nextStatus = await statusAction(statusId)
+      setStatus(nextStatus)
+      setPollError(null)
+    } catch {
+      setPollError('Rollout status could not be refreshed.')
+    }
+  }, [statusId, statusAction])
 
   useEffect(() => {
-    if (status?.state !== 'running') return
+    if (status?.state !== 'running' || pollError) return
     let cancelled = false
     let requestPending = false
     const timer = setInterval(async () => {
@@ -48,7 +63,12 @@ export function ExistingItemRolloutPanel({
       requestPending = true
       try {
         const nextStatus = await statusAction(status.id)
-        if (!cancelled) setStatus(nextStatus)
+        if (!cancelled) {
+          setStatus(nextStatus)
+          setPollError(null)
+        }
+      } catch {
+        if (!cancelled) setPollError('Rollout status could not be refreshed.')
       } finally {
         requestPending = false
       }
@@ -57,20 +77,20 @@ export function ExistingItemRolloutPanel({
       cancelled = true
       clearInterval(timer)
     }
-  }, [status?.id, status?.state, statusAction])
+  }, [pollError, status?.id, status?.state, statusAction])
 
   return (
     <section
       aria-labelledby="existing-item-rollout-heading"
       aria-readonly={canManage ? undefined : true}
-      className="rounded border border-gray-200 bg-white p-4"
+      className={styles.panel}
     >
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className={styles.header}>
         <div>
-          <h2 id="existing-item-rollout-heading" className="font-semibold text-gray-950">
+          <h2 id="existing-item-rollout-heading" className={styles.heading}>
             Existing-item enrichment
           </h2>
-          <p className="mt-1 text-sm text-gray-600">
+          <p className={styles.description}>
             Start the supervised one-time Production Specification draft rollout.
           </p>
         </div>
@@ -87,12 +107,23 @@ export function ExistingItemRolloutPanel({
         )}
       </div>
 
-      <div aria-live="polite" className="mt-3 text-sm text-gray-700">
+      <div aria-live="polite" className={styles.status}>
         {status ? `Rollout ${status.state}.` : 'No rollout has been started.'}
       </div>
 
+      {pollError && (
+        <FeedbackState tone="error">
+          <div className={styles.feedbackActions}>
+            <p>{pollError}</p>
+            <PrecisionButton type="button" tone="secondary" onClick={refreshStatus}>
+              Retry status
+            </PrecisionButton>
+          </div>
+        </FeedbackState>
+      )}
+
       {status && (
-        <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <dl className={styles.counts}>
           <Count label="Total" name="total" value={status.total} />
           <Count label="Queued" name="queued" value={status.queued} />
           <Count label="Processing" name="processing" value={status.processing} />
@@ -116,23 +147,22 @@ function RolloutActionButton({ kind }: { kind: 'start' | 'resume' }) {
     ? 'Start existing-item enrichment'
     : 'Resume failed enrichment'
   return (
-    <button
+    <PrecisionButton
       type="submit"
       disabled={pending}
-      className="rounded bg-gray-900 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
     >
       {pending
         ? <span role="status">{pendingLabel}</span>
         : idleLabel}
-    </button>
+    </PrecisionButton>
   )
 }
 
 function Count({ label, name, value }: { label: string; name: string; value: number }) {
   return (
-    <div className="rounded bg-gray-50 p-3">
-      <dt className="text-xs font-medium uppercase tracking-wide text-gray-600">{label}</dt>
-      <dd data-count={name} className="mt-1 text-lg font-semibold text-gray-950">{value}</dd>
+    <div className={styles.count}>
+      <dt className={styles.countLabel}>{label}</dt>
+      <dd data-count={name} className={styles.countValue}>{value}</dd>
     </div>
   )
 }

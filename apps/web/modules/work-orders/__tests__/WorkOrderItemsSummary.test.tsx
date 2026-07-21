@@ -239,11 +239,13 @@ describe('WorkOrderItemsSummary', () => {
     expect(screen.queryByRole('button', { name: 'Create new draft' })).not.toBeInTheDocument()
 
     rerender(<WorkOrderItemsSummary canManage items={[item]} />)
+    const specificationDisclosure = screen.getByText('View specification')
     fireEvent.click(screen.getByRole('button', { name: 'Ignore source change' }))
     await waitFor(() => expect(mockIgnoreSourceChange).toHaveBeenCalledWith('item-source-comparison', {
       expectedConfirmedRevision: 1,
       sourceDescriptionFingerprint: 'source-new',
     }))
+    await waitFor(() => expect(specificationDisclosure).toHaveFocus())
   })
 
   it('keeps an authorised manual label correction editable after enrichment', () => {
@@ -399,6 +401,40 @@ describe('WorkOrderItemsSummary', () => {
         note: 'Client approved Matte Black.',
       },
     }))
+  })
+
+  it('associates the missing change reason error with its invalid control', async () => {
+    const confirmed = confirmedSpecificationDocument()
+    render(<WorkOrderItemsSummary canManage items={[workOrderItem({
+      id: 'item-change-reason-error',
+      itemCode: 'GLASS-ERROR',
+      quantity: '1.000',
+      originalDescription: 'ServiceM8 source with Chrome hardware',
+      lineTotalExcludingGst: '1200.00',
+      generatedLabel: 'Existing short label',
+      manualLabelOverride: null,
+      isActive: true,
+      productionSpecification: {
+        id: 'specification-1',
+        status: 'confirmed',
+        draftData: confirmed,
+        confirmedData: confirmed,
+        productionLabel: 'Double Disc | Ext Balcony | 12 mm Toughened Clear | Timber | Chrome | Supply & Install',
+        confirmedAt: new Date('2026-07-16T03:30:00.000Z'),
+        confirmedRevision: 1,
+        draftRevision: 2,
+        history: [],
+      },
+    })]} />)
+
+    fireEvent.click(screen.getByText('View specification'))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm specification' }))
+
+    const reason = screen.getByLabelText('Change reason')
+    const error = await screen.findByRole('alert')
+    expect(reason).toHaveAttribute('aria-invalid', 'true')
+    expect(reason).toHaveAttribute('aria-describedby', error.id)
+    expect(error).toHaveTextContent('Choose an approved change reason before confirming this revision.')
   })
 
   it('lets a Manage user correct a Needs Review draft and confirm it without entering a change reason', async () => {

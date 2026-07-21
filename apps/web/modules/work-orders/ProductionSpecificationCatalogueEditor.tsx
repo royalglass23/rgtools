@@ -4,6 +4,13 @@ import { useActionState, type ReactNode } from 'react'
 import { useFormStatus } from 'react-dom'
 
 import {
+  DataPanel,
+  FeedbackState,
+  PrecisionButton,
+  StatusBadge,
+  precisionControlClassName,
+} from '@/components/precision-ui/PrecisionUI'
+import {
   saveProductionSpecificationCatalogueOptionAction,
   type ProductionSpecificationCatalogueActionState,
 } from './production-specification-catalogue-actions'
@@ -12,6 +19,7 @@ import {
   PRODUCTION_SPECIFICATION_FIELD_DEFINITIONS,
   productionSpecificationFieldLabel,
 } from './production-specifications'
+import styles from './ProductionSpecificationCatalogueEditor.module.css'
 
 const INITIAL_STATE: ProductionSpecificationCatalogueActionState = { status: 'idle', message: '' }
 
@@ -21,25 +29,22 @@ export function ProductionSpecificationCatalogueEditor({
   options: ProductionSpecificationCatalogueAdminOption[]
 }) {
   return (
-    <section className="rounded border border-gray-200 bg-white shadow-sm">
-      <div className="border-b border-gray-100 p-4">
-        <h2 className="text-sm font-semibold text-gray-950">Specification Catalogue</h2>
-        <p className="mt-1 text-sm text-gray-500">
-          Govern stable canonical values, source aliases, Production Label wording, and PS1/PS3 applicability.
-        </p>
-      </div>
-      <div className="border-b border-gray-100 p-4">
-        <h3 className="text-sm font-semibold text-gray-900">Add canonical option</h3>
+    <DataPanel title="Specification Catalogue" eyebrow="Canonical production terminology">
+      <p className={styles.description}>
+        Govern stable canonical values, source aliases, Production Label wording, and PS1/PS3 applicability.
+      </p>
+      <section className={styles.section} aria-labelledby="add-catalogue-option-heading">
+        <h3 id="add-catalogue-option-heading" className={styles.sectionHeading}>Add canonical option</h3>
         <CatalogueOptionForm />
-      </div>
-      <div className="divide-y divide-gray-100">
+      </section>
+      <div className={styles.options}>
         {options.map((model) => (
-          <div key={model.option.id} className="p-4">
+          <div key={model.option.id} className={styles.option}>
             <CatalogueOptionForm model={model} />
           </div>
         ))}
       </div>
-    </section>
+    </DataPanel>
   )
 }
 
@@ -49,9 +54,9 @@ function CatalogueOptionForm({ model }: { model?: ProductionSpecificationCatalog
   const hasPsMapping = Boolean(option?.ps1Applicable || option?.ps3Applicable)
 
   return (
-    <form action={action} className="mt-3 space-y-3">
+    <form action={action} className={styles.form}>
       {option && <input type="hidden" name="editingId" value={option.id} />}
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className={styles.fields}>
         <Field label="Stable ID">
           <input
             name="id"
@@ -66,7 +71,7 @@ function CatalogueOptionForm({ model }: { model?: ProductionSpecificationCatalog
           {option ? (
             <>
               <input type="hidden" name="field" value={option.field} />
-              <div className="rounded border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+              <div className={`${precisionControlClassName} ${styles.readOnly}`}>
                 {productionSpecificationFieldLabel(option.field)}
               </div>
             </>
@@ -99,18 +104,18 @@ function CatalogueOptionForm({ model }: { model?: ProductionSpecificationCatalog
         </Field>
       </div>
 
-      <div className="flex flex-wrap gap-5 text-sm text-gray-800">
+      <div className={styles.checkboxes}>
         <Checkbox name="ps1Applicable" label="PS1" defaultChecked={option?.ps1Applicable ?? false} />
         <Checkbox name="ps3Applicable" label="PS3" defaultChecked={option?.ps3Applicable ?? false} />
         <Checkbox name="isActive" label="Active" defaultChecked={option?.isActive ?? true} />
-        {!hasPsMapping && option && <span className="text-gray-500">Not used for PS</span>}
+        {!hasPsMapping && option && <span className={styles.muted}>Not used for PS</span>}
       </div>
 
       {model && (
-        <div className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
-          <p className="font-semibold">Affected confirmed items: {model.affectedCount}</p>
+        <div className={styles.impact}>
+          <p className={styles.impactTitle}>Affected confirmed items: {model.affectedCount}</p>
           {model.affectedItems.length > 0 && (
-            <ul className="mt-1 list-disc pl-5">
+            <ul className={styles.impactList}>
               {model.affectedItems.map((item) => (
                 <li key={item.workOrderItemId}>
                   {item.jobNumber ?? 'Unknown job'} / {item.itemCode ?? 'No item code'} — {item.productionLabel ?? 'No Production Label'}
@@ -119,23 +124,24 @@ function CatalogueOptionForm({ model }: { model?: ProductionSpecificationCatalog
             </ul>
           )}
           {model.affectedCount > model.affectedItems.length && (
-            <p className="mt-1">Plus {model.affectedCount - model.affectedItems.length} more confirmed items.</p>
+            <p>Plus {model.affectedCount - model.affectedItems.length} more confirmed items.</p>
           )}
           {model.affectedCount > 0 && (
-            <label className="mt-2 flex items-start gap-2 font-medium">
-              <input type="checkbox" name="confirmImpact" className="mt-0.5" />
+            <label className={styles.impactConfirmation}>
+              <input type="checkbox" name="confirmImpact" />
               Confirm this rename or deactivation may rebuild every affected Production Label and add system history.
             </label>
           )}
         </div>
       )}
 
-      <div className="flex items-center gap-3">
+      <div className={styles.actions}>
         <CatalogueSubmitButton label={option ? 'Save catalogue option' : 'Add catalogue option'} />
-        {state.message && (
-          <span role={state.status === 'error' ? 'alert' : 'status'} className={state.status === 'error' ? 'text-sm text-red-700' : 'text-sm text-green-700'}>
-            {state.message}
-          </span>
+        {state.status === 'error' && state.message && (
+          <FeedbackState tone="error">{state.message}</FeedbackState>
+        )}
+        {state.status === 'success' && state.message && (
+          <span role="status"><StatusBadge tone="positive">{state.message}</StatusBadge></span>
         )}
       </div>
     </form>
@@ -145,25 +151,24 @@ function CatalogueOptionForm({ model }: { model?: ProductionSpecificationCatalog
 function CatalogueSubmitButton({ label }: { label: string }) {
   const { pending } = useFormStatus()
   return (
-    <button
+    <PrecisionButton
       type="submit"
       disabled={pending}
-      className="rounded bg-[#142B3A] px-4 py-2 text-sm font-medium text-white hover:bg-[#1d3d52] disabled:cursor-wait disabled:opacity-60"
     >
       {pending ? 'Saving catalogue option…' : label}
       {pending && <span className="sr-only" role="status">Saving catalogue option</span>}
-    </button>
+    </PrecisionButton>
   )
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
-  return <label className="space-y-1 text-sm font-medium text-gray-800"><span>{label}</span>{children}</label>
+  return <label className={styles.field}><span>{label}</span>{children}</label>
 }
 
 function Checkbox({ name, label, defaultChecked }: { name: string; label: string; defaultChecked: boolean }) {
-  return <label className="flex items-center gap-2"><input type="checkbox" name={name} defaultChecked={defaultChecked} />{label}</label>
+  return <label className={styles.checkbox}><input type="checkbox" name={name} defaultChecked={defaultChecked} />{label}</label>
 }
 
 function inputClass(readOnly: boolean) {
-  return `w-full rounded border px-3 py-2 text-sm ${readOnly ? 'border-gray-200 bg-gray-50 text-gray-600' : 'border-gray-300 bg-white text-gray-950'}`
+  return `${precisionControlClassName}${readOnly ? ` ${styles.readOnly}` : ''}`
 }
