@@ -52,10 +52,9 @@ const QUOTE_TRACKER_ROUTE_BY_SLUG: Record<string, DashboardNavItem> = {
 }
 
 const QUOTE_TRACKER_SORT_ORDER: Record<string, number> = {
-  'quote-movement': 0,
-  'quote-tracker': 1,
-  'admin/tracking': 2,
-  'quote-tracker/guide': 3,
+  'quote-tracker': 0,
+  'admin/tracking': 1,
+  'quote-tracker/guide': 2,
 }
 
 const CLIENTS_ROUTE_BY_SLUG: Record<string, DashboardNavItem> = {
@@ -219,12 +218,6 @@ export function buildDashboardNavigation(modules: DashboardModule[], options: { 
   }
 
   if (quoteTrackerItemsByKey.size > 0) {
-    quoteTrackerItemsByKey.set('quote-movement', {
-      id: 'quote-movement-list',
-      slug: 'quote-movement',
-      name: 'Quote Movement',
-      href: '/quote-movement',
-    })
     quoteTrackerItemsByKey.set('quote-tracker/guide', {
       id: 'quote-tracker-guide',
       slug: 'quote-tracker/guide',

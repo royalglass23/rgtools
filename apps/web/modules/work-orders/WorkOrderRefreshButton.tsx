@@ -17,7 +17,7 @@ export function WorkOrderRefreshButton() {
           className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
         />
       )}
-      {pending ? <span role="status">Refreshing all jobs...</span> : 'Refresh all jobs'}
+      {pending ? <span role="status">Fetching data...</span> : 'Refresh from ServiceM8'}
     </button>
   )
 }

@@ -1,34 +1,36 @@
 # Gate - mt-192-workorder-changes
 
-- Date: 2026-07-16
-- Commit: `73c3e84341c268ceb335b5a1f342b33685959916` plus current dirty MT-192 delta
-- Verdict: **GREEN**
+- Date: 2026-07-15
+- Commit: `e2c167aad9f7a77851c548afd3d33b5f7efd0224` plus current dirty MT-199 and repair delta
+- Verdict: **RED**
 
 | Check | Result | Evidence |
 |---|---|---|
-| Workspace tests | PASS | 2 files, 4 tests |
-| Full web tests | PASS | Deterministic one-worker run: 137 files passed, 3 skipped; 826 passed, 17 skipped; 0 failures |
-| Real DB concurrency | PASS | 1 sentinel-protected two-connection integration test |
-| MT-199 Playwright | PASS | Complete authenticated Chromium refresh/edit/audit/filter/export/remove/restore journey |
-| Accessibility | PASS | Axe 4.12.1: 0 WCAG 2.0/2.1 A/AA violations |
-| Performance | PASS | Refresh 3.650s/3.629s/3.410s under 30s; export 3.029s under 10s |
-| Web typecheck | PASS | No diagnostics |
-| Database typecheck | PASS | No diagnostics |
-| Lint | PASS | 0 errors; 6 unrelated existing warnings |
-| Production build | PASS | Next.js build completed; 36 routes/pages |
-| Migration consistency | PASS | `drizzle-kit check`: `Everything's fine` |
-| Isolated migrations | PASS | 0053-0056 applied and schema effects verified |
-| Production dependency audit | PASS | 0 info/low/moderate/high/critical advisories |
-| Security sign-off | PASS | Omerta full retrofit sign-off |
-| Exit review | PASS | Architecture, standards, and specification axes approved |
-| Secret/debug scan | PASS | 0 credential-like tracked/untracked matches; 0 executable debug additions |
-| Scope check | PASS | 0 unexpected tracked/untracked MT-192 files; 11 Work Order enrichment planning files explicitly excluded |
-| `git diff --check` | PASS | No whitespace errors; line-ending warning only |
+| Workspace tests | PASS | Direct Vitest: 2 files, 4 tests passed. |
+| Full web tests | PASS | Direct standard Vitest run: 135 files and 810 tests passed; 3 files and 17 tests skipped; 0 failures. A separate constrained single-worker attempt timed out at 301 seconds, then the standard project run completed successfully in 232.5 seconds. |
+| Web typecheck | PASS | `tsc --noEmit --pretty false`; no diagnostics. |
+| Database typecheck | PASS | `tsc --noEmit --pretty false`; no diagnostics. |
+| Lint | PASS with warnings | Full web ESLint: 0 errors and 6 unrelated pre-existing warnings. |
+| Production build | PASS with warnings | App-scoped `next build` compiled, typechecked, generated 35 pages, and included `/work-orders`, `/work-orders/[id]`, and `/api/work-orders/export`; existing workspace-root and NFT trace warnings remain. |
+| Playwright discovery | PASS | One Chromium MT-199 Work Order Items acceptance test discovered. |
+| Real DB concurrency execution | BLOCKED | The sentinel-protected integration test is present but skipped without `E2E_DATABASE_URL` and matching `E2E_DATABASE_SENTINEL`. |
+| Playwright execution | BLOCKED | No dedicated migrated E2E database with the matching strong sentinel is configured. |
+| Visible route / accessibility | BLOCKED | No authenticated protected-route browser run or accessibility scan was completed in this environment. |
+| Performance | BLOCKED | No representative ServiceM8 dataset, baseline, or budget; serial reconciliation/label work and unbounded provider/export paths remain unmeasured. |
+| Security sign-off | FAIL | Current Omerta sign-off has no open High/Critical, but remains FAIL for abuse/time bounds, 2 moderate plus 1 low advisories, raw snapshot retention, privileged-event logging, and raw OpenAI provider error handling. Focused security evidence: 84/84 tests pass. |
+| Exit review | PASS | Enforcer review axes are APPROVED; registered refresh authorization, full cursor exhaustion, and atomic active writes are resolved. |
+| Dependency audit | FAIL | Current production audit recorded by Omerta: 0 critical, 0 high, 2 moderate, 1 low. |
+| Secret scan | PASS | Diff scan found only explicit fake test values (`e2e-read-key`, `controlled-e2e-key`, `secret-key`) and environment variable names; no real credential/key material was found. |
+| Debug-artifact scan | PASS with follow-up | Tracked root `debug.log` is deleted and no `[DEBUG-*]`, `console.log`, `console.debug`, or `debugger` instrumentation is added. Plain `debug.log` is not ignored. |
+| Scope check | FAIL | Product changes are traceable to MT-199/repairs except `.gitignore:56-57`, which adds broad orchestration/plugin ignores outside the approved slice. Security and Famiglia files are review artifacts. |
+| `git diff --check` | PASS | No whitespace errors; CRLF-to-LF warnings only. |
 
-## Gate notes
+## Gate blockers
 
-- The first default-pool full-suite attempt passed 126 files/770 tests but exited on 11 Vitest worker-start timeouts. No assertion failed. Enforcer verified no orphaned Vitest/Next process, then reran the complete suite with one thread worker; all 137 runnable files and 826 tests passed.
-- `pnpm peers check` has one non-blocking optional peer concern: Auth.js Nodemailer `^7` versus app Nodemailer 9. RGTools uses Credentials auth and a separate direct SMTP path; record this before any future Auth.js email-provider work.
-- Existing Next workspace-root/NFT trace and six unrelated lint warnings remain noted.
+1. Execute the real database concurrency test and MT-199 Playwright journey against a dedicated migrated database protected by the matching 32+ character `E2E_DATABASE_SENTINEL`.
+2. Resolve or formally accept the current Omerta medium/low findings: provider/refresh/export abuse and timeout bounds, raw snapshot retention, privileged-event logging, and safe OpenAI error translation.
+3. Clear or formally accept the remaining 2 moderate and 1 low production dependency advisories.
+4. Remove or separately justify/stage the unrelated broad `.gitignore` additions.
+5. Complete authenticated visible-route/accessibility proof and representative refresh/export performance evidence before release readiness is claimed.
 
-This GREEN verdict is the Enforcer code/validation gate. Deployment readiness remains separate in `getaway.md`; no commit, push, merge, deployment, or production mutation was performed.
+The implementation review is now approved and all deterministic command checks are green, but missing required runtime evidence and failed strict security/scope checks prevent a GREEN gate.

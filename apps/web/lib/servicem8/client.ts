@@ -41,15 +41,9 @@ type ServiceM8RetryOptions = {
   capMs?: number
 }
 
-type ServiceM8RequestOptions = {
-  retry?: ServiceM8RetryOptions
-  timeoutMs?: number
-}
-
 const DEFAULT_RETRY_ATTEMPTS = 5
 const DEFAULT_RETRY_BASE_MS = 1000
 const DEFAULT_RETRY_CAP_MS = 16000
-const DEFAULT_REQUEST_TIMEOUT_MS = 30000
 
 export class ServiceM8RateLimitError extends Error {
   constructor(
@@ -58,26 +52,6 @@ export class ServiceM8RateLimitError extends Error {
   ) {
     super(message)
     this.name = 'ServiceM8RateLimitError'
-  }
-}
-
-export class ServiceM8TimeoutError extends Error {
-  constructor(
-    message: string,
-    readonly details: { path: string; timeoutMs: number },
-  ) {
-    super(message)
-    this.name = 'ServiceM8TimeoutError'
-  }
-}
-
-export class ServiceM8AttachmentTimeoutError extends Error {
-  constructor(
-    message: string,
-    readonly details: { attachmentUuid: string; timeoutMs: number },
-  ) {
-    super(message)
-    this.name = 'ServiceM8AttachmentTimeoutError'
   }
 }
 
@@ -106,7 +80,7 @@ export function withServiceM8Retry(
 
         console.warn(`ServiceM8 request retrying: status=${response.status} path=${path} attempt=${attempt}`)
       } catch (error) {
-        if (error instanceof ServiceM8RateLimitError || error instanceof ServiceM8TimeoutError) throw error
+        if (error instanceof ServiceM8RateLimitError) throw error
         if (attempt >= maxAttempts) {
           console.warn(`ServiceM8 request exhausted retries: network path=${path} attempts=${attempt}`)
           throw new ServiceM8RateLimitError(
@@ -176,7 +150,7 @@ export function getServiceM8FullApiKey(): string {
   return apiKey
 }
 
-function buildServiceM8Request(apiKey: string, timeoutMs: number): ServiceM8FetchRequest {
+function buildServiceM8Request(apiKey: string): ServiceM8FetchRequest {
   const baseUrl = serviceM8BaseUrl()
   return async (path, init) => {
     const headers = new Headers(init?.headers)
@@ -184,32 +158,16 @@ function buildServiceM8Request(apiKey: string, timeoutMs: number): ServiceM8Fetc
     headers.set('Accept', 'application/json')
     if (init?.body) headers.set('Content-Type', 'application/json')
 
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), timeoutMs)
+    const response = await fetch(`${baseUrl}${path}`, {
+      ...init,
+      headers,
+    })
 
-    try {
-      const response = await fetch(`${baseUrl}${path}`, {
-        ...init,
-        headers,
-        signal: controller.signal,
-      })
-
-      return {
-        ok: response.ok,
-        status: response.status,
-        headers: response.headers,
-        json: () => response.json(),
-      }
-    } catch (error) {
-      if (controller.signal.aborted) {
-        throw new ServiceM8TimeoutError(
-          `ServiceM8 request timed out after ${timeoutMs}ms`,
-          { path, timeoutMs },
-        )
-      }
-      throw error
-    } finally {
-      clearTimeout(timeout)
+    return {
+      ok: response.ok,
+      status: response.status,
+      headers: response.headers,
+      json: () => response.json(),
     }
   }
 }
@@ -234,22 +192,16 @@ function serviceM8BaseUrl() {
  * `api_1.0` base explicitly to avoid the legacy-endpoint redirect loop.
  * Read-only key — use {@link createServiceM8WriteRequestFromEnv} for writes.
  */
-export function createServiceM8RequestFromEnv(opts: ServiceM8RequestOptions = {}): ServiceM8FetchRequest {
-  return withServiceM8Retry(
-    buildServiceM8Request(getServiceM8ApiKey(), opts.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS),
-    opts.retry,
-  )
+export function createServiceM8RequestFromEnv(opts: { retry?: ServiceM8RetryOptions } = {}): ServiceM8FetchRequest {
+  return withServiceM8Retry(buildServiceM8Request(getServiceM8ApiKey()), opts.retry)
 }
 
 /**
  * Write-capable request helper, authenticated with the full-access key. Job
  * writes (e.g. custom fields) need `manage_jobs`, which the read-only key lacks.
  */
-export function createServiceM8WriteRequestFromEnv(opts: ServiceM8RequestOptions = {}): ServiceM8FetchRequest {
-  return withServiceM8Retry(
-    buildServiceM8Request(getServiceM8FullApiKey(), opts.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS),
-    opts.retry,
-  )
+export function createServiceM8WriteRequestFromEnv(opts: { retry?: ServiceM8RetryOptions } = {}): ServiceM8FetchRequest {
+  return withServiceM8Retry(buildServiceM8Request(getServiceM8FullApiKey()), opts.retry)
 }
 
 /**
@@ -1023,37 +975,15 @@ export async function findQuoteAttachmentRecord(
 export async function downloadAttachmentFile(
   attachmentUuid: string,
   apiKey: string = getServiceM8ApiKey(),
-  opts: {
-    timeoutMs?: number
-    fetchImplementation?: typeof fetch
-  } = {},
 ): Promise<ArrayBuffer> {
-  const timeoutMs = opts.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
-  const fetchImplementation = opts.fetchImplementation ?? fetch
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), timeoutMs)
-
-  try {
-    const response = await fetchImplementation(`${SERVICEM8_BASE}/Attachment/${attachmentUuid}.file`, {
-      headers: { 'X-API-Key': apiKey },
-      redirect: 'follow',
-      signal: controller.signal,
-    })
-    if (!response.ok) {
-      throw new Error(`ServiceM8 attachment download failed with HTTP ${response.status}`)
-    }
-    return await response.arrayBuffer()
-  } catch (error) {
-    if (controller.signal.aborted) {
-      throw new ServiceM8AttachmentTimeoutError(
-        `ServiceM8 attachment download timed out after ${timeoutMs}ms`,
-        { attachmentUuid, timeoutMs },
-      )
-    }
-    throw error
-  } finally {
-    clearTimeout(timeout)
+  const response = await fetch(`${SERVICEM8_BASE}/Attachment/${attachmentUuid}.file`, {
+    headers: { 'X-API-Key': apiKey },
+    redirect: 'follow',
+  })
+  if (!response.ok) {
+    throw new Error(`ServiceM8 attachment download failed with HTTP ${response.status}`)
   }
+  return response.arrayBuffer()
 }
 
 /**

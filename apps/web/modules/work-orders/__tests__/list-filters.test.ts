@@ -49,30 +49,4 @@ describe('parseWorkOrderListFilters', () => {
     expect(parseWorkOrderListFilters({ showRemovedItems: '1' }).showRemovedItems).toBe(true)
     expect(parseWorkOrderListFilters({ showRemovedItems: 'false' }).showRemovedItems).toBe(false)
   })
-
-  it('parses canonical Production Specification option IDs by supported field', () => {
-    expect(parseWorkOrderListFilters({
-      spec_hardwareFinish: 'hardware_finish.matte-black',
-      spec_unknownField: 'ignored.option',
-    }).specification).toEqual({
-      hardwareFinish: 'hardware_finish.matte-black',
-    })
-
-    expect(parseWorkOrderListFilters({
-      wo_spec_glassConstruction: 'glass_construction.laminated',
-    }, { prefix: 'wo_' }).specification).toEqual({
-      glassConstruction: 'glass_construction.laminated',
-    })
-  })
-
-  it('ignores stale filter params for globally disabled specification fields', () => {
-    expect(parseWorkOrderListFilters({
-      spec_hardwareFinish: 'hardware_finish.matte-black',
-      spec_glassConstruction: 'glass_construction.laminated',
-    }, {
-      specificationFields: ['hardwareFinish'],
-    }).specification).toEqual({
-      hardwareFinish: 'hardware_finish.matte-black',
-    })
-  })
 })

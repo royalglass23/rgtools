@@ -23,17 +23,6 @@ export const workOrderItemLabelStatusEnum = pgEnum('work_order_item_label_status
   'failed',
   'source_changed',
 ])
-export const workOrderProductionSpecificationStatusEnum = pgEnum('work_order_production_specification_status', [
-  'needs_review',
-  'confirmed',
-])
-export const workOrderItemEnrichmentStatusEnum = pgEnum('work_order_item_enrichment_status', [
-  'queued',
-  'processing',
-  'completed',
-  'failed',
-])
-export type WorkOrderItemEnrichmentStatusValue = typeof workOrderItemEnrichmentStatusEnum.enumValues[number]
 
 export const workOrderInstallers = pgTable('work_order_installers', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -134,7 +123,6 @@ export const workOrders = pgTable('work_orders', {
   index('work_orders_client_idx').on(table.clientId),
   index('work_orders_lead_idx').on(table.leadId),
   index('work_orders_quote_idx').on(table.quoteId),
-  index('work_orders_retention_idx').on(table.isCurrent, table.servicem8Active, table.dateCompleted, table.updatedAt),
 ])
 
 export const workOrderItems = pgTable('work_order_items', {
@@ -148,7 +136,6 @@ export const workOrderItems = pgTable('work_order_items', {
   lineTotalExcludingGst: numeric('line_total_excluding_gst', { precision: 12, scale: 2 }),
   sortOrder: integer('sort_order').default(0).notNull(),
   isActive: boolean('is_active').default(true).notNull(),
-  enrichmentHandoffPending: boolean('enrichment_handoff_pending').default(false).notNull(),
   generatedLabel: text('generated_label'),
   manualLabelOverride: text('manual_label_override'),
   labelStatus: workOrderItemLabelStatusEnum('label_status').default('pending').notNull(),
@@ -171,139 +158,8 @@ export const workOrderItems = pgTable('work_order_items', {
   index('work_order_items_servicem8_job_uuid_idx').on(table.servicem8JobUuid),
 ])
 
-export const workOrderSpecificationCatalogueOptions = pgTable('work_order_specification_catalogue_options', {
-  id: text('id').primaryKey(),
-  fieldName: text('field_name').notNull(),
-  displayLabel: text('display_label').notNull(),
-  productionLabel: text('production_label').notNull(),
-  aliases: jsonb('aliases').$type<string[]>().default([]).notNull(),
-  psCategorySlug: text('ps_category_slug'),
-  psOptionSlug: text('ps_option_slug'),
-  ps1Applicable: boolean('ps1_applicable').default(false).notNull(),
-  ps3Applicable: boolean('ps3_applicable').default(false).notNull(),
-  isActive: boolean('is_active').default(true).notNull(),
-  sortOrder: integer('sort_order').default(0).notNull(),
-  createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-}, (table) => [
-  index('work_order_specification_catalogue_field_active_idx').on(table.fieldName, table.isActive, table.sortOrder),
-  uniqueIndex('work_order_specification_catalogue_ps_mapping_uq').on(table.psCategorySlug, table.psOptionSlug),
-])
-
-export const workOrderItemProductionSpecifications = pgTable('work_order_item_production_specifications', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  workOrderItemId: uuid('work_order_item_id').notNull().references(() => workOrderItems.id, { onDelete: 'cascade' }),
-  status: workOrderProductionSpecificationStatusEnum('status').default('needs_review').notNull(),
-  schemaVersion: integer('schema_version').default(1).notNull(),
-  draftData: jsonb('draft_data').$type<Record<string, unknown>>(),
-  confirmedData: jsonb('confirmed_data').$type<Record<string, unknown>>(),
-  evidenceData: jsonb('evidence_data').$type<Array<Record<string, unknown>>>().default([]).notNull(),
-  ambiguityFlags: jsonb('ambiguity_flags').$type<string[]>().default([]).notNull(),
-  sourceDescriptionFingerprint: text('source_description_fingerprint'),
-  sourceDescription: text('source_description'),
-  draftSourceDescriptionFingerprint: text('draft_source_description_fingerprint'),
-  draftSourceDescription: text('draft_source_description'),
-  ignoredSourceDescriptionFingerprint: text('ignored_source_description_fingerprint'),
-  extractionSchemaVersion: integer('extraction_schema_version'),
-  promptVersion: text('prompt_version'),
-  modelIdentifier: text('model_identifier'),
-  generatedAt: timestamp('generated_at', { withTimezone: true }),
-  productionLabel: text('production_label'),
-  draftUpdatedBy: uuid('draft_updated_by').references(() => users.id, { onDelete: 'set null' }),
-  draftUpdatedAt: timestamp('draft_updated_at', { withTimezone: true }),
-  confirmedBy: uuid('confirmed_by').references(() => users.id, { onDelete: 'set null' }),
-  confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
-  confirmedRevision: integer('confirmed_revision').default(0).notNull(),
-  draftRevision: integer('draft_revision').default(0).notNull(),
-  draftBaseRevision: integer('draft_base_revision'),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-}, (table) => [
-  uniqueIndex('work_order_item_production_specifications_item_uq').on(table.workOrderItemId),
-  index('work_order_item_production_specifications_status_idx').on(table.status),
-])
-
-export const workOrderExistingItemRolloutRuns = pgTable('work_order_existing_item_rollout_runs', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  actorId: uuid('actor_id').references(() => users.id, { onDelete: 'set null' }),
-  correlationId: text('correlation_id').notNull(),
-  state: text('state').default('running').notNull(),
-  activeRunKey: boolean('active_run_key'),
-  totalCount: integer('total_count').default(0).notNull(),
-  queuedCount: integer('queued_count').default(0).notNull(),
-  processingCount: integer('processing_count').default(0).notNull(),
-  draftedCount: integer('drafted_count').default(0).notNull(),
-  needsReviewCount: integer('needs_review_count').default(0).notNull(),
-  unmappedCount: integer('unmapped_count').default(0).notNull(),
-  failedCount: integer('failed_count').default(0).notNull(),
-  retriedCount: integer('retried_count').default(0).notNull(),
-  skippedRemovedCount: integer('skipped_removed_count').default(0).notNull(),
-  skippedConfirmedCount: integer('skipped_confirmed_count').default(0).notNull(),
-  skippedCurrentKeyCount: integer('skipped_current_key_count').default(0).notNull(),
-  safeFailureClass: text('safe_failure_class'),
-  startedAt: timestamp('started_at', { withTimezone: true }).defaultNow().notNull(),
-  completedAt: timestamp('completed_at', { withTimezone: true }),
-  durationMs: integer('duration_ms').default(0).notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-}, (table) => [
-  uniqueIndex('work_order_existing_item_rollout_runs_correlation_uq').on(table.correlationId),
-  uniqueIndex('work_order_existing_item_rollout_runs_active_uq').on(table.activeRunKey),
-  index('work_order_existing_item_rollout_runs_started_idx').on(table.startedAt),
-])
-
-export const workOrderItemEnrichmentJobs = pgTable('work_order_item_enrichment_jobs', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  workOrderItemId: uuid('work_order_item_id').notNull().references(() => workOrderItems.id, { onDelete: 'cascade' }),
-  sourceDescription: text('source_description').notNull(),
-  sourceDescriptionFingerprint: text('source_description_fingerprint').notNull(),
-  extractionSchemaVersion: integer('extraction_schema_version').notNull(),
-  promptVersion: text('prompt_version').notNull(),
-  status: workOrderItemEnrichmentStatusEnum('status').default('queued').notNull(),
-  attemptCount: integer('attempt_count').default(0).notNull(),
-  rolloutWasRetried: boolean('rollout_was_retried').default(false).notNull(),
-  availableAt: timestamp('available_at', { withTimezone: true }).defaultNow().notNull(),
-  lockedAt: timestamp('locked_at', { withTimezone: true }),
-  leaseExpiresAt: timestamp('lease_expires_at', { withTimezone: true }),
-  modelIdentifier: text('model_identifier'),
-  lastSafeError: text('last_safe_error'),
-  generatedAt: timestamp('generated_at', { withTimezone: true }),
-  rolloutRunId: uuid('rollout_run_id').references(() => workOrderExistingItemRolloutRuns.id, { onDelete: 'set null' }),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-}, (table) => [
-  uniqueIndex('work_order_item_enrichment_jobs_key_uq').on(
-    table.workOrderItemId,
-    table.sourceDescriptionFingerprint,
-    table.extractionSchemaVersion,
-    table.promptVersion,
-  ),
-  index('work_order_item_enrichment_jobs_status_available_idx').on(table.status, table.availableAt),
-  index('work_order_item_enrichment_jobs_item_created_idx').on(table.workOrderItemId, table.createdAt),
-  index('work_order_item_enrichment_jobs_rollout_run_idx').on(table.rolloutRunId),
-])
-
-export const workOrderItemProductionSpecificationRevisions = pgTable('work_order_item_production_specification_revisions', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  specificationId: uuid('specification_id').notNull().references(() => workOrderItemProductionSpecifications.id, { onDelete: 'cascade' }),
-  workOrderItemId: uuid('work_order_item_id').notNull().references(() => workOrderItems.id, { onDelete: 'cascade' }),
-  actorId: uuid('actor_id').references(() => users.id, { onDelete: 'set null' }),
-  revisionType: text('revision_type').notNull(),
-  previousSnapshot: jsonb('previous_snapshot').$type<Record<string, unknown>>(),
-  newSnapshot: jsonb('new_snapshot').$type<Record<string, unknown>>().notNull(),
-  reasonCode: text('reason_code'),
-  note: text('note'),
-  changes: jsonb('changes').$type<Array<Record<string, unknown>>>().default([]).notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-}, (table) => [
-  index('work_order_item_specification_revisions_item_created_idx').on(table.workOrderItemId, table.createdAt),
-  index('work_order_item_specification_revisions_specification_idx').on(table.specificationId),
-])
-
 export const workOrderRefreshRuns = pgTable('work_order_refresh_runs', {
   id: uuid('id').primaryKey().defaultRandom(),
-  actorId: uuid('actor_id').references(() => users.id, { onDelete: 'set null' }),
   status: text('status').notNull(),
   syncedCount: integer('synced_count').default(0).notNull(),
   itemSyncedCount: integer('item_synced_count').default(0).notNull(),
@@ -314,13 +170,6 @@ export const workOrderRefreshRuns = pgTable('work_order_refresh_runs', {
   index('work_order_refresh_runs_created_at_idx').on(table.createdAt),
   index('work_order_refresh_runs_status_idx').on(table.status),
 ])
-
-export const workOrderRefreshLocks = pgTable('work_order_refresh_locks', {
-  lockName: text('lock_name').primaryKey(),
-  ownerId: text('owner_id').notNull(),
-  leaseExpiresAt: timestamp('lease_expires_at', { withTimezone: true }).notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-})
 
 export const workOrderEvents = pgTable('work_order_events', {
   id: uuid('id').primaryKey().defaultRandom(),
