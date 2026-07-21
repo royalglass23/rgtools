@@ -142,6 +142,42 @@ describe("QuoteMovementList", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows incomplete coverage and a safe first-summary failure before any summary exists", () => {
+    render(
+      <QuoteMovementList
+        records={[
+          {
+            id: "record-1",
+            jobNumber: "Q260224",
+            customerName: "Cached Customer",
+            jobAddress: "24 Glass Lane",
+            quoteValueExcludingGst: "2400.00",
+            projectComplexity: "normal",
+            latestActivityAt: new Date("2026-07-21T01:00:00Z"),
+            convertedAt: null,
+            workOrderId: null,
+            sourceCoverage: "incomplete",
+            sourceUnreadCount: 1,
+            summaryLastError:
+              "What Matters Now could not update. The previous valid summary was kept.",
+          },
+        ]}
+        selectedControls={{
+          search: "",
+          projectComplexity: "all",
+          lifecycle: "active",
+          sort: "latest_activity",
+        }}
+        updateComplexityAction={vi.fn()}
+      />,
+    );
+
+    const importantNow = screen.getByRole("cell", { name: /Not yet summarised/ });
+    expect(importantNow).toHaveTextContent("Incomplete Source Coverage");
+    expect(importantNow).toHaveTextContent("1 unread source");
+    expect(importantNow).toHaveTextContent("What Matters Now could not update");
+  });
+
   it("submits the selected complexity for only that record", async () => {
     const user = userEvent.setup();
     const updateComplexityAction = vi.fn(async (formData: FormData) => {

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   quoteMovementProjectComplexityEnum,
   quoteMovementRecords,
+  quoteMovementRefreshLocks,
   quoteMovementRefreshRuns,
   quoteMovementSourceEnrichment,
   quoteMovementSources,
@@ -128,6 +129,20 @@ describe("Quote Movement persistence", () => {
         "synced_count",
         "error_message",
         "created_at",
+        "completed_at",
+      ]),
+    );
+  });
+
+  it("stores a durable lease for cross-instance refresh coordination", () => {
+    const config = getTableConfig(quoteMovementRefreshLocks);
+
+    expect(config.columns.map((column) => column.name)).toEqual(
+      expect.arrayContaining([
+        "lock_name",
+        "owner_id",
+        "lease_expires_at",
+        "updated_at",
       ]),
     );
   });

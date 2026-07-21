@@ -19,6 +19,9 @@ import {
 } from '@rgtools/db/schema-quote-movement'
 import type { QuoteMovementProjectComplexity } from '@rgtools/db/schema-quote-movement'
 import { workOrders } from '@rgtools/db/schema-workorders'
+import { deriveQuoteMovementRefreshStatus } from './refresh-status'
+
+export { deriveQuoteMovementRefreshStatus } from './refresh-status'
 
 export type QuoteMovementListFilters = {
   search?: string
@@ -147,10 +150,11 @@ export async function getQuoteMovementEvidence(
 }
 
 export async function getQuoteMovementRefreshStatus() {
-  const [successfulRows, failedRows] = await Promise.all([
+  const [successfulRows, failedRows, pendingRows] = await Promise.all([
     db
       .select({
         createdAt: quoteMovementRefreshRuns.createdAt,
+        completedAt: quoteMovementRefreshRuns.completedAt,
         syncedCount: quoteMovementRefreshRuns.syncedCount,
       })
       .from(quoteMovementRefreshRuns)
@@ -160,29 +164,24 @@ export async function getQuoteMovementRefreshStatus() {
     db
       .select({
         createdAt: quoteMovementRefreshRuns.createdAt,
+        completedAt: quoteMovementRefreshRuns.completedAt,
         errorMessage: quoteMovementRefreshRuns.errorMessage,
       })
       .from(quoteMovementRefreshRuns)
       .where(eq(quoteMovementRefreshRuns.status, 'failed'))
       .orderBy(desc(quoteMovementRefreshRuns.createdAt))
       .limit(1),
+    db
+      .select({ createdAt: quoteMovementRefreshRuns.createdAt })
+      .from(quoteMovementRefreshRuns)
+      .where(eq(quoteMovementRefreshRuns.status, 'pending'))
+      .orderBy(desc(quoteMovementRefreshRuns.createdAt))
+      .limit(1),
   ])
-  const latestSuccess = successfulRows[0] ?? null
-  const latestFailure = failedRows[0] ?? null
-  const hasNewerFailure =
-    latestFailure &&
-    (!latestSuccess ||
-      latestFailure.createdAt.getTime() > latestSuccess.createdAt.getTime())
-
-  return {
-    lastSuccessfulAt: latestSuccess?.createdAt ?? null,
-    lastSuccessfulCount: latestSuccess?.syncedCount ?? 0,
-    latestFailure: hasNewerFailure
-      ? {
-          at: latestFailure.createdAt,
-          message:
-            latestFailure.errorMessage ?? 'Quote Movement refresh failed.',
-        }
-      : null,
-  }
+  return deriveQuoteMovementRefreshStatus({
+    successful: successfulRows[0] ?? null,
+    failed: failedRows[0] ?? null,
+    pending: pendingRows[0] ?? null,
+    now: new Date(),
+  })
 }

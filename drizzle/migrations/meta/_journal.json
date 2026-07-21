@@ -477,6 +477,13 @@
       "when": 1784517060000,
       "tag": "0067_work_order_rollout_retry_marker",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1784595600000,
+      "tag": "0068_quote_movement_refresh_coordination",
+      "breakpoints": true
     }
   ]
 }

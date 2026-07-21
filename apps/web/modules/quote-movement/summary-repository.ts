@@ -108,6 +108,7 @@ export async function listPendingQuoteMovementSummaries(
       {
         recordId: record.id,
         sourceFingerprint,
+        hasValidSummary: Boolean(record.importantDetailsSummary),
         record: candidateRecord,
       },
     ];

@@ -11,7 +11,9 @@ Quote Movement is the cached, read-only monitoring history of ServiceM8 Quote jo
 
 ## Data flow
 
-Manual refresh calls `refreshQuoteMovementAction`, which checks `quote-tracker` access, records the acting user when available, and calls `refreshQuoteMovementFromServiceM8`.
+List and detail pages render their last valid cached data first, then the client requests refresh work automatically. `refreshQuoteMovementAction` checks `quote-tracker` access, records the acting user when available, acquires a durable database lease, records a pending run, and uses Next.js post-response work to call `refreshQuoteMovementFromServiceM8`. **Refresh now** uses the same request path.
+
+Concurrent browser tabs and application instances contend on `quote_movement_refresh_locks`; only the lease owner schedules work. The lease expires after 15 minutes so an interrupted deployment cannot block refresh forever. Pending runs are visible to staff, and the browser polls the cached route while work is active. A successful run changes **Last refreshed** only when the snapshot transaction commits. Failed ServiceM8 or summary work leaves the last valid cached list and summary visible with staff-safe stale, partial, or failure language.
 
 The sync reads:
 
@@ -37,7 +39,8 @@ Source collection is intentionally fail-safe. A failed collection or interpretat
 - `quote_movement_records` stores ServiceM8 job identity, customer/address fields, ex-GST quote value, active status, nullable `converted_at` evidence, RG-owned Project Complexity, source update time, meaningful latest activity, source-coverage state/counts, the structured cached summary, summary fingerprint/generation state, and last rgtools sync time.
 - `quote_movement_sources` retains immutable provider evidence by stable source identity. A later refresh updates the same retained source if ServiceM8 reclassifies it; absence from a later response never deletes it.
 - `quote_movement_source_enrichment` stores RG-owned interpretation state, staff-safe errors, and summaries separately from provider evidence.
-- `quote_movement_refresh_runs` stores success/failure metadata, synced row count, optional actor, and safe error text.
+- `quote_movement_refresh_runs` stores pending/success/failure metadata, request and completion timestamps, synced row count, optional actor, and safe error text.
+- `quote_movement_refresh_locks` stores the single expiring refresh lease used for cross-instance duplicate suppression and abandoned-run recovery.
 
 The persistence transaction upserts current records and retained sources atomically. Source identity is unique within a Quote Movement record, so concurrent refreshes cannot create duplicate history entries.
 
@@ -57,4 +60,4 @@ List and detail queries derive `workOrderId` by joining the current Work Order o
 
 ## Follow-on slices
 
-Later tickets make refresh scheduling non-blocking/resilient and prove the secured ten-second journey. Quote Movement remains a monitoring surface rather than a workflow manager.
+The remaining release slice proves the secured ten-second browser journey. Quote Movement remains a monitoring surface rather than a workflow manager.

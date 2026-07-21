@@ -1,20 +1,16 @@
-import {
-  DataPanel,
-  PageHeader,
-  SectionHeading,
-} from "@/components/precision-ui/PrecisionUI";
+import { PageHeader, SectionHeading } from "@/components/precision-ui/PrecisionUI";
 import { requireModule } from "@/lib/guard";
 import {
   refreshQuoteMovementAction,
   updateQuoteMovementComplexityAction,
 } from "@/modules/quote-movement/actions";
-import { formatQuoteMovementDate } from "@/modules/quote-movement/presentation";
 import {
   getQuoteMovementRefreshStatus,
   listQuoteMovementRecords,
 } from "@/modules/quote-movement/queries";
 import { QuoteMovementList } from "@/modules/quote-movement/QuoteMovementList";
 import { QuoteMovementRefreshButton } from "@/modules/quote-movement/QuoteMovementRefreshButton";
+import { QuoteMovementRefreshStatus } from "@/modules/quote-movement/QuoteMovementRefreshStatus";
 import { DismissibleNotice } from "@/modules/ui/DismissibleNotice";
 import type { QuoteMovementProjectComplexity } from "@rgtools/db/schema-quote-movement";
 
@@ -75,42 +71,14 @@ export default async function QuoteMovementPage({
             : `${records.length} inactive cached Quote jobs shown as the transitional Converted view`
         }
         actions={
-          <form action={refreshQuoteMovementAction}>
-            <QuoteMovementRefreshButton />
-          </form>
+          <QuoteMovementRefreshButton
+            action={refreshQuoteMovementAction}
+            refreshPending={refreshStatus.isPending}
+          />
         }
       />
 
-      <DataPanel title="Refresh status" eyebrow="ServiceM8 cache">
-        <dl className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <dt className="text-xs font-medium text-text-muted">
-              Last refreshed
-            </dt>
-            <dd className="mt-1 text-sm font-semibold text-text-primary">
-              {formatQuoteMovementDate(refreshStatus.lastSuccessfulAt)}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs font-medium text-text-muted">
-              Cached active jobs
-            </dt>
-            <dd className="mt-1 text-sm font-semibold tabular-nums text-text-primary">
-              {refreshStatus.lastSuccessfulCount}
-            </dd>
-          </div>
-        </dl>
-      </DataPanel>
-
-      {refreshStatus.latestFailure && (
-        <DismissibleNotice
-          tone="error"
-          noticeKey={`${refreshStatus.latestFailure.at.toISOString()}-${refreshStatus.latestFailure.message}`}
-        >
-          Quote Movement could not refresh from ServiceM8:{" "}
-          {refreshStatus.latestFailure.message}
-        </DismissibleNotice>
-      )}
+      <QuoteMovementRefreshStatus status={refreshStatus} />
 
       {refreshError && !refreshStatus.latestFailure && (
         <DismissibleNotice tone="error" noticeKey={refreshError}>

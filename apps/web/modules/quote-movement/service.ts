@@ -14,6 +14,10 @@ import {
   type QuoteMovementTrackedEngagementReader,
 } from "./sync";
 import { readQuoteMovementTrackedEngagement } from "./tracked-engagement";
+import {
+  quoteMovementRefreshCoordinator,
+  type QuoteMovementRefreshCoordinator,
+} from "./refresh-coordinator";
 
 type QuoteMovementRefreshResult = Awaited<
   ReturnType<typeof syncQuoteMovementFromServiceM8>
@@ -23,6 +27,7 @@ let inFlightRefresh: Promise<QuoteMovementRefreshResult> | null = null;
 
 export async function refreshQuoteMovementFromServiceM8({
   actorId,
+  runId,
   request,
   repository = quoteMovementSnapshotRepository,
   summaryRepository = quoteMovementSummaryRepository,
@@ -32,6 +37,7 @@ export async function refreshQuoteMovementFromServiceM8({
   readTrackedEngagement = readQuoteMovementTrackedEngagement,
 }: {
   actorId: string | null;
+  runId?: string;
   request?: ServiceM8FetchRequest;
   repository?: QuoteMovementSnapshotRepository;
   summaryRepository?: QuoteMovementSummaryRepository;
@@ -43,6 +49,7 @@ export async function refreshQuoteMovementFromServiceM8({
 
   const refresh = syncQuoteMovementFromServiceM8({
     actorId,
+    runId,
     request,
     repository,
     summaryRepository,
@@ -57,4 +64,36 @@ export async function refreshQuoteMovementFromServiceM8({
   } finally {
     if (inFlightRefresh === refresh) inFlightRefresh = null;
   }
+}
+
+type QuoteMovementBackgroundScheduler = (work: () => Promise<void>) => void;
+
+export async function requestQuoteMovementRefresh({
+  actorId,
+  coordinator = quoteMovementRefreshCoordinator,
+  refresh = refreshQuoteMovementFromServiceM8,
+  schedule,
+}: {
+  actorId: string | null;
+  coordinator?: QuoteMovementRefreshCoordinator;
+  refresh?: (input: {
+    actorId: string | null;
+    runId: string;
+  }) => Promise<QuoteMovementRefreshResult>;
+  schedule: QuoteMovementBackgroundScheduler;
+}): Promise<{ status: "requested" | "already_pending" }> {
+  const request = await coordinator.request(actorId);
+  if (!request.accepted) return { status: "already_pending" };
+
+  schedule(async () => {
+    try {
+      await refresh({ actorId, runId: request.runId });
+    } catch {
+      // The refresh use case records a staff-safe failure and preserves the cache.
+    } finally {
+      await coordinator.finish(request.runId);
+    }
+  });
+
+  return { status: "requested" };
 }

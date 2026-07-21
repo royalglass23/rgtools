@@ -33,6 +33,7 @@ export type QuoteMovementListRecord = {
   importantDetailsSummary?: QuoteMovementImportantDetailsSummary | null;
   sourceCoverage?: string;
   sourceUnreadCount?: number;
+  summaryLastError?: string | null;
 };
 
 export type QuoteMovementSelectedControls = {
@@ -187,7 +188,12 @@ export function QuoteMovementList({
                         {record.importantDetailsSummary?.currentPosition.text ??
                           "Not yet summarised"}
                       </p>
-                      {record.importantDetailsSummary ? (
+                      {record.summaryLastError ? (
+                        <p className="mt-1 text-xs text-warning-text">
+                          {record.summaryLastError}
+                        </p>
+                      ) : null}
+                      {record.sourceCoverage ? (
                         <p className="mt-1 text-xs text-text-muted">
                           {record.sourceCoverage === "complete"
                             ? "Complete Source Coverage"
