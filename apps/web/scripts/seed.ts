@@ -1,4 +1,6 @@
 import { config } from 'dotenv'
+import { PRODUCTION_ACCESS_MODULES } from '../lib/production-access'
+
 config({ path: '.env.local' })
 
 async function seed() {
@@ -33,9 +35,7 @@ async function seed() {
 
   // Upsert modules
   const modulesToSeed = [
-    { slug: 'lead-intake', name: 'Lead Intake', adminOnly: false, sortOrder: 0, isActive: true },
-    { slug: 'leads', name: 'Leads', adminOnly: false, sortOrder: 1, isActive: true },
-    { slug: 'quote-tracker', name: 'Quote Tracker', adminOnly: false, sortOrder: 2, isActive: true },
+    ...PRODUCTION_ACCESS_MODULES.map((moduleRow) => ({ ...moduleRow, isActive: true })),
     { slug: 'clients', name: 'Clients', adminOnly: false, sortOrder: 3, isActive: true },
     { slug: 'ps-generator', name: 'PS Generator', adminOnly: false, sortOrder: 4, isActive: true },
     { slug: 'ps-generator/history', name: 'PS History', adminOnly: false, sortOrder: 5, isActive: true },
@@ -66,9 +66,7 @@ async function seed() {
   }
 
   const staffDefaultModuleSlugs = [
-    'lead-intake',
-    'leads',
-    'quote-tracker',
+    ...PRODUCTION_ACCESS_MODULES.map((moduleRow) => moduleRow.slug),
     'clients',
     'ps-generator',
     'ps-generator/history',

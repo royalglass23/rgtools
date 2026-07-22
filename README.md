@@ -97,6 +97,16 @@ to the production Neon pooled URL and run:
 pnpm db:migrate:prod
 ```
 
+If a core production module row or staff grant is missing, first confirm that
+`DATABASE_URL` targets the intended database, then run the idempotent access repair:
+
+```bash
+pnpm seed:production-access
+```
+
+This reconciles the active Lead Intake, Leads, and Quote Tracker module rows and adds
+only missing staff grants. It does not remove unrelated modules or access grants.
+
 ## Quote pipeline scripts
 
 ```bash
