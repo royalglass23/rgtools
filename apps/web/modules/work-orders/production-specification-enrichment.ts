@@ -279,7 +279,7 @@ function openAIResponsesUrl() {
 
 function productionSpecificationEnrichmentJsonSchema() {
   const valueSchema = {
-    oneOf: [
+    anyOf: [
       {
         type: 'object',
         additionalProperties: false,
