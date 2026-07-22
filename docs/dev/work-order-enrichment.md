@@ -70,6 +70,34 @@ Monitor queued, processing, retry, and failed states in the Work Orders UI, plus
 audit logs for repeated failures. The item and original ServiceM8 description remain usable when
 enrichment fails.
 
+## Dashboard review states
+
+Keep each item's Production Specification collapsed by default so the Work Orders dashboard remains
+compact. While enrichment is queued or processing, show the status instead of an empty TBC review
+form. When a draft is ready, **View specification** reveals the editable catalogue-backed fields
+for staff review. Do not duplicate the original ServiceM8 description, a read-only field summary,
+or revision history above that editor.
+
+Staff may confirm a Production Specification only when every dropdown contains an approved catalogue
+value or **Not Applicable**. **TBC** means an applicable value is still unknown, and **Unmapped** means
+source wording has not yet been matched to an approved value; either state blocks confirmation.
+Enrichment must leave a source-silent dropdown as **TBC** rather than infer **Not Applicable**; staff
+choose **Not Applicable** during review when the field does not apply to that item.
+If a source-supported value is **Unmapped**, retain it as unresolved and keep the item in **Needs
+Review** until an approved catalogue option exists; never substitute an approximate option.
+Grandfather existing confirmed specifications that already contain **TBC** or **Unmapped**: preserve
+their confirmed status and display the unresolved values. Apply the resolution gate when confirming
+a new draft or reconfirming an edited specification; do not rewrite historical records in place.
+
+Measurements, Additional Components, and Special Requirements are deferred from the current review
+surface and enrichment output. Retain their existing stored fields as empty arrays for compatibility;
+do not remove existing data or introduce a destructive schema migration.
+
+Before confirmation, retain the item's existing editable label. Confirming a fully resolved Production
+Specification automatically rebuilds the Production Label from its approved dropdown values, omitting
+**Not Applicable** fields. A confirmed item no longer permits an independent free-text label override;
+staff correct its dropdown values and reconfirm so the label and specification remain consistent.
+
 ## Rollback
 
 Set `NEXT_PUBLIC_WORK_ORDER_PRODUCTION_SPECIFICATIONS_ENABLED=false` to disable the specification

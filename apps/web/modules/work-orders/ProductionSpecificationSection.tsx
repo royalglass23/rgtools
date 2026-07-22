@@ -15,10 +15,7 @@ import {
   type ProductionSpecification,
   type ProductionSpecificationCatalogueOption,
   type ProductionSpecificationChangeReasonCode,
-  type ProductionSpecificationComponent,
   type ProductionSpecificationFieldName,
-  type ProductionSpecificationMeasurement,
-  type ProductionSpecificationRequirement,
   type ProductionSpecificationValue,
 } from './production-specifications'
 import type {
@@ -87,114 +84,26 @@ export function ProductionSpecificationDetails({
           />
         )}
 
-        <section aria-label="Original ServiceM8 description">
-          <h4 className="font-semibold text-text-primary">Original ServiceM8 description</h4>
-          <p className="mt-1 whitespace-pre-wrap">
-            {persisted.sourceDescription ?? 'Original source text was not recorded.'}
-          </p>
-        </section>
-
-        {(persisted.evidenceData?.length ?? 0) > 0 && (
-          <section aria-label="Source evidence">
-            <h4 className="font-semibold text-text-primary">Source evidence</h4>
-            <ul className="mt-1 list-disc space-y-1 pl-5">
-              {persisted.evidenceData?.map((entry, index) => (
-                <li key={`${String(entry.field ?? 'evidence')}-${index}`}>
-                  {String(entry.field ?? 'Field')}: {String(entry.sourceText ?? '')}
-                </li>
-              ))}
-            </ul>
-          </section>
+        {persisted.status === 'confirmed' && !draftSpecification && (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {SPECIFICATION_FIELDS.map(({ field, label }) => {
+              const displayValue = productionSpecificationValueLabel(specification[field], catalogue)
+              return (
+                <label key={field} className="block font-medium text-text-secondary">
+                  {label}
+                  <select
+                    aria-label={`${label} for ${item.itemCode ?? 'item'}`}
+                    value={displayValue}
+                    disabled
+                    className="mt-1 w-full rounded border border-border bg-surface-subtle px-2 py-1.5 text-xs text-text-primary disabled:opacity-100"
+                  >
+                    <option value={displayValue}>{displayValue}</option>
+                  </select>
+                </label>
+              )
+            })}
+          </div>
         )}
-
-        {(persisted.ambiguityFlags?.length ?? 0) > 0 && (
-          <section aria-label="Review flags">
-            <h4 className="font-semibold text-text-primary">Review flags</h4>
-            <ul className="mt-1 list-disc space-y-1 pl-5">
-              {persisted.ambiguityFlags?.map((flag) => <li key={flag}>{flag}</li>)}
-            </ul>
-          </section>
-        )}
-
-        <dl className="grid gap-x-4 gap-y-2 sm:grid-cols-2 lg:grid-cols-4">
-          {SPECIFICATION_FIELDS.map(({ field, label }) => (
-            <div key={field}>
-              <dt className="font-medium text-text-muted">{label}</dt>
-              <dd className="mt-0.5 text-text-primary">{productionSpecificationValueLabel(specification[field], catalogue)}</dd>
-            </div>
-          ))}
-        </dl>
-
-        {specification.measurements.length > 0 && (
-          <section aria-label="Measurements">
-            <h4 className="font-semibold text-text-primary">Measurements</h4>
-            <ul className="mt-1 list-disc space-y-1 pl-5">
-              {specification.measurements.map((measurement, index) => (
-                <li key={`${measurement.kind}-${index}`}>
-                  {measurement.label ? `${measurement.label}: ` : ''}{measurement.value} {measurement.unit}
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {specification.additionalComponents.length > 0 && (
-          <section aria-label="Additional Components">
-            <h4 className="font-semibold text-text-primary">Additional Components</h4>
-            <ul className="mt-1 list-disc space-y-1 pl-5">
-              {specification.additionalComponents.map((component, index) => (
-                <li key={`${component.name}-${index}`}>
-                  {component.name}{component.quantity ? ` - Qty ${component.quantity}` : ''}
-                  {component.dimensions ? ` - ${component.dimensions}` : ''}
-                  {component.material ? ` - ${component.material}` : ''}
-                  {component.finish ? ` - ${component.finish}` : ''}
-                  {component.notes ? ` - ${component.notes}` : ''}
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {specification.specialRequirements.length > 0 && (
-          <section aria-label="Special Requirements">
-            <h4 className="font-semibold text-text-primary">Special Requirements</h4>
-            <ul className="mt-1 list-disc space-y-1 pl-5">
-              {specification.specialRequirements.map((requirement, index) => (
-                <li key={`${requirement.kind}-${index}`}>{requirement.detail}</li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        <section aria-label="Production Specification history">
-          <h4 className="font-semibold text-text-primary">History</h4>
-          {persisted.history.length === 0 ? (
-            <p className="mt-1 text-text-muted">No confirmed changes yet.</p>
-          ) : (
-            <ol className="mt-1 space-y-2">
-              {persisted.history.map((revision) => (
-                <li key={revision.id} className="rounded border border-border bg-surface px-2 py-1.5">
-                  <span className="font-medium">
-                    {revisionTypeLabel(revision.revisionType)}
-                    {' by '}{revision.actorUsername ?? 'Unknown user'}
-                  </span>
-                  {' - '}{formatDateTime(revision.createdAt)}
-                  {revision.reasonCode ? ` - ${changeReasonLabel(revision.reasonCode)}` : ''}
-                  {revision.note ? `: ${revision.note}` : ''}
-                  {(revision.changes?.length ?? 0) > 0 && (
-                    <ul className="mt-1 list-disc space-y-1 pl-5">
-                      {revision.changes?.map((change, index) => (
-                        <li key={`${String(change.identity ?? change.kind ?? 'change')}-${index}`}>
-                          {revisionChangeLabel(change, catalogue)}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </li>
-              ))}
-            </ol>
-          )}
-        </section>
 
         {canManage && persisted.status === 'confirmed' && !draftSpecification && (
           <div className="flex flex-wrap items-center gap-2">
@@ -319,43 +228,6 @@ function SourceChangeComparison({
   )
 }
 
-function revisionTypeLabel(revisionType: string) {
-  if (revisionType === 'baseline_confirmed') return 'Baseline confirmed'
-  if (revisionType === 'source_change_ignored') return 'Source change ignored'
-  if (revisionType === 'source_change_draft_created') return 'Source-change draft created'
-  if (revisionType === 'catalogue_option_changed') return 'Catalogue option updated'
-  return 'Specification updated'
-}
-
-function changeReasonLabel(reasonCode: string) {
-  return PRODUCTION_SPECIFICATION_CHANGE_REASONS.find(({ code }) => code === reasonCode)?.label ?? reasonCode
-}
-
-function revisionChangeLabel(
-  change: Record<string, unknown>,
-  catalogue: readonly ProductionSpecificationCatalogueOption[],
-) {
-  const identity = String(change.identity ?? 'Specification')
-  if (change.kind === 'catalogue') {
-    const governedAttribute = typeof change.label === 'string' ? ` — ${change.label}` : ''
-    return `Catalogue option ${identity}${governedAttribute}: ${auditValueLabel(change.previousValue, catalogue)} → ${auditValueLabel(change.newValue, catalogue)}`
-  }
-  const field = SPECIFICATION_FIELDS.find(({ field }) => field === identity)
-  const label = field?.label ?? identity
-  return `${label}: ${auditValueLabel(change.previousValue, catalogue)} → ${auditValueLabel(change.newValue, catalogue)}`
-}
-
-function auditValueLabel(
-  value: unknown,
-  catalogue: readonly ProductionSpecificationCatalogueOption[],
-) {
-  if (typeof value === 'string') return value
-  if (value && typeof value === 'object' && !Array.isArray(value) && 'state' in value) {
-    return productionSpecificationValueLabel(value as ProductionSpecificationValue, catalogue)
-  }
-  return JSON.stringify(value)
-}
-
 function ProductionSpecificationEditor({
   itemId,
   itemCode,
@@ -457,26 +329,6 @@ function ProductionSpecificationEditor({
           />
         ))}
       </div>
-      <RepeatableSpecificationEditor
-        measurements={draft.measurements}
-        components={draft.additionalComponents}
-        requirements={draft.specialRequirements}
-        onMeasurementsChange={(measurements) => {
-          setDraft((current) => ({ ...current, measurements }))
-          setDirty(true)
-          setStatus('idle')
-        }}
-        onComponentsChange={(additionalComponents) => {
-          setDraft((current) => ({ ...current, additionalComponents }))
-          setDirty(true)
-          setStatus('idle')
-        }}
-        onRequirementsChange={(specialRequirements) => {
-          setDraft((current) => ({ ...current, specialRequirements }))
-          setDirty(true)
-          setStatus('idle')
-        }}
-      />
       {hasConfirmedSpecification && (
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <label className="text-xs font-medium text-text-secondary">
@@ -548,184 +400,6 @@ function ProductionSpecificationEditor({
   )
 }
 
-function RepeatableSpecificationEditor({
-  measurements,
-  components,
-  requirements,
-  onMeasurementsChange,
-  onComponentsChange,
-  onRequirementsChange,
-}: {
-  measurements: ProductionSpecificationMeasurement[]
-  components: ProductionSpecificationComponent[]
-  requirements: ProductionSpecificationRequirement[]
-  onMeasurementsChange: (value: ProductionSpecificationMeasurement[]) => void
-  onComponentsChange: (value: ProductionSpecificationComponent[]) => void
-  onRequirementsChange: (value: ProductionSpecificationRequirement[]) => void
-}) {
-  return (
-    <div className="mt-4 grid gap-4 lg:grid-cols-3">
-      <fieldset className="rounded border border-border p-3">
-        <legend className="px-1 font-semibold text-text-primary">Measurements</legend>
-        <div className="space-y-3">
-          {measurements.map((measurement, index) => (
-            <div key={index} className="grid grid-cols-2 gap-2 rounded bg-surface-subtle p-2">
-              <label>Kind
-                <select
-                  aria-label={`Measurement kind ${index + 1}`}
-                  value={measurement.kind}
-                  onChange={(event) => onMeasurementsChange(replaceAt(measurements, index, {
-                    ...measurement,
-                    kind: event.target.value as ProductionSpecificationMeasurement['kind'],
-                  }))}
-                  className="mt-1 w-full rounded border border-border bg-surface px-2 py-1"
-                >
-                  {MEASUREMENT_KINDS.map((value) => <option key={value} value={value}>{titleCase(value)}</option>)}
-                </select>
-              </label>
-              <label>Label
-                <input
-                  aria-label={`Measurement label ${index + 1}`}
-                  value={measurement.label ?? ''}
-                  maxLength={80}
-                  onChange={(event) => onMeasurementsChange(replaceAt(measurements, index, {
-                    ...measurement,
-                    ...(event.target.value ? { label: event.target.value } : { label: undefined }),
-                  }))}
-                  className="mt-1 w-full rounded border border-border bg-surface px-2 py-1"
-                />
-              </label>
-              <label>Value
-                <input
-                  aria-label={`Measurement value ${index + 1}`}
-                  value={measurement.value}
-                  required
-                  maxLength={40}
-                  onChange={(event) => onMeasurementsChange(replaceAt(measurements, index, { ...measurement, value: event.target.value }))}
-                  className="mt-1 w-full rounded border border-border bg-surface px-2 py-1"
-                />
-              </label>
-              <label>Unit
-                <select
-                  aria-label={`Measurement unit ${index + 1}`}
-                  value={measurement.unit}
-                  onChange={(event) => onMeasurementsChange(replaceAt(measurements, index, {
-                    ...measurement,
-                    unit: event.target.value as ProductionSpecificationMeasurement['unit'],
-                  }))}
-                  className="mt-1 w-full rounded border border-border bg-surface px-2 py-1"
-                >
-                  {MEASUREMENT_UNITS.map((value) => <option key={value} value={value}>{value}</option>)}
-                </select>
-              </label>
-              <button type="button" onClick={() => onMeasurementsChange(removeAt(measurements, index))} className="col-span-2 justify-self-start text-[var(--state-critical)]">
-                Remove measurement {index + 1}
-              </button>
-            </div>
-          ))}
-          <button type="button" onClick={() => onMeasurementsChange([...measurements, { kind: 'other', value: '', unit: 'mm' }])} className="rounded border border-border bg-surface px-2 py-1 font-medium">
-            Add measurement
-          </button>
-        </div>
-      </fieldset>
-
-      <fieldset className="rounded border border-border p-3">
-        <legend className="px-1 font-semibold text-text-primary">Additional Components</legend>
-        <div className="space-y-3">
-          {components.map((component, index) => (
-            <div key={index} className="grid grid-cols-2 gap-2 rounded bg-surface-subtle p-2">
-              {COMPONENT_FIELDS.map(({ key, label, maxLength }) => (
-                <label key={key} className={key === 'notes' ? 'col-span-2' : ''}>{label}
-                  <input
-                    aria-label={`Component ${label.toLowerCase()} ${index + 1}`}
-                    value={component[key] ?? ''}
-                    required={key === 'name'}
-                    maxLength={maxLength}
-                    onChange={(event) => onComponentsChange(replaceAt(components, index, {
-                      ...component,
-                      [key]: event.target.value || undefined,
-                    }))}
-                    className="mt-1 w-full rounded border border-border bg-surface px-2 py-1"
-                  />
-                </label>
-              ))}
-              <button type="button" onClick={() => onComponentsChange(removeAt(components, index))} className="col-span-2 justify-self-start text-[var(--state-critical)]">
-                Remove component {index + 1}
-              </button>
-            </div>
-          ))}
-          <button type="button" onClick={() => onComponentsChange([...components, { name: '' }])} className="rounded border border-border bg-surface px-2 py-1 font-medium">
-            Add component
-          </button>
-        </div>
-      </fieldset>
-
-      <fieldset className="rounded border border-border p-3">
-        <legend className="px-1 font-semibold text-text-primary">Special Requirements</legend>
-        <div className="space-y-3">
-          {requirements.map((requirement, index) => (
-            <div key={index} className="space-y-2 rounded bg-surface-subtle p-2">
-              <label>Kind
-                <select
-                  aria-label={`Special requirement kind ${index + 1}`}
-                  value={requirement.kind}
-                  onChange={(event) => onRequirementsChange(replaceAt(requirements, index, {
-                    ...requirement,
-                    kind: event.target.value as ProductionSpecificationRequirement['kind'],
-                  }))}
-                  className="mt-1 w-full rounded border border-border bg-surface px-2 py-1"
-                >
-                  {REQUIREMENT_KINDS.map((value) => <option key={value} value={value}>{titleCase(value)}</option>)}
-                </select>
-              </label>
-              <label>Detail
-                <textarea
-                  aria-label={`Special requirement detail ${index + 1}`}
-                  value={requirement.detail}
-                  required
-                  maxLength={1_000}
-                  onChange={(event) => onRequirementsChange(replaceAt(requirements, index, { ...requirement, detail: event.target.value }))}
-                  className="mt-1 min-h-16 w-full rounded border border-border bg-surface px-2 py-1"
-                />
-              </label>
-              <button type="button" onClick={() => onRequirementsChange(removeAt(requirements, index))} className="text-[var(--state-critical)]">
-                Remove special requirement {index + 1}
-              </button>
-            </div>
-          ))}
-          <button type="button" onClick={() => onRequirementsChange([...requirements, { kind: 'other', detail: '' }])} className="rounded border border-border bg-surface px-2 py-1 font-medium">
-            Add special requirement
-          </button>
-        </div>
-      </fieldset>
-    </div>
-  )
-}
-
-const MEASUREMENT_KINDS: ProductionSpecificationMeasurement['kind'][] = ['quantity', 'length', 'width', 'height', 'diameter', 'other']
-const MEASUREMENT_UNITS: ProductionSpecificationMeasurement['unit'][] = ['mm', 'm', 'each', 'other']
-const REQUIREMENT_KINDS: ProductionSpecificationRequirement['kind'][] = ['standard', 'design_constraint', 'inclusion', 'exclusion', 'template', 'drawing', 'other']
-const COMPONENT_FIELDS: Array<{ key: keyof ProductionSpecificationComponent; label: string; maxLength: number }> = [
-  { key: 'name', label: 'Name', maxLength: 160 },
-  { key: 'quantity', label: 'Quantity', maxLength: 40 },
-  { key: 'dimensions', label: 'Dimensions', maxLength: 120 },
-  { key: 'material', label: 'Material', maxLength: 120 },
-  { key: 'finish', label: 'Finish', maxLength: 120 },
-  { key: 'notes', label: 'Notes', maxLength: 500 },
-]
-
-function replaceAt<T>(values: T[], index: number, replacement: T) {
-  return values.map((value, currentIndex) => currentIndex === index ? replacement : value)
-}
-
-function removeAt<T>(values: T[], index: number) {
-  return values.filter((_, currentIndex) => currentIndex !== index)
-}
-
-function titleCase(value: string) {
-  return value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
-}
-
 function SpecificationChoiceEditor({
   field,
   label,
@@ -744,7 +418,9 @@ function SpecificationChoiceEditor({
   const options = catalogue.filter((option) => option.field === field && option.isActive !== false)
   const selectedValue = value.state === 'selected'
     ? value.catalogueId
-    : value.state === 'unmapped' ? '__unmapped' : '__tbc'
+    : value.state === 'unmapped'
+      ? '__unmapped'
+      : value.state === 'not_applicable' ? '__not_applicable' : '__tbc'
 
   return (
     <div>
@@ -756,12 +432,14 @@ function SpecificationChoiceEditor({
           onChange={(event) => {
             const next = event.target.value
             if (next === '__tbc') return onChange({ state: 'tbc' })
+            if (next === '__not_applicable') return onChange({ state: 'not_applicable' })
             if (next === '__unmapped') return onChange({ state: 'unmapped', raw: value.state === 'unmapped' ? value.raw : 'Needs review' })
             onChange({ state: 'selected', catalogueId: next })
           }}
           className="mt-1 w-full rounded border border-border bg-surface px-2 py-1.5 text-xs text-text-primary"
         >
           <option value="__tbc">TBC</option>
+          <option value="__not_applicable">Not Applicable</option>
           {options.map((option) => <option key={option.id} value={option.id}>{option.displayLabel}</option>)}
           <option value="__unmapped">Unmapped - Needs Review</option>
         </select>

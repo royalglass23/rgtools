@@ -36,7 +36,7 @@ describe('Production Specifications', () => {
     )
   })
 
-  it('validates the approved Double Disc tracer and builds one deterministic two-line production label', () => {
+  it('builds the production label from dropdowns only when historical repeatables remain stored', () => {
     const specification = parseProductionSpecification({
       schemaVersion: 1,
       system: { state: 'selected', catalogueId: 'system.double-disc' },
@@ -64,28 +64,29 @@ describe('Production Specifications', () => {
     })
 
     expect(buildProductionLabel(specification)).toBe(
-      'Double Disc | Ext Balcony | 14.9 m\n12 mm Toughened Clear | Timber | Chrome | IL Rail 21 x 25 mm | Supply & Install',
+      'Double Disc | Ext Balcony\n12 mm Toughened Clear | Timber | Chrome | IL Rail 21 x 25 mm | Supply & Install',
     )
+    expect(buildProductionLabel(specification)).not.toContain('14.9 m')
     expect(buildProductionLabel(specification)).not.toContain('AS/NZS')
   })
 
-  it('promotes a corrected draft into the first attributable confirmed baseline without a change reason', () => {
+  it('promotes a fully resolved draft while omitting Not Applicable values from its label', () => {
     const draft = parseProductionSpecification({
       schemaVersion: 1,
       system: { state: 'selected', catalogueId: 'system.double-disc' },
       structureMaterial: { state: 'selected', catalogueId: 'structure_material.timber' },
       structureType: { state: 'selected', catalogueId: 'structure_type.balcony' },
       locationEnvironment: { state: 'selected', catalogueId: 'location.external' },
-      locationDetail: { state: 'unmapped', raw: 'Upper balcony' },
+      locationDetail: { state: 'not_applicable' },
       structureBuilt: { state: 'selected', catalogueId: 'structure_built.new' },
       glassConstruction: { state: 'selected', catalogueId: 'glass_construction.toughened' },
       glassAppearance: { state: 'selected', catalogueId: 'glass_appearance.clear' },
       thickness: { state: 'selected', catalogueId: 'thickness.12mm' },
       gateRequired: { state: 'selected', catalogueId: 'gate_required.no' },
-      doorOpeningType: { state: 'tbc' },
+      doorOpeningType: { state: 'not_applicable' },
       fixingMethod: { state: 'selected', catalogueId: 'fixing_method.double-disc' },
       hardwareFinish: { state: 'selected', catalogueId: 'finish.chrome' },
-      systemFinish: { state: 'tbc' },
+      systemFinish: { state: 'not_applicable' },
       interlinkingRail: { state: 'selected', catalogueId: 'interlinking_rail.21x25mm' },
       deliveryScope: { state: 'selected', catalogueId: 'delivery_scope.supply-install' },
       measurements: [],
@@ -188,6 +189,27 @@ describe('Production Specifications', () => {
       changeReason: { code: 'not-approved' as 'other' },
     })).toThrow('Choose an approved change reason before confirming this revision.')
   })
+
+  it('blocks confirmation while any dropdown remains TBC or Unmapped', () => {
+    const resolved = parseProductionSpecification(confirmedSpecificationInput())
+    const transition = (draft: typeof resolved) => ({
+      specificationId: 'specification-unresolved',
+      workOrderItemId: 'item-unresolved',
+      draft,
+      previousConfirmed: null,
+      actorId: 'user-1',
+      confirmedAt: new Date('2026-07-17T03:30:00.000Z'),
+    })
+
+    expect(() => confirmProductionSpecificationDraft(transition({
+      ...resolved,
+      systemFinish: { state: 'tbc' },
+    }))).toThrow('Resolve all TBC and Unmapped values before confirming this specification.')
+    expect(() => confirmProductionSpecificationDraft(transition({
+      ...resolved,
+      systemFinish: { state: 'unmapped', raw: 'Custom bronze' },
+    }))).toThrow('Resolve all TBC and Unmapped values before confirming this specification.')
+  })
 })
 
 function confirmedSpecificationInput() {
@@ -197,16 +219,16 @@ function confirmedSpecificationInput() {
     structureMaterial: { state: 'selected', catalogueId: 'structure_material.timber' },
     structureType: { state: 'selected', catalogueId: 'structure_type.balcony' },
     locationEnvironment: { state: 'selected', catalogueId: 'location.external' },
-    locationDetail: { state: 'tbc' },
+    locationDetail: { state: 'not_applicable' },
     structureBuilt: { state: 'selected', catalogueId: 'structure_built.new' },
     glassConstruction: { state: 'selected', catalogueId: 'glass_construction.toughened' },
     glassAppearance: { state: 'selected', catalogueId: 'glass_appearance.clear' },
     thickness: { state: 'selected', catalogueId: 'thickness.12mm' },
     gateRequired: { state: 'selected', catalogueId: 'gate_required.no' },
-    doorOpeningType: { state: 'tbc' },
+    doorOpeningType: { state: 'not_applicable' },
     fixingMethod: { state: 'selected', catalogueId: 'fixing_method.double-disc' },
     hardwareFinish: { state: 'selected', catalogueId: 'finish.chrome' },
-    systemFinish: { state: 'tbc' },
+    systemFinish: { state: 'not_applicable' },
     interlinkingRail: { state: 'selected', catalogueId: 'interlinking_rail.21x25mm' },
     deliveryScope: { state: 'selected', catalogueId: 'delivery_scope.supply-install' },
     measurements: [],

@@ -217,6 +217,26 @@ describe('Production Specification enrichment contract', () => {
     )
   })
 
+  it('rejects repeatable details outside the dropdown-only enrichment scope', () => {
+    const specification = createEmptyProductionSpecification()
+    specification.measurements = [{ kind: 'quantity', value: '5', unit: 'each' }]
+    specification.additionalComponents = [{ name: 'Bracket' }]
+    specification.specialRequirements = [{ kind: 'inclusion', detail: 'Installation included' }]
+
+    expect(() => parseProductionSpecificationEnrichmentOutput({
+      schemaVersion: 1,
+      specification,
+      evidence: [
+        { field: 'measurements', sourceText: '5 pieces' },
+        { field: 'additionalComponents', sourceText: 'Bracket' },
+        { field: 'specialRequirements', sourceText: 'Installation included' },
+      ],
+      ambiguityFlags: [],
+    }, '5 pieces with Bracket and Installation included')).toThrow(
+      'Enrichment may propose dropdown values only; repeatable details must remain empty.',
+    )
+  })
+
   it('rejects unsupported fields inside an additional component', () => {
     const specification = createEmptyProductionSpecification() as unknown as Record<string, unknown>
     specification.additionalComponents = [{
