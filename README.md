@@ -24,6 +24,12 @@ This repo is a pnpm workspace:
 | **PS Generator** | Generate PS1 and PS3 Producer Statement PDF packages from published system, option, template, mapping, and wording configuration                                                                                   |
 | **Admin**        | User/module access, pricing/tracking settings, dashboard tables, audit/error exports, and client merge review                                                                                                      |
 
+### Quote Movement V1 boundary
+
+Quote Movement is the staff monitoring surface at `/quote-movement`, separate from Quote Tracker but protected by the same `quote-tracker` module grant. It reads ServiceM8 Quote jobs one way into retained rgtools history, shows explicit Complete or Incomplete Source Coverage, and preserves converted Quote evidence while operations continue in Work Orders.
+
+V1 deliberately does not rank or score Quotes, recommend sales actions, assign owners, manage next actions or due dates, draft customer messages, or write changes back to ServiceM8. Automatic What Matters Now summaries organise retained evidence; they do not act as a priority engine or workflow manager.
+
 ## Tech stack
 
 - **Next.js 16** (App Router) + **React 19** + **Tailwind CSS 4**

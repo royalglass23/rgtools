@@ -58,6 +58,14 @@ List and detail queries derive `workOrderId` by joining the current Work Order o
 
 `updateQuoteMovementComplexityAction(formData)` reuses `requireModule('quote-tracker')`, accepts only `recordId` and an approved complexity value, calls the narrow repository updater, and revalidates `/quote-movement`. Important Now displays the cached Current Position plus Source Coverage, or **Not yet summarised** while the first background summary is pending.
 
-## Follow-on slices
+## V1 release boundary
 
-The remaining release slice proves the secured ten-second browser journey. Quote Movement remains a monitoring surface rather than a workflow manager.
+V1 is the `/quote-movement` list, `/quote-movement/[id]` detail, and contextual evidence route protected by the existing `quote-tracker` grant. Its one-way inbound model retains ServiceM8 source records and tracked engagement, reports Source Coverage honestly, preserves converted history, and permits only the RG-owned Project Complexity mutation.
+
+The release excludes ranking, priority or value qualification, automated complexity, owner/action/due-date workflow, sales recommendations, customer-message drafting, raw history playback, deletion mirroring, two-way ServiceM8 sync, and a separate permission. These are not implicit summary features; any future V2 addition needs its own product and security decision.
+
+## Controlled release proof
+
+`tests/e2e/quote-movement-v1.spec.ts` is the deterministic V1 browser journey. It requires `E2E_QUOTE_MOVEMENT_V1=true`, an isolated `E2E_DATABASE_URL`, and a matching 32-character-or-longer `E2E_DATABASE_SENTINEL` row. The test fails closed before mutation if the sentinel cannot be proven.
+
+The fixture uses granted and ungranted staff users plus representative active and converted Quotes, Complete and Incomplete Source Coverage, conflicting retained history, relevant and routine media, tracked engagement, and an Unassessed record. It measures the prepared cached list and detail surfaces against the ten-second target, exercises the approved controls and complexity mutation, follows contextual evidence, verifies Work Order conversion linkage, and uses a controlled local ServiceM8 failure rather than live ServiceM8 or OpenAI.
