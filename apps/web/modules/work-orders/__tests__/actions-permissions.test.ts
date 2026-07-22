@@ -481,6 +481,39 @@ describe('work order action permissions', () => {
     expect(mockLogAudit).not.toHaveBeenCalled()
   })
 
+  it('rejects an independent manual label change for a confirmed Production Specification', async () => {
+    const txUpdate = vi.fn()
+    const txInsert = vi.fn()
+    mockTransaction.mockImplementationOnce(async (callback: (tx: unknown) => Promise<void>) => callback({
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn(async () => [{
+              id: 'item-1',
+              workOrderId: 'work-order-1',
+              originalDescription: 'Confirmed ServiceM8 description',
+              generatedLabel: 'Legacy label',
+              manualLabelOverride: null,
+              isActive: true,
+              productionSpecificationStatus: 'confirmed',
+            }]),
+          })),
+        })),
+      })),
+      update: txUpdate,
+      insert: txInsert,
+    }))
+    const formData = new FormData()
+    formData.set('label', 'Forged confirmed label')
+
+    await expect(updateWorkOrderItemLabelAction('item-1', formData)).rejects.toThrow(
+      'Confirmed Production Specification labels must be changed through the specification review.',
+    )
+
+    expect(txUpdate).not.toHaveBeenCalled()
+    expect(txInsert).not.toHaveBeenCalled()
+  })
+
   it('rejects a manual label change when refresh removes the item between read and write', async () => {
     const returning = vi.fn(async () => [])
     const where = vi.fn(() => ({ returning }))
@@ -631,6 +664,31 @@ describe('work order action permissions', () => {
 
     await expect(regenerateWorkOrderItemLabelAction('item-1')).rejects.toThrow(
       'Work Order Item item-1 is removed and cannot be edited.',
+    )
+
+    expect(mockGenerateWorkOrderItemLabel).not.toHaveBeenCalled()
+    expect(mockTransaction).not.toHaveBeenCalled()
+  })
+
+  it('rejects AI label regeneration for a confirmed Production Specification before calling OpenAI', async () => {
+    mockSelect.mockReturnValue({
+      from: vi.fn(() => ({
+        where: vi.fn(() => ({
+          limit: vi.fn(async () => [{
+            id: 'item-1',
+            workOrderId: 'work-order-1',
+            originalDescription: 'Confirmed ServiceM8 description',
+            generatedLabel: 'Legacy label',
+            manualLabelOverride: null,
+            isActive: true,
+            productionSpecificationStatus: 'confirmed',
+          }]),
+        })),
+      })),
+    })
+
+    await expect(regenerateWorkOrderItemLabelAction('item-1')).rejects.toThrow(
+      'Confirmed Production Specification labels must be changed through the specification review.',
     )
 
     expect(mockGenerateWorkOrderItemLabel).not.toHaveBeenCalled()
