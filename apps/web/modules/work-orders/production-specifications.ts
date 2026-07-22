@@ -318,6 +318,7 @@ export function confirmProductionSpecificationDraft(input: {
   workOrderItemId: string
   draft: ProductionSpecification
   previousConfirmed: ProductionSpecification | null
+  existingItemLabel: string
   actorId: string | null
   confirmedAt: Date
   catalogue?: readonly ProductionSpecificationCatalogueOption[]
@@ -329,12 +330,15 @@ export function confirmProductionSpecificationDraft(input: {
   const catalogue = input.catalogue ?? INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE
   const confirmedData = parseProductionSpecification(input.draft, catalogue)
   const hasUnresolvedValue = SPECIFICATION_FIELD_NAMES.some((field) => (
-    confirmedData[field].state === 'tbc' || confirmedData[field].state === 'unmapped'
+    confirmedData[field].state === 'unmapped'
   ))
   if (hasUnresolvedValue) {
-    throw new Error('Resolve all TBC and Unmapped values before confirming this specification.')
+    throw new Error('Resolve all Unmapped values before confirming this specification.')
   }
-  const productionLabel = buildProductionLabel(confirmedData, catalogue)
+  const hasTbcValue = SPECIFICATION_FIELD_NAMES.some((field) => confirmedData[field].state === 'tbc')
+  const productionLabel = hasTbcValue
+    ? input.existingItemLabel.trim()
+    : buildProductionLabel(confirmedData, catalogue)
   if (!productionLabel) throw new Error('Production specification cannot be confirmed without a production label.')
   const changeReason = input.previousConfirmed ? parseChangeReason(input.changeReason) : null
   const changes = input.previousConfirmed
