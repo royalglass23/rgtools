@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildProductionLabel,
   confirmProductionSpecificationDraft,
+  createEmptyProductionSpecification,
   parseProductionSpecification,
 } from '../production-specifications'
 
@@ -100,6 +101,7 @@ describe('Production Specifications', () => {
       workOrderItemId: 'item-1',
       draft,
       previousConfirmed: null,
+      existingItemLabel: 'Existing item label',
       actorId: 'user-1',
       confirmedAt,
     })
@@ -138,6 +140,7 @@ describe('Production Specifications', () => {
       workOrderItemId: 'item-1',
       draft: changedDraft,
       previousConfirmed: draft,
+      existingItemLabel: 'Existing item label',
       actorId: 'user-2',
       confirmedAt: new Date('2026-07-17T03:30:00.000Z'),
       changeReason: {
@@ -173,6 +176,7 @@ describe('Production Specifications', () => {
       workOrderItemId: 'item-1',
       draft: changed,
       previousConfirmed: confirmed,
+      existingItemLabel: 'Existing item label',
       actorId: 'user-1',
       confirmedAt: new Date('2026-07-17T03:30:00.000Z'),
     }
@@ -190,27 +194,43 @@ describe('Production Specifications', () => {
     })).toThrow('Choose an approved change reason before confirming this revision.')
   })
 
-  it('blocks confirmation while any dropdown remains TBC or Unmapped', () => {
-    const resolved = parseProductionSpecification(confirmedSpecificationInput())
-    const transition = (draft: typeof resolved) => ({
-      specificationId: 'specification-unresolved',
-      workOrderItemId: 'item-unresolved',
-      draft,
-      previousConfirmed: null,
-      actorId: 'user-1',
-      confirmedAt: new Date('2026-07-17T03:30:00.000Z'),
-    })
+  it('allows an all-TBC confirmation while preserving the existing item label', () => {
+    const draft = createEmptyProductionSpecification()
+    const transition = unresolvedTransition(draft, 'Existing shower glass label')
 
-    expect(() => confirmProductionSpecificationDraft(transition({
-      ...resolved,
-      systemFinish: { state: 'tbc' },
-    }))).toThrow('Resolve all TBC and Unmapped values before confirming this specification.')
-    expect(() => confirmProductionSpecificationDraft(transition({
+    const result = confirmProductionSpecificationDraft(transition)
+
+    expect(result.specification).toMatchObject({
+      status: 'confirmed',
+      confirmedData: { systemFinish: { state: 'tbc' } },
+      productionLabel: 'Existing shower glass label',
+    })
+  })
+
+  it('blocks confirmation while any dropdown remains Unmapped', () => {
+    const resolved = parseProductionSpecification(confirmedSpecificationInput())
+
+    expect(() => confirmProductionSpecificationDraft(unresolvedTransition({
       ...resolved,
       systemFinish: { state: 'unmapped', raw: 'Custom bronze' },
-    }))).toThrow('Resolve all TBC and Unmapped values before confirming this specification.')
+    }))).toThrow('Resolve all Unmapped values before confirming this specification.')
   })
 })
+
+function unresolvedTransition(
+  draft: ReturnType<typeof createEmptyProductionSpecification>,
+  existingItemLabel = 'Existing item label',
+) {
+  return {
+    specificationId: 'specification-unresolved',
+    workOrderItemId: 'item-unresolved',
+    draft,
+    previousConfirmed: null,
+    existingItemLabel,
+    actorId: 'user-1',
+    confirmedAt: new Date('2026-07-17T03:30:00.000Z'),
+  }
+}
 
 function confirmedSpecificationInput() {
   return {

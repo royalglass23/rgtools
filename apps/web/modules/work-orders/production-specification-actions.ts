@@ -162,6 +162,9 @@ export async function confirmWorkOrderItemProductionSpecificationAction(
         id: workOrderItems.id,
         workOrderId: workOrderItems.workOrderId,
         isActive: workOrderItems.isActive,
+        originalDescription: workOrderItems.originalDescription,
+        generatedLabel: workOrderItems.generatedLabel,
+        manualLabelOverride: workOrderItems.manualLabelOverride,
       })
       .from(workOrderItems)
       .where(and(eq(workOrderItems.id, itemId), eq(workOrderItems.isActive, true)))
@@ -173,6 +176,7 @@ export async function confirmWorkOrderItemProductionSpecificationAction(
         id: workOrderItemProductionSpecifications.id,
         draftData: workOrderItemProductionSpecifications.draftData,
         confirmedData: workOrderItemProductionSpecifications.confirmedData,
+        productionLabel: workOrderItemProductionSpecifications.productionLabel,
         sourceDescription: workOrderItemProductionSpecifications.sourceDescription,
         sourceDescriptionFingerprint: workOrderItemProductionSpecifications.sourceDescriptionFingerprint,
         draftSourceDescription: workOrderItemProductionSpecifications.draftSourceDescription,
@@ -200,6 +204,8 @@ export async function confirmWorkOrderItemProductionSpecificationAction(
       previousConfirmed: current.confirmedData
         ? parsePersistedProductionSpecification(current.confirmedData, catalogue)
         : null,
+      existingItemLabel:
+        current.productionLabel ?? item.manualLabelOverride ?? item.generatedLabel ?? item.originalDescription,
       actorId,
       confirmedAt,
       catalogue,
