@@ -21,6 +21,7 @@ All notable changes to rgtools are recorded here, grouped by release.
 
 ### Changed
 
+- Production access reconciliation now safely recreates or reactivates the canonical Lead Intake, Leads, and Quote Tracker module rows, restores missing staff grants idempotently, and preserves unrelated module access.
 - **Royal Glass Precision UI product-wide rollout (MT-201)** - extended the semantic Light, Dark, and System presentation layer across all 29 user-facing pages, including the new Quote Movement list and detail surfaces; refined the sign-in experience and navigation order; labelled Business Performance chart periods and series; and clarified that Quote Tracker tracks ServiceM8 quotes.
 - **Royal Glass Precision UI Phase 1 (MT-200)** - added persistent Light, Dark, and System themes; semantic design tokens; an updated authenticated shell; shared presentation components; and token-driven Dashboard, Leads list, Work Order detail, and Quote Movement reference screens.
 - Repo is now a pnpm monorepo: the internal Next.js app moved to `apps/web`, the shared Drizzle schema/client moved to `packages/db`, and root scripts now delegate to workspace packages.

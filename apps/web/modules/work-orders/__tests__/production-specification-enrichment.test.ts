@@ -131,6 +131,42 @@ describe('Production Specification enrichment contract', () => {
     })
   })
 
+  it('submits a schema accepted by the Responses structured-output boundary', async () => {
+    process.env.OPENAI_API_KEY = 'test-key'
+    const specification = createEmptyProductionSpecification()
+    const request = vi.fn(async (
+      _input: Parameters<typeof fetch>[0],
+      init?: Parameters<typeof fetch>[1],
+    ) => {
+      const body = JSON.parse(String(init?.body)) as {
+        text: { format: { schema: unknown } }
+      }
+      if (JSON.stringify(body.text.format.schema).includes('"oneOf"')) {
+        return Response.json({
+          error: {
+            message: "Invalid schema: 'oneOf' is not permitted.",
+            param: 'text.format.schema',
+            code: 'invalid_json_schema',
+          },
+        }, { status: 400 })
+      }
+      return Response.json({
+        output_text: JSON.stringify({
+          schemaVersion: 1,
+          specification,
+          evidence: [],
+          ambiguityFlags: [],
+        }),
+      })
+    })
+
+    await expect(generateWorkOrderProductionSpecificationDraft(
+      'Shower glass',
+      request,
+      async () => [...INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE],
+    )).resolves.toMatchObject({ specification })
+  })
+
   it('supplies active catalogue IDs and aliases to the provider', async () => {
     process.env.OPENAI_API_KEY = 'test-key'
     let requestBody: BodyInit | null | undefined
@@ -214,6 +250,26 @@ describe('Production Specification enrichment contract', () => {
       ambiguityFlags: [],
     }, 'Chrome shower fittings')).toThrow(
       'Enrichment evidence is required for proposed field hardwareFinish.',
+    )
+  })
+
+  it('rejects repeatable details outside the dropdown-only enrichment scope', () => {
+    const specification = createEmptyProductionSpecification()
+    specification.measurements = [{ kind: 'quantity', value: '5', unit: 'each' }]
+    specification.additionalComponents = [{ name: 'Bracket' }]
+    specification.specialRequirements = [{ kind: 'inclusion', detail: 'Installation included' }]
+
+    expect(() => parseProductionSpecificationEnrichmentOutput({
+      schemaVersion: 1,
+      specification,
+      evidence: [
+        { field: 'measurements', sourceText: '5 pieces' },
+        { field: 'additionalComponents', sourceText: 'Bracket' },
+        { field: 'specialRequirements', sourceText: 'Installation included' },
+      ],
+      ambiguityFlags: [],
+    }, '5 pieces with Bracket and Installation included')).toThrow(
+      'Enrichment may propose dropdown values only; repeatable details must remain empty.',
     )
   })
 

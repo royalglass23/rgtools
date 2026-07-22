@@ -257,6 +257,23 @@ If the snapshot is partial or stale, the panel shows that context so you know ho
 
 ## Troubleshooting
 
+### Quotes menu is missing
+
+First refresh the dashboard. If **Quotes** is still absent, ask an admin to confirm that
+your staff account has Quote Tracker access.
+
+For an operator repairing a missing production module row or grant, confirm that
+`DATABASE_URL` targets the intended database, then run this command from the repository
+root:
+
+```powershell
+pnpm seed:production-access
+```
+
+The command safely recreates or reactivates the canonical Lead Intake, Leads, and Quote
+Tracker module rows and inserts only missing staff grants. It can be run repeatedly and
+does not remove unrelated modules or grants.
+
 ### "Generate the quote in ServiceM8 first"
 
 The quote PDF does not exist in ServiceM8 yet.

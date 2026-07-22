@@ -33,6 +33,7 @@ export function productionSpecificationFieldLabel(field: ProductionSpecification
 
 export type ProductionSpecificationValue =
   | { state: 'selected'; catalogueId: string }
+  | { state: 'not_applicable' }
   | { state: 'tbc' }
   | { state: 'unmapped'; raw: string }
 
@@ -276,7 +277,6 @@ export function buildProductionLabel(
   const labelFor = (value: ProductionSpecificationValue) => selectedLabel(value, catalogue)
   const system = labelFor(specification.system)
   const location = buildLocationLabel(specification, catalogue)
-  const measurements = specification.measurements.map(formatMeasurement)
   const glass = [
     labelFor(specification.thickness),
     labelFor(specification.glassConstruction),
@@ -296,7 +296,7 @@ export function buildProductionLabel(
   ].filter(Boolean).join(' / ')
   const scope = labelFor(specification.deliveryScope)
 
-  const identityLine = [system, location, ...measurements].filter(Boolean).join(' | ')
+  const identityLine = [system, location].filter(Boolean).join(' | ')
   const productionLine = [glass, doorOpening, fixingAndMaterial, finishes, extras, scope].filter(Boolean).join(' | ')
   return [identityLine, productionLine].filter(Boolean).join('\n')
 }
@@ -306,6 +306,7 @@ export function productionSpecificationValueLabel(
   catalogue: readonly ProductionSpecificationCatalogueOption[] = INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE,
 ) {
   if (value.state === 'tbc') return 'TBC'
+  if (value.state === 'not_applicable') return 'Not Applicable'
   if (value.state === 'unmapped') return `Unmapped - ${value.raw}`
   return catalogue.find((option) => (
     option.id === value.catalogueId
@@ -317,6 +318,7 @@ export function confirmProductionSpecificationDraft(input: {
   workOrderItemId: string
   draft: ProductionSpecification
   previousConfirmed: ProductionSpecification | null
+  existingItemLabel: string
   actorId: string | null
   confirmedAt: Date
   catalogue?: readonly ProductionSpecificationCatalogueOption[]
@@ -327,7 +329,16 @@ export function confirmProductionSpecificationDraft(input: {
 }) {
   const catalogue = input.catalogue ?? INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE
   const confirmedData = parseProductionSpecification(input.draft, catalogue)
-  const productionLabel = buildProductionLabel(confirmedData, catalogue)
+  const hasUnresolvedValue = SPECIFICATION_FIELD_NAMES.some((field) => (
+    confirmedData[field].state === 'unmapped'
+  ))
+  if (hasUnresolvedValue) {
+    throw new Error('Resolve all Unmapped values before confirming this specification.')
+  }
+  const hasTbcValue = SPECIFICATION_FIELD_NAMES.some((field) => confirmedData[field].state === 'tbc')
+  const productionLabel = hasTbcValue
+    ? input.existingItemLabel.trim()
+    : buildProductionLabel(confirmedData, catalogue)
   if (!productionLabel) throw new Error('Production specification cannot be confirmed without a production label.')
   const changeReason = input.previousConfirmed ? parseChangeReason(input.changeReason) : null
   const changes = input.previousConfirmed
@@ -460,6 +471,10 @@ function parseSpecificationValue(
     exactKeys(value, ['state'], field)
     return { state: 'tbc' }
   }
+  if (value.state === 'not_applicable') {
+    exactKeys(value, ['state'], field)
+    return { state: 'not_applicable' }
+  }
   if (value.state === 'unmapped') {
     exactKeys(value, ['state', 'raw'], field)
     return { state: 'unmapped', raw: requiredText(value.raw, `${field}.raw`, 240) }
@@ -537,11 +552,6 @@ function selectedLabel(
 ) {
   if (value.state !== 'selected') return ''
   return catalogue.find((option) => option.id === value.catalogueId)?.productionLabel ?? ''
-}
-
-function formatMeasurement(measurement: ProductionSpecificationMeasurement) {
-  const value = `${measurement.value} ${measurement.unit === 'other' ? '' : measurement.unit}`.trim()
-  return measurement.label ? `${measurement.label} ${value}` : value
 }
 
 function uniqueLabels(values: string[]) {

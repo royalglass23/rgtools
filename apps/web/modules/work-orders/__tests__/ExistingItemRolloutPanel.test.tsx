@@ -132,6 +132,44 @@ describe('ExistingItemRolloutPanel', () => {
       vi.useRealTimers()
     }
   })
+
+  it('shows a recoverable polling error and retries status on demand', async () => {
+    vi.useFakeTimers()
+    const statusAction = vi.fn()
+      .mockRejectedValueOnce(new Error('temporary status failure'))
+      .mockResolvedValueOnce(status({
+        state: 'completed',
+        drafted: 1,
+        needsReview: 1,
+        completedAt: new Date('2026-07-20T03:05:00.000Z'),
+      }))
+    try {
+      render(
+        <ExistingItemRolloutPanel
+          initialStatus={status({ state: 'running', queued: 1 })}
+          startAction={vi.fn()}
+          resumeAction={vi.fn()}
+          statusAction={statusAction}
+        />,
+      )
+
+      await act(async () => vi.advanceTimersByTimeAsync(2_000))
+
+      expect(screen.getByRole('alert')).toHaveTextContent('Rollout status could not be refreshed.')
+      expect(screen.getByText('Rollout running.')).toBeVisible()
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Retry status' }))
+        await Promise.resolve()
+      })
+
+      expect(statusAction).toHaveBeenCalledTimes(2)
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(screen.getByText('Rollout completed.')).toBeVisible()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
 
 function status(overrides: Partial<ExistingItemRolloutStatus> = {}): ExistingItemRolloutStatus {
