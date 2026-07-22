@@ -31,6 +31,7 @@ All notable changes to rgtools are recorded here, grouped by release.
 
 ### Added
 
+- **Quote Movement V1 secured release proof (MT-225)** - adds a sentinel-gated browser journey for granted, ungranted, and logged-out access; representative list, filter, complexity, evidence, refresh, Source Coverage, and conversion behavior; explicit ten-second cached-surface measurements; and V1 scope and limitation documentation without live ServiceM8 or OpenAI dependencies.
 - **Resilient automatic Quote Movement refresh (MT-224)** - renders cached list/detail data before automatically scheduling post-response refresh work, uses a durable database lease to suppress concurrent requests, exposes pending/stale/partial/failure states without clearing valid data, and advances Last refreshed only after successful persistence.
 - **Automatic What Matters Now summaries (MT-223)** - generates structured evidence-backed summaries after first or changed meaningful Quote activity, fingerprints complete retained history for idempotency, preserves the last valid summary on safe provider failure, displays explicit Source Coverage on list/detail surfaces, and opens contextual retained evidence without exposing AI scores or sales actions.
 - **Quote-to-Work-Order history conversion (MT-222)** - records explicit active ServiceM8 Work Order evidence without deleting monitored Quote history, keeps RG-owned complexity and retained sources intact, limits Converted to evidenced conversions, and links to the current rgtools Work Order with an honest unmatched fallback.

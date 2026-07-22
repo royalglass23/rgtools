@@ -47,6 +47,14 @@ What Matters Now runs automatically when a Quote first appears or its meaningful
 
 Open a converted job through its normal Quote Movement link to keep reviewing the retained Quote summary and evidence. When the matching current rgtools Work Order is available, **Open Work Order** continues into it; otherwise the list and detail page state **Work Order record not yet available**.
 
+### Quote Movement V1 boundaries and limitations
+
+- Access uses the existing Quote Tracker permission. There is no separate Quote Movement grant in V1.
+- ServiceM8 is read-only from Quote Movement. Complexity selections and cached summaries stay in rgtools and are never written back.
+- Retained source history is intentionally one-way: a source missing or deleted later in ServiceM8 is not deleted from rgtools.
+- Incomplete Source Coverage means staff must inspect ServiceM8 manually; What Matters Now cannot claim to represent unread or unsupported evidence.
+- V1 does not provide priority, ranking, scoring, owner assignment, next actions, due dates, AI sales recommendations, message drafting, or customer follow-up workflow. Those remain possible V2 work, not hidden V1 behaviour.
+
 ## Quote Tracker step-by-step workflow
 
 ### 1. Generate the quote in ServiceM8
