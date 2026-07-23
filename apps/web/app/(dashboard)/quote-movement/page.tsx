@@ -2,6 +2,7 @@ import { PageHeader, SectionHeading } from "@/components/precision-ui/PrecisionU
 import { requireModule } from "@/lib/guard";
 import {
   refreshQuoteMovementAction,
+  refreshQuoteMovementJobAction,
   updateQuoteMovementComplexityAction,
 } from "@/modules/quote-movement/actions";
 import {
@@ -71,10 +72,31 @@ export default async function QuoteMovementPage({
             : `${records.length} inactive cached Quote jobs shown as the transitional Converted view`
         }
         actions={
-          <QuoteMovementRefreshButton
-            action={refreshQuoteMovementAction}
-            refreshPending={refreshStatus.isPending}
-          />
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <form action={refreshQuoteMovementJobAction} className="flex items-center gap-2">
+              <label className="sr-only" htmlFor="quote-movement-job-number">
+                Job number to fetch
+              </label>
+              <input
+                aria-label="Job number to fetch"
+                className="w-40 rounded-md border border-border bg-surface px-3 py-2 text-sm text-text-primary"
+                id="quote-movement-job-number"
+                name="jobNumber"
+                placeholder="Job number"
+                type="search"
+              />
+              <button
+                className="rounded-md border border-border bg-surface px-3 py-2 text-sm font-semibold text-text-primary"
+                type="submit"
+              >
+                Fetch job
+              </button>
+            </form>
+            <QuoteMovementRefreshButton
+              action={refreshQuoteMovementAction}
+              refreshPending={refreshStatus.isPending}
+            />
+          </div>
         }
       />
 

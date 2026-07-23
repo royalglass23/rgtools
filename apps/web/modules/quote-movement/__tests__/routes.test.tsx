@@ -5,6 +5,7 @@ const requireModule = vi.hoisted(() => vi.fn())
 const listQuoteMovementRecords = vi.hoisted(() => vi.fn())
 const getQuoteMovementRefreshStatus = vi.hoisted(() => vi.fn())
 const refreshQuoteMovementAction = vi.hoisted(() => vi.fn())
+const refreshQuoteMovementJobAction = vi.hoisted(() => vi.fn())
 const routerRefresh = vi.hoisted(() => vi.fn())
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: routerRefresh }) }))
@@ -16,6 +17,7 @@ vi.mock('../queries', () => ({
 }))
 vi.mock('../actions', () => ({
   refreshQuoteMovementAction,
+  refreshQuoteMovementJobAction,
   updateQuoteMovementComplexityAction: vi.fn(),
 }))
 vi.mock('../QuoteMovementRefreshButton', () => ({

@@ -28,6 +28,7 @@ let inFlightRefresh: Promise<QuoteMovementRefreshResult> | null = null;
 export async function refreshQuoteMovementFromServiceM8({
   actorId,
   runId,
+  jobNumber,
   request,
   repository = quoteMovementSnapshotRepository,
   summaryRepository = quoteMovementSummaryRepository,
@@ -38,6 +39,7 @@ export async function refreshQuoteMovementFromServiceM8({
 }: {
   actorId: string | null;
   runId?: string;
+  jobNumber?: string;
   request?: ServiceM8FetchRequest;
   repository?: QuoteMovementSnapshotRepository;
   summaryRepository?: QuoteMovementSummaryRepository;
@@ -50,6 +52,7 @@ export async function refreshQuoteMovementFromServiceM8({
   const refresh = syncQuoteMovementFromServiceM8({
     actorId,
     runId,
+    jobNumber,
     request,
     repository,
     summaryRepository,
@@ -70,15 +73,18 @@ type QuoteMovementBackgroundScheduler = (work: () => Promise<void>) => void;
 
 export async function requestQuoteMovementRefresh({
   actorId,
+  jobNumber,
   coordinator = quoteMovementRefreshCoordinator,
   refresh = refreshQuoteMovementFromServiceM8,
   schedule,
 }: {
   actorId: string | null;
+  jobNumber?: string;
   coordinator?: QuoteMovementRefreshCoordinator;
   refresh?: (input: {
     actorId: string | null;
     runId: string;
+    jobNumber?: string;
   }) => Promise<QuoteMovementRefreshResult>;
   schedule: QuoteMovementBackgroundScheduler;
 }): Promise<{ status: "requested" | "already_pending" }> {
@@ -87,7 +93,11 @@ export async function requestQuoteMovementRefresh({
 
   schedule(async () => {
     try {
-      await refresh({ actorId, runId: request.runId });
+      await refresh({
+        actorId,
+        runId: request.runId,
+        ...(jobNumber ? { jobNumber } : {}),
+      });
     } catch {
       // The refresh use case records a staff-safe failure and preserves the cache.
     } finally {

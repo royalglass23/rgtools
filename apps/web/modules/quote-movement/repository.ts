@@ -124,7 +124,7 @@ export async function persistQuoteMovementSnapshot(
       .where(eq(quoteMovementRecords.id, savedRecord.id));
   }
 
-  if (convertedJobUuids.length > 0) {
+  if (!context.partial && convertedJobUuids.length > 0) {
     await tx
       .update(quoteMovementRecords)
       .set({
@@ -139,14 +139,16 @@ export async function persistQuoteMovementSnapshot(
       ));
   }
 
-  await tx
-    .update(quoteMovementRecords)
-    .set({ servicem8Active: false, updatedAt: context.refreshedAt })
-    .where(
-      seenJobUuids.length > 0
-        ? notInArray(quoteMovementRecords.servicem8JobUuid, seenJobUuids)
-        : undefined,
-    );
+  if (!context.partial) {
+    await tx
+      .update(quoteMovementRecords)
+      .set({ servicem8Active: false, updatedAt: context.refreshedAt })
+      .where(
+        seenJobUuids.length > 0
+          ? notInArray(quoteMovementRecords.servicem8JobUuid, seenJobUuids)
+          : undefined,
+      )
+  }
 
   await persistQuoteMovementRefreshOutcome(tx, context, {
     status: "success",

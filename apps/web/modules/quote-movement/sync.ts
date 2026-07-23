@@ -161,6 +161,7 @@ export type QuoteMovementRefreshContext = {
   runId?: string;
   refreshedAt: Date;
   convertedJobUuids?: string[];
+  partial?: boolean;
 };
 
 export interface QuoteMovementSnapshotRepository {
@@ -176,6 +177,7 @@ export interface QuoteMovementSnapshotRepository {
 
 export async function syncQuoteMovementFromServiceM8({
   request = createServiceM8RequestFromEnv(),
+  jobNumber,
   repository,
   summaryRepository,
   summarize,
@@ -186,6 +188,7 @@ export async function syncQuoteMovementFromServiceM8({
   now = () => new Date(),
 }: {
   request?: ServiceM8FetchRequest;
+  jobNumber?: string;
   repository: QuoteMovementSnapshotRepository;
   summaryRepository?: QuoteMovementSummaryRepository;
   summarize?: QuoteMovementSummarizer;
@@ -196,23 +199,52 @@ export async function syncQuoteMovementFromServiceM8({
   now?: () => Date;
 }) {
   const refreshedAt = now();
+  const requestedJobNumber = clean(jobNumber);
 
   try {
-    const [jobs, workOrderJobs, companies, materials] = await Promise.all([
+    const [jobs, workOrderJobs] = await Promise.all([
       readServiceM8Array<ServiceM8QuoteJob>(
         request,
-        `/job.json${odataFilter(ACTIVE_QUOTE_FILTER)}`,
+        `/job.json${odataFilter(
+          requestedJobNumber
+            ? `${ACTIVE_QUOTE_FILTER} and generated_job_id eq '${escapeOdataString(requestedJobNumber)}'`
+            : ACTIVE_QUOTE_FILTER,
+        )}`,
         "job",
       ),
       readServiceM8Array<ServiceM8QuoteJob>(
         request,
-        `/job.json${odataFilter(ACTIVE_WORK_ORDER_FILTER)}`,
+        `/job.json${odataFilter(
+          requestedJobNumber
+            ? `${ACTIVE_WORK_ORDER_FILTER} and generated_job_id eq '${escapeOdataString(requestedJobNumber)}'`
+            : ACTIVE_WORK_ORDER_FILTER,
+        )}`,
         "Work Order job",
       ),
-      readServiceM8Array<ServiceM8Company>(request, "/company.json", "company"),
+    ]);
+    const targetJobUuids = jobs
+      .map((job) => clean(job.uuid))
+      .filter((uuid): uuid is string => Boolean(uuid));
+    const targetCompanyUuids = jobs
+      .map((job) => clean(job.company_uuid))
+      .filter((uuid): uuid is string => Boolean(uuid));
+    const [companies, materials] = await Promise.all([
+      readServiceM8Array<ServiceM8Company>(
+        request,
+        requestedJobNumber
+          ? `/company.json${odataFilter(
+              `uuid eq '${escapeOdataString(targetCompanyUuids[0] ?? "")}'`,
+            )}`
+          : "/company.json",
+        "company",
+      ),
       readServiceM8Array<ServiceM8JobMaterial>(
         request,
-        `/jobmaterial.json${odataFilter(ACTIVE_FILTER)}`,
+        `/jobmaterial.json${odataFilter(
+          requestedJobNumber
+            ? `${ACTIVE_FILTER} and job_uuid eq '${escapeOdataString(targetJobUuids[0] ?? "")}'`
+            : ACTIVE_FILTER,
+        )}`,
         "job material",
       ),
     ]);
@@ -240,6 +272,7 @@ export async function syncQuoteMovementFromServiceM8({
       runId,
       refreshedAt,
       convertedJobUuids,
+      partial: Boolean(requestedJobNumber),
     });
     if (summaryRepository && summarize) {
       const candidates = await summaryRepository.listPendingSummaries(
