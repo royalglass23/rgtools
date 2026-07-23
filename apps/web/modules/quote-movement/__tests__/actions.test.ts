@@ -22,6 +22,7 @@ vi.mock('next/server', () => ({ after }))
 
 import {
   refreshQuoteMovementAction,
+  refreshQuoteMovementJobAction,
   updateQuoteMovementComplexityAction,
 } from '../actions'
 
@@ -65,6 +66,27 @@ describe('refreshQuoteMovementAction', () => {
         'Quote Movement could not refresh from ServiceM8. The previous cached list was kept.',
       )}`,
     })
+  })
+
+  it('requests a scoped refresh for the submitted job number', async () => {
+    const formData = new FormData()
+    formData.set('jobNumber', ' Q260223 ')
+
+    await expect(refreshQuoteMovementJobAction(formData)).resolves.toBeUndefined()
+
+    expect(requestQuoteMovementRefresh).toHaveBeenCalledWith({
+      actorId: 'user-1',
+      jobNumber: 'Q260223',
+      schedule: after,
+    })
+    expect(revalidatePath).toHaveBeenCalledWith('/quote-movement')
+  })
+
+  it('rejects a scoped refresh without a job number', async () => {
+    await expect(refreshQuoteMovementJobAction(new FormData())).rejects.toMatchObject({
+      url: '/quote-movement?refreshError=Enter%20a%20job%20number%20to%20fetch.',
+    })
+    expect(requestQuoteMovementRefresh).not.toHaveBeenCalled()
   })
 })
 

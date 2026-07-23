@@ -28,7 +28,13 @@ export function deriveQuoteMovementRefreshStatus({
   pending: { createdAt: Date } | null;
   now: Date;
 }): QuoteMovementRefreshStatusValue {
-  const pendingSince = pending?.createdAt ?? null;
+  const pendingAgeMs = pending
+    ? now.getTime() - pending.createdAt.getTime()
+    : null
+  const pendingSince =
+    pending && (pendingAgeMs ?? 0) < QUOTE_MOVEMENT_REFRESH_WINDOW_MS
+      ? pending.createdAt
+      : null
   const lastSuccessfulAt = successful
     ? successful.completedAt ?? successful.createdAt
     : null;

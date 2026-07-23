@@ -31,6 +31,27 @@ export async function refreshQuoteMovementAction() {
 
 }
 
+export async function refreshQuoteMovementJobAction(formData: FormData) {
+  await requireModule('quote-tracker')
+  const session = await auth()
+  const jobNumber = formData.get('jobNumber')
+  if (typeof jobNumber !== 'string' || jobNumber.trim() === '') {
+    redirect('/quote-movement?refreshError=Enter%20a%20job%20number%20to%20fetch.')
+  }
+
+  try {
+    await requestQuoteMovementRefresh({
+      actorId: session?.user?.id ?? null,
+      jobNumber: jobNumber.trim(),
+      schedule: after,
+    })
+    revalidatePath('/quote-movement')
+  } catch (error) {
+    const message = safeQuoteMovementRefreshError(error)
+    redirect(`/quote-movement?refreshError=${encodeURIComponent(message)}`)
+  }
+}
+
 export async function updateQuoteMovementComplexityAction(
   formData: FormData,
 ) {
