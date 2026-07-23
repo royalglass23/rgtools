@@ -185,12 +185,14 @@ function ItemCompositeField({
   )
   const draftSpecificationDocument = safeProductionSpecification(productionSpecification?.draftData, catalogue)
   const draftProductionLabel = structuredDocument ? buildProductionLabel(structuredDocument, catalogue) : ''
-  const effectiveLabel = item.manualLabelOverride
-    ?? productionSpecification?.productionLabel
+  const hasConfirmedSpecification = productionSpecification?.status === 'confirmed'
+  const specificationLabel = productionSpecification?.productionLabel
     ?? (draftProductionLabel && draftProductionLabel !== 'Location TBC' ? draftProductionLabel : null)
+  const effectiveLabel = (hasConfirmedSpecification ? specificationLabel : item.manualLabelOverride ?? specificationLabel)
     ?? item.generatedLabel
     ?? truncateDescription(item.originalDescription)
-  const isLabelPending = !item.manualLabelOverride
+  const isLabelPending = !hasConfirmedSpecification
+    && !item.manualLabelOverride
     && !item.generatedLabel
     && (item.labelStatus === 'pending' || item.labelStatus === 'failed')
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
@@ -294,7 +296,7 @@ function ItemCompositeField({
         )}
       </div>
       <div title={hoverDetail} className="flex flex-wrap items-center gap-2 text-gray-950">
-        {canEdit ? (
+        {canEdit && !hasConfirmedSpecification ? (
           <>
             <form
               className="flex min-w-[260px] flex-1 gap-2"
@@ -381,9 +383,6 @@ function ItemCompositeField({
           )}
           {enrichmentRetryState === 'error' && <p role="alert">Enrichment retry could not be queued.</p>}
         </div>
-      )}
-      {productionSpecificationsEnabled && enrichmentStatus && (
-        <p className="text-xs text-text-secondary">{item.originalDescription}</p>
       )}
       {canManageSpecification && !productionSpecification && !enrichmentStatus && (
         <div className="mt-2 flex flex-wrap items-center gap-2">

@@ -11,6 +11,7 @@ import { quotes, settings } from '@rgtools/db/schema'
 import {
   workOrderHardwareStatusOptions,
   workOrderInstallers,
+  workOrderItemProductionSpecifications,
   workOrderItems,
   workOrderEvents,
   workOrderRefreshRuns,
@@ -602,6 +603,7 @@ export async function updateWorkOrderItemLabelAction(itemId: string, formData: F
   const result = await db.transaction(async (tx) => {
     const item = await getWorkOrderItemLabelRecord(itemId, tx)
     if (!item.isActive) throw new Error(`Work Order Item ${itemId} is removed and cannot be edited.`)
+    assertProductionSpecificationLabelEditable(item.productionSpecificationStatus)
     const previousLabel = item.manualLabelOverride ?? item.generatedLabel
 
     await updateActiveWorkOrderItem(tx, itemId, {
@@ -705,6 +707,7 @@ export async function regenerateWorkOrderItemLabelAction(itemId: string) {
   const session = await auth()
   const item = await getWorkOrderItemLabelRecord(itemId)
   if (!item.isActive) throw new Error(`Work Order Item ${itemId} is removed and cannot be edited.`)
+  assertProductionSpecificationLabelEditable(item.productionSpecificationStatus)
   const actorId = session?.user?.id ?? null
   if (actorId && !(await acquireWorkOrderRateLimit('ai-label', actorId))) {
     throw new Error('Work Order AI label generation was requested too recently. Please wait a minute before trying again.')
@@ -714,6 +717,7 @@ export async function regenerateWorkOrderItemLabelAction(itemId: string) {
   const result = await db.transaction(async (tx) => {
     const currentItem = await getWorkOrderItemLabelRecord(itemId, tx)
     if (!currentItem.isActive) throw new Error(`Work Order Item ${itemId} is removed and cannot be edited.`)
+    assertProductionSpecificationLabelEditable(currentItem.productionSpecificationStatus)
     const previousLabel = currentItem.manualLabelOverride ?? currentItem.generatedLabel
 
     await updateActiveWorkOrderItem(tx, itemId, {
@@ -770,6 +774,12 @@ async function getWorkOrderItemLabelRecord(itemId: string, database: Pick<typeof
       generatedLabel: workOrderItems.generatedLabel,
       manualLabelOverride: workOrderItems.manualLabelOverride,
       isActive: workOrderItems.isActive,
+      productionSpecificationStatus: sql<'confirmed' | 'needs_review' | null>`(
+        select ${workOrderItemProductionSpecifications.status}
+        from ${workOrderItemProductionSpecifications}
+        where ${workOrderItemProductionSpecifications.workOrderItemId} = ${workOrderItems.id}
+        limit 1
+      )`,
     })
     .from(workOrderItems)
     .where(eq(workOrderItems.id, itemId))
@@ -777,6 +787,12 @@ async function getWorkOrderItemLabelRecord(itemId: string, database: Pick<typeof
 
   if (!item) throw new Error(`Work Order Item ${itemId} was not found.`)
   return item
+}
+
+function assertProductionSpecificationLabelEditable(status: 'confirmed' | 'needs_review' | null | undefined) {
+  if (status === 'confirmed') {
+    throw new Error('Confirmed Production Specification labels must be changed through the specification review.')
+  }
 }
 
 async function assertActiveWorkOrderItemOption(

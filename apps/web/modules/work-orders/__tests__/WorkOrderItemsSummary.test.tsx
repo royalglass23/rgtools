@@ -90,7 +90,7 @@ describe('WorkOrderItemsSummary', () => {
 
     await waitFor(() => expect(mockRetryEnrichment).toHaveBeenCalledWith('item-enrichment-failed'))
     expect(await screen.findByText('Enrichment queued')).toBeInTheDocument()
-    expect(screen.getByText('Original ServiceM8 shower description remains visible')).toBeInTheDocument()
+    expect(screen.queryByText('Original ServiceM8 shower description remains visible')).not.toBeInTheDocument()
   })
 
   it('announces a safe failure without exposing retry controls to a viewer', () => {
@@ -120,7 +120,84 @@ describe('WorkOrderItemsSummary', () => {
     })
   })
 
-  it('shows a confirmed Production Label and accessible read-only specification history to a viewer', () => {
+  it('opens a ready draft as a dropdown-only review surface', () => {
+    render(<WorkOrderItemsSummary canManage items={[workOrderItem({
+      id: 'item-dropdown-review',
+      itemCode: 'GLASS-REVIEW',
+      quantity: '1.000',
+      originalDescription: 'Original ServiceM8 description must stay out of the review surface',
+      lineTotalExcludingGst: '1200.00',
+      generatedLabel: 'Existing short label',
+      manualLabelOverride: null,
+      isActive: true,
+      productionSpecification: {
+        id: 'specification-dropdown-review',
+        status: 'needs_review',
+        draftData: confirmedSpecificationDocument(),
+        confirmedData: null,
+        productionLabel: null,
+        sourceDescription: 'Original ServiceM8 description must stay out of the review surface',
+        confirmedAt: null,
+        history: [],
+      },
+    })]} />)
+
+    const disclosure = screen.getByText('View specification')
+    expect(disclosure.closest('details')).not.toHaveAttribute('open')
+    fireEvent.click(disclosure)
+
+    expect(screen.getByLabelText('System for GLASS-REVIEW')).toHaveValue('system.double-disc')
+    expect(screen.queryByRole('heading', { name: 'Original ServiceM8 description' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Production Specification history')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add measurement' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add component' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add special requirement' })).not.toBeInTheDocument()
+  })
+
+  it('lets staff resolve an inapplicable dropdown before confirmation', async () => {
+    mockSaveSpecificationDraft.mockResolvedValue({
+      id: 'specification-not-applicable',
+      status: 'needs_review',
+      confirmedRevision: 0,
+      draftRevision: 1,
+    })
+    render(<WorkOrderItemsSummary canManage items={[workOrderItem({
+      id: 'item-not-applicable',
+      itemCode: 'GLASS-NA',
+      quantity: '1.000',
+      originalDescription: 'Shower glass without a channel finish',
+      lineTotalExcludingGst: '1200.00',
+      generatedLabel: 'Existing short label',
+      manualLabelOverride: null,
+      isActive: true,
+      productionSpecification: {
+        id: 'specification-not-applicable',
+        status: 'needs_review',
+        draftData: {
+          ...confirmedSpecificationDocument(),
+          systemFinish: { state: 'tbc' },
+        },
+        confirmedData: null,
+        productionLabel: null,
+        confirmedAt: null,
+        history: [],
+      },
+    })]} />)
+
+    fireEvent.click(screen.getByText('View specification'))
+    fireEvent.change(screen.getByLabelText('System/Channel Finish for GLASS-NA'), {
+      target: { value: '__not_applicable' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
+
+    await waitFor(() => expect(mockSaveSpecificationDraft).toHaveBeenCalledWith(
+      'item-not-applicable',
+      expect.objectContaining({ systemFinish: { state: 'not_applicable' } }),
+      { expectedConfirmedRevision: 0, expectedDraftRevision: 0 },
+    ))
+  })
+
+  it('keeps a confirmed viewer surface compact and read-only', () => {
     render(<WorkOrderItemsSummary items={[workOrderItem({
       id: 'item-production-specification',
       itemCode: 'GLASS-SPEC',
@@ -134,7 +211,10 @@ describe('WorkOrderItemsSummary', () => {
         id: 'specification-1',
         status: 'confirmed',
         draftData: null,
-        confirmedData: confirmedSpecificationDocument(),
+        confirmedData: {
+          ...confirmedSpecificationDocument(),
+          systemFinish: { state: 'unmapped', raw: 'Custom bronze' },
+        },
         productionLabel: 'Double Disc | Ext Balcony | 12 mm Toughened Clear | Timber | Chrome | Supply & Install',
         sourceDescription: 'Original noisy ServiceM8 description with pricing and compliance wording',
         confirmedAt: new Date('2026-07-16T03:30:00.000Z'),
@@ -190,16 +270,44 @@ describe('WorkOrderItemsSummary', () => {
     const disclosure = screen.getByText('View specification')
     expect(disclosure.closest('details')).toBeInTheDocument()
     fireEvent.click(disclosure)
-    expect(screen.getByText('Original noisy ServiceM8 description with pricing and compliance wording')).toBeInTheDocument()
-    expect(screen.getByText(/Pool gate hardware/)).toBeInTheDocument()
-    expect(screen.getByText('Custom design to avoid toe hold')).toBeInTheDocument()
-    expect(screen.getByText(/Baseline confirmed by installer@example.com/)).toBeInTheDocument()
-    expect(screen.getByText(/Client request/)).toBeInTheDocument()
-    expect(screen.getByText('Hardware\/Fittings Finish: Chrome → Matte Black')).toBeInTheDocument()
-    expect(screen.getByText(/Catalogue option updated by configure@example.com/)).toBeInTheDocument()
-    expect(screen.getByText('Catalogue option finish.chrome — Production Label wording: Chrome → Polished Chrome')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Location Detail/Area for GLASS-SPEC' }))
+      .toHaveDisplayValue('TBC')
+    expect(screen.getByRole('combobox', { name: 'System/Channel Finish for GLASS-SPEC' }))
+      .toHaveDisplayValue('Unmapped - Custom bronze')
+    expect(screen.getAllByRole('combobox').every((field) => field.hasAttribute('disabled'))).toBe(true)
+    expect(screen.queryByRole('heading', { name: 'Original ServiceM8 description' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Production Specification history')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save draft' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Confirm specification' })).not.toBeInTheDocument()
+  })
+
+  it('uses the confirmed production label and locks independent label editing', () => {
+    render(<WorkOrderItemsSummary canManage items={[workOrderItem({
+      id: 'item-confirmed-label',
+      itemCode: 'GLASS-CONFIRMED',
+      quantity: '1.000',
+      originalDescription: 'Confirmed glass item',
+      lineTotalExcludingGst: '1200.00',
+      generatedLabel: 'Legacy generated label',
+      manualLabelOverride: 'Legacy manual override',
+      isActive: true,
+      productionSpecification: {
+        id: 'specification-confirmed-label',
+        status: 'confirmed',
+        draftData: null,
+        confirmedData: confirmedSpecificationDocument(),
+        productionLabel: 'Confirmed production label',
+        sourceDescription: 'Confirmed glass item',
+        confirmedAt: new Date('2026-07-16T03:30:00.000Z'),
+        history: [],
+      },
+    })]} />)
+
+    expect(screen.getByText('Confirmed production label')).toBeInTheDocument()
+    expect(screen.queryByText('Legacy manual override')).not.toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'Short label for GLASS-CONFIRMED' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save label' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Regenerate with AI' })).not.toBeInTheDocument()
   })
 
   it('shows every viewer a safe ServiceM8 source comparison and only Manage users the decisions', async () => {
@@ -233,7 +341,7 @@ describe('WorkOrderItemsSummary', () => {
 
     expect(screen.getByText('Source Changed')).toBeInTheDocument()
     fireEvent.click(screen.getByText('Compare ServiceM8 source'))
-    expect(screen.getAllByText('Original ServiceM8 description with Chrome hardware')).toHaveLength(2)
+    expect(screen.getAllByText('Original ServiceM8 description with Chrome hardware')).toHaveLength(1)
     expect(screen.getByText('New ServiceM8 description with Matte Black hardware')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Ignore source change' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Create new draft' })).not.toBeInTheDocument()
@@ -248,7 +356,7 @@ describe('WorkOrderItemsSummary', () => {
     await waitFor(() => expect(specificationDisclosure).toHaveFocus())
   })
 
-  it('keeps an authorised manual label correction editable after enrichment', () => {
+  it('keeps an authorised manual label correction editable before confirmation', () => {
     render(<WorkOrderItemsSummary canManage items={[workOrderItem({
       id: 'item-enriched-label-correction',
       itemCode: 'GLASS-CORRECTED',
@@ -260,11 +368,11 @@ describe('WorkOrderItemsSummary', () => {
       isActive: true,
       productionSpecification: {
         id: 'specification-corrected-label',
-        status: 'confirmed',
-        draftData: null,
-        confirmedData: confirmedSpecificationDocument(),
-        productionLabel: 'Double Disc | Ext Balcony | 12 mm Toughened Clear',
-        confirmedAt: new Date('2026-07-16T03:30:00.000Z'),
+        status: 'needs_review',
+        draftData: confirmedSpecificationDocument(),
+        confirmedData: null,
+        productionLabel: null,
+        confirmedAt: null,
         history: [],
       },
     })]} />)
@@ -578,69 +686,10 @@ describe('WorkOrderItemsSummary', () => {
 
     fireEvent.click(screen.getByText('View specification'))
 
-    expect(screen.getByText('Retired Rail')).toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: 'Retired Rail' })).not.toBeInTheDocument()
-  })
-
-  it('lets a Manage user add structured measurements, components, and special requirements to a draft', async () => {
-    mockSaveSpecificationDraft.mockResolvedValue({
-      id: 'specification-1',
-      status: 'needs_review',
-      confirmedRevision: 0,
-      draftRevision: 1,
-    })
-    render(<WorkOrderItemsSummary canManage items={[workOrderItem({
-      id: 'item-repeatable-details',
-      itemCode: 'GLASS-DETAILS',
-      quantity: '1.000',
-      originalDescription: 'Original ServiceM8 description',
-      lineTotalExcludingGst: '1200.00',
-      generatedLabel: 'Legacy short label',
-      manualLabelOverride: null,
-      isActive: true,
-      productionSpecification: {
-        id: 'specification-1',
-        status: 'needs_review',
-        draftData: {
-          ...confirmedSpecificationDocument(),
-          measurements: [],
-          additionalComponents: [],
-          specialRequirements: [],
-        },
-        confirmedData: null,
-        productionLabel: null,
-        confirmedAt: null,
-        history: [],
-      },
-    })]} />)
-
-    fireEvent.click(screen.getByText('View specification'))
-    fireEvent.click(screen.getByRole('button', { name: 'Add measurement' }))
-    fireEvent.change(screen.getByLabelText('Measurement value 1'), { target: { value: '14900' } })
-    fireEvent.change(screen.getByLabelText('Measurement unit 1'), { target: { value: 'mm' } })
-
-    fireEvent.click(screen.getByRole('button', { name: 'Add component' }))
-    fireEvent.change(screen.getByLabelText('Component name 1'), { target: { value: 'Pool gate hardware' } })
-    fireEvent.change(screen.getByLabelText('Component quantity 1'), { target: { value: '1 set' } })
-
-    fireEvent.click(screen.getByRole('button', { name: 'Add special requirement' }))
-    fireEvent.change(screen.getByLabelText('Special requirement detail 1'), {
-      target: { value: 'Custom design to avoid toe hold' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
-
-    await waitFor(() => expect(mockSaveSpecificationDraft).toHaveBeenCalledWith(
-      'item-repeatable-details',
-      expect.objectContaining({
-        measurements: [expect.objectContaining({ kind: 'other', value: '14900', unit: 'mm' })],
-        additionalComponents: [expect.objectContaining({ name: 'Pool gate hardware', quantity: '1 set' })],
-        specialRequirements: [expect.objectContaining({
-          kind: 'other',
-          detail: 'Custom design to avoid toe hold',
-        })],
-      }),
-      { expectedConfirmedRevision: 0, expectedDraftRevision: 0 },
-    ))
+    expect(screen.getByText('Retired Rail | Ext Balcony')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'System for RAIL-RETIRED' }))
+      .toHaveDisplayValue('Retired Rail')
+    expect(screen.getByRole('combobox', { name: 'System for RAIL-RETIRED' })).toBeDisabled()
   })
 
   it('lets a Manage user create the first TBC draft when an item has not been enriched', async () => {
