@@ -10,7 +10,7 @@ import {
 const isolatedDatabaseUrl = process.env.E2E_DATABASE_URL;
 const expectedDatabaseSentinel = process.env.E2E_DATABASE_SENTINEL;
 const enabled = process.env.E2E_QUOTE_MOVEMENT_V1 === "true";
-const adapterPort = Number(process.env.E2E_ADAPTER_PORT ?? 32200);
+const adapterPort = Number(process.env.E2E_ADAPTER_PORT ?? 32199);
 const runId = crypto.randomUUID();
 const grantedUserId = crypto.randomUUID();
 const ungrantedUserId = crypto.randomUUID();
@@ -82,6 +82,28 @@ test.describe("MT-225 secured Quote Movement V1 journey", () => {
       WHERE slug = 'quote-tracker'
     `;
     await sql`
+      DELETE FROM quote_movement_source_enrichment
+      WHERE source_id IN (
+        SELECT qms.id
+        FROM quote_movement_sources qms
+        INNER JOIN quote_movement_records qmr
+          ON qmr.id = qms.quote_movement_record_id
+        WHERE qmr.job_number LIKE 'MT225-%'
+      )
+    `;
+    await sql`
+      DELETE FROM quote_movement_sources
+      WHERE quote_movement_record_id IN (
+        SELECT id FROM quote_movement_records WHERE job_number LIKE 'MT225-%'
+      )
+    `;
+    await sql`
+      DELETE FROM quote_movement_records WHERE job_number LIKE 'MT225-%'
+    `;
+    await sql`
+      DELETE FROM work_orders WHERE job_number LIKE 'MT225-%'
+    `;
+    await sql`
       INSERT INTO work_orders (
         id, identity_kind, identity_value, servicem8_job_uuid,
         servicem8_status, servicem8_active, is_current, job_number, client_name
@@ -148,6 +170,48 @@ test.describe("MT-225 secured Quote Movement V1 journey", () => {
       FROM quote_movement_sources
       WHERE quote_movement_record_id = ${completeRecordId}::uuid
     `;
+    const fixtureUsers = (await sql`
+      SELECT
+        u.id,
+        u.username,
+        u.role,
+        EXISTS (
+          SELECT 1
+          FROM user_module_access uma
+          INNER JOIN modules m ON m.id = uma.module_id
+          WHERE uma.user_id = u.id AND m.slug = 'quote-tracker'
+        ) AS "hasQuoteTrackerGrant"
+      FROM users u
+      WHERE u.id IN (${grantedUserId}::uuid, ${ungrantedUserId}::uuid)
+      ORDER BY u.username
+    `) as Array<{
+      id: string;
+      username: string;
+      role: string;
+      hasQuoteTrackerGrant: boolean;
+    }>;
+    expect(fixtureUsers).toEqual([
+      {
+        id: grantedUserId,
+        username: grantedUsername,
+        role: "staff",
+        hasQuoteTrackerGrant: true,
+      },
+      {
+        id: ungrantedUserId,
+        username: ungrantedUsername,
+        role: "staff",
+        hasQuoteTrackerGrant: false,
+      },
+    ]);
+    const fixtureEvidence = await sql`
+      SELECT 1
+      FROM quote_movement_sources
+      WHERE quote_movement_record_id = ${completeRecordId}::uuid
+        AND source_identity = 'note-current'
+      LIMIT 1
+    `;
+    expect(fixtureEvidence).toHaveLength(1);
     await sql`DELETE FROM quote_movement_refresh_locks WHERE lock_name = 'quote-movement-refresh'`;
 
     adapterServer = createControlledFailureServer();
@@ -225,10 +289,13 @@ test.describe("MT-225 secured Quote Movement V1 journey", () => {
       page.getByRole("link", { name: completeJobNumber }),
     ).toBeVisible();
 
-    await expect(page.getByLabel("Search")).toBeVisible();
-    await expect(page.getByLabel("Complexity")).toHaveValue("all");
-    await expect(page.getByLabel("Active/Converted")).toHaveValue("active");
-    await expect(page.getByLabel("Sort")).toHaveValue("latest_activity");
+    const controls = page.getByRole("form", {
+      name: "Quote Movement controls",
+    });
+    await expect(controls.getByLabel("Search")).toBeVisible();
+    await expect(controls.getByLabel("Complexity")).toHaveValue("all");
+    await expect(controls.getByLabel("Active/Converted")).toHaveValue("active");
+    await expect(controls.getByLabel("Sort")).toHaveValue("latest_activity");
     const activeJobs = await page
       .locator("tbody a[href^='/quote-movement/']")
       .allTextContents();
@@ -237,7 +304,7 @@ test.describe("MT-225 secured Quote Movement V1 journey", () => {
       incompleteJobNumber,
     ]);
 
-    await page.getByLabel("Complexity").selectOption("normal");
+    await controls.getByLabel("Complexity").selectOption("normal");
     await expect(
       page.getByRole("link", { name: incompleteJobNumber }),
     ).toBeVisible();
@@ -343,11 +410,13 @@ function protectedPaths() {
 }
 
 async function login(page: Page, username: string, password: string) {
+  await page.context().clearCookies();
   await page.goto("/login");
   await page.getByLabel("Username").fill(username);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: /^sign in$/i }).click();
   await page.waitForURL((url) => !url.pathname.startsWith("/login"));
+  await expect(page.getByText(username, { exact: true })).toBeVisible();
 }
 
 function completeSummary() {

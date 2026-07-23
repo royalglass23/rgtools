@@ -47,7 +47,12 @@ export function QuoteMovementRefreshButton({
       : "Refresh now";
 
   return (
-    <PrecisionButton type="button" disabled={pending} onClick={requestRefresh}>
+    <PrecisionButton
+      type="button"
+      aria-label={label}
+      disabled={pending}
+      onClick={requestRefresh}
+    >
       {pending && (
         <span
           aria-hidden="true"
