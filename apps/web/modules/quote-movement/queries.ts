@@ -5,6 +5,7 @@ import {
   eq,
   getTableColumns,
   ilike,
+  inArray,
   isNotNull,
   isNull,
   or,
@@ -147,6 +148,53 @@ export async function getQuoteMovementEvidence(
     .limit(1)
 
   return evidence ?? null
+}
+
+export async function getQuoteMovementActivity(recordId: string) {
+  return db
+    .select({
+      id: quoteMovementSources.id,
+      sourceType: quoteMovementSources.sourceType,
+      sourceIdentity: quoteMovementSources.sourceIdentity,
+      occurredAt: quoteMovementSources.occurredAt,
+      content: quoteMovementSources.content,
+      interpretationStatus: quoteMovementSourceEnrichment.interpretationStatus,
+      interpretationSummary: quoteMovementSourceEnrichment.summary,
+      safeError: quoteMovementSourceEnrichment.safeError,
+    })
+    .from(quoteMovementSources)
+    .leftJoin(
+      quoteMovementSourceEnrichment,
+      eq(quoteMovementSourceEnrichment.sourceId, quoteMovementSources.id),
+    )
+    .where(eq(quoteMovementSources.quoteMovementRecordId, recordId))
+    .orderBy(desc(quoteMovementSources.occurredAt), desc(quoteMovementSources.createdAt));
+}
+
+export async function listQuoteMovementJobFetchOutcomes(jobNumbers?: string[]) {
+  const rows = await db
+    .select({
+      jobNumber: quoteMovementRefreshRuns.jobNumber,
+      status: quoteMovementRefreshRuns.status,
+      syncedCount: quoteMovementRefreshRuns.syncedCount,
+      errorMessage: quoteMovementRefreshRuns.errorMessage,
+      createdAt: quoteMovementRefreshRuns.createdAt,
+      completedAt: quoteMovementRefreshRuns.completedAt,
+    })
+    .from(quoteMovementRefreshRuns)
+    .where(
+      jobNumbers && jobNumbers.length > 0
+        ? inArray(quoteMovementRefreshRuns.jobNumber, jobNumbers)
+        : isNotNull(quoteMovementRefreshRuns.jobNumber),
+    )
+    .orderBy(desc(quoteMovementRefreshRuns.createdAt))
+    .limit(50);
+
+  const latest = new Map<string, (typeof rows)[number]>();
+  for (const row of rows) {
+    if (row.jobNumber && !latest.has(row.jobNumber)) latest.set(row.jobNumber, row);
+  }
+  return Array.from(latest.values());
 }
 
 export async function getQuoteMovementRefreshStatus() {

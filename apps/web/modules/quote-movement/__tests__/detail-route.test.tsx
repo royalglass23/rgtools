@@ -4,7 +4,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const requireModule = vi.hoisted(() => vi.fn())
 const getQuoteMovementRecord = vi.hoisted(() => vi.fn())
 const getQuoteMovementRefreshStatus = vi.hoisted(() => vi.fn())
-const refreshQuoteMovementAction = vi.hoisted(() => vi.fn())
+const getQuoteMovementActivity = vi.hoisted(() => vi.fn())
+const listQuoteMovementJobFetchOutcomes = vi.hoisted(() => vi.fn())
+const refreshQuoteMovementDetailAction = vi.hoisted(() => vi.fn())
 const routerRefresh = vi.hoisted(() => vi.fn())
 const notFound = vi.hoisted(() =>
   vi.fn(() => {
@@ -13,8 +15,8 @@ const notFound = vi.hoisted(() =>
 )
 
 vi.mock('@/lib/guard', () => ({ requireModule }))
-vi.mock('../queries', () => ({ getQuoteMovementRecord, getQuoteMovementRefreshStatus }))
-vi.mock('../actions', () => ({ refreshQuoteMovementAction }))
+vi.mock('../queries', () => ({ getQuoteMovementRecord, getQuoteMovementRefreshStatus, getQuoteMovementActivity, listQuoteMovementJobFetchOutcomes }))
+vi.mock('../actions', () => ({ refreshQuoteMovementDetailAction }))
 vi.mock('../QuoteMovementRefreshButton', () => ({
   QuoteMovementRefreshButton: ({ refreshPending }: { refreshPending: boolean }) => (
     <button type="button" disabled={refreshPending}>
@@ -33,15 +35,18 @@ describe('Quote Movement detail route shell', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     requireModule.mockResolvedValue(undefined)
-    refreshQuoteMovementAction.mockResolvedValue({ status: 'requested' })
+    refreshQuoteMovementDetailAction.mockResolvedValue({ status: 'requested' })
     getQuoteMovementRefreshStatus.mockResolvedValue({
       lastSuccessfulAt: new Date('2026-07-17T03:00:00Z'),
       lastSuccessfulCount: 1,
       latestFailure: null,
       pendingSince: null,
       isPending: false,
+      hasExpiredPending: false,
       isStale: false,
     })
+    getQuoteMovementActivity.mockResolvedValue([])
+    listQuoteMovementJobFetchOutcomes.mockResolvedValue([])
     getQuoteMovementRecord.mockResolvedValue({
       id: 'record-1',
       servicem8Status: 'Quote',
@@ -194,6 +199,7 @@ describe('Quote Movement detail route shell', () => {
       latestFailure: null,
       pendingSince: null,
       isPending: false,
+      hasExpiredPending: false,
       isStale: true,
     })
     getQuoteMovementRecord.mockResolvedValue({

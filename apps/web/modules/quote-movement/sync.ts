@@ -17,6 +17,20 @@ const ACTIVE_FILTER = "active eq 1";
 const SERVICEM8_MAX_PAGES = 25;
 const SOURCE_COLLECTION_CONCURRENCY = 4;
 
+export function parseQuoteMovementJobNumbers(input: string) {
+  const seen = new Set<string>();
+  const jobNumbers: string[] = [];
+
+  for (const value of input.split(";")) {
+    const jobNumber = value.trim();
+    if (!jobNumber || seen.has(jobNumber)) continue;
+    seen.add(jobNumber);
+    jobNumbers.push(jobNumber);
+  }
+
+  return jobNumbers;
+}
+
 type ServiceM8QuoteJob = {
   uuid?: string | null;
   active?: number | string | boolean | null;
@@ -158,6 +172,8 @@ export type QuoteMovementSnapshotInput = {
 
 export type QuoteMovementRefreshContext = {
   actorId: string | null;
+  jobNumber?: string;
+  batchRunId?: string;
   runId?: string;
   refreshedAt: Date;
   convertedJobUuids?: string[];
@@ -178,6 +194,7 @@ export interface QuoteMovementSnapshotRepository {
 export async function syncQuoteMovementFromServiceM8({
   request = createServiceM8RequestFromEnv(),
   jobNumber,
+  batchRunId,
   repository,
   summaryRepository,
   summarize,
@@ -189,6 +206,7 @@ export async function syncQuoteMovementFromServiceM8({
 }: {
   request?: ServiceM8FetchRequest;
   jobNumber?: string;
+  batchRunId?: string;
   repository: QuoteMovementSnapshotRepository;
   summaryRepository?: QuoteMovementSummaryRepository;
   summarize?: QuoteMovementSummarizer;
@@ -269,10 +287,12 @@ export async function syncQuoteMovementFromServiceM8({
 
     await repository.replaceActiveSnapshot(records, {
       actorId,
-      runId,
       refreshedAt,
-      convertedJobUuids,
-      partial: Boolean(requestedJobNumber),
+      ...(requestedJobNumber ? { jobNumber: requestedJobNumber } : {}),
+      ...(batchRunId ? { batchRunId } : {}),
+      ...(runId ? { runId } : {}),
+      ...(convertedJobUuids.length > 0 ? { convertedJobUuids } : {}),
+      ...(requestedJobNumber ? { partial: true } : {}),
     });
     if (summaryRepository && summarize) {
       const candidates = await summaryRepository.listPendingSummaries(
@@ -302,7 +322,13 @@ export async function syncQuoteMovementFromServiceM8({
   } catch (error) {
     const safeMessage = safeQuoteMovementRefreshError(error);
     try {
-      await repository.recordFailure(safeMessage, { actorId, runId, refreshedAt });
+      await repository.recordFailure(safeMessage, {
+        actorId,
+        ...(requestedJobNumber ? { jobNumber: requestedJobNumber } : {}),
+        ...(batchRunId ? { batchRunId } : {}),
+        ...(runId ? { runId } : {}),
+        refreshedAt,
+      });
     } catch {
       // The original refresh failure is the useful operator signal.
     }

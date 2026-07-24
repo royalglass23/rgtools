@@ -5,6 +5,7 @@ export type QuoteMovementRefreshStatusValue = {
   lastSuccessfulCount: number;
   pendingSince: Date | null;
   isPending: boolean;
+  hasExpiredPending: boolean;
   isStale: boolean;
   latestFailure: { at: Date; message: string } | null;
 };
@@ -35,6 +36,8 @@ export function deriveQuoteMovementRefreshStatus({
     pending && (pendingAgeMs ?? 0) < QUOTE_MOVEMENT_REFRESH_WINDOW_MS
       ? pending.createdAt
       : null
+  const hasExpiredPending =
+    pendingAgeMs !== null && pendingAgeMs >= QUOTE_MOVEMENT_REFRESH_WINDOW_MS
   const lastSuccessfulAt = successful
     ? successful.completedAt ?? successful.createdAt
     : null;
@@ -51,6 +54,7 @@ export function deriveQuoteMovementRefreshStatus({
     lastSuccessfulCount: successful?.syncedCount ?? 0,
     pendingSince,
     isPending: pendingSince !== null,
+    hasExpiredPending,
     isStale:
       lastSuccessfulAt === null ||
       now.getTime() - lastSuccessfulAt.getTime() >=

@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const requireModule = vi.hoisted(() => vi.fn())
 const auth = vi.hoisted(() => vi.fn())
 const requestQuoteMovementRefresh = vi.hoisted(() => vi.fn())
+const requestQuoteMovementJobFetch = vi.hoisted(() => vi.fn())
 const updateQuoteMovementProjectComplexity = vi.hoisted(() => vi.fn())
 const revalidatePath = vi.hoisted(() => vi.fn())
 const redirect = vi.hoisted(() => vi.fn((url: string) => {
@@ -14,7 +15,7 @@ const after = vi.hoisted(() => vi.fn())
 
 vi.mock('@/lib/guard', () => ({ requireModule }))
 vi.mock('@/lib/auth', () => ({ auth }))
-vi.mock('../service', () => ({ requestQuoteMovementRefresh }))
+vi.mock('../service', () => ({ requestQuoteMovementRefresh, requestQuoteMovementJobFetch }))
 vi.mock('../repository', () => ({ updateQuoteMovementProjectComplexity }))
 vi.mock('next/cache', () => ({ revalidatePath }))
 vi.mock('next/navigation', () => ({ redirect }))
@@ -32,6 +33,7 @@ describe('refreshQuoteMovementAction', () => {
     requireModule.mockResolvedValue(undefined)
     auth.mockResolvedValue({ user: { id: 'user-1' } })
     requestQuoteMovementRefresh.mockResolvedValue({ status: 'requested' })
+    requestQuoteMovementJobFetch.mockResolvedValue({ status: 'requested' })
   })
 
   it('requests non-blocking refresh work through the existing Quote Tracker permission', async () => {
@@ -74,9 +76,9 @@ describe('refreshQuoteMovementAction', () => {
 
     await expect(refreshQuoteMovementJobAction(formData)).resolves.toBeUndefined()
 
-    expect(requestQuoteMovementRefresh).toHaveBeenCalledWith({
+    expect(requestQuoteMovementJobFetch).toHaveBeenCalledWith({
       actorId: 'user-1',
-      jobNumber: 'Q260223',
+      input: 'Q260223',
       schedule: after,
     })
     expect(revalidatePath).toHaveBeenCalledWith('/quote-movement')

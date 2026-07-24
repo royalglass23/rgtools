@@ -1,16 +1,15 @@
 import { PageHeader, SectionHeading } from "@/components/precision-ui/PrecisionUI";
 import { requireModule } from "@/lib/guard";
 import {
-  refreshQuoteMovementAction,
   refreshQuoteMovementJobAction,
   updateQuoteMovementComplexityAction,
 } from "@/modules/quote-movement/actions";
 import {
   getQuoteMovementRefreshStatus,
+  listQuoteMovementJobFetchOutcomes,
   listQuoteMovementRecords,
 } from "@/modules/quote-movement/queries";
 import { QuoteMovementList } from "@/modules/quote-movement/QuoteMovementList";
-import { QuoteMovementRefreshButton } from "@/modules/quote-movement/QuoteMovementRefreshButton";
 import { QuoteMovementRefreshStatus } from "@/modules/quote-movement/QuoteMovementRefreshStatus";
 import { DismissibleNotice } from "@/modules/ui/DismissibleNotice";
 import type { QuoteMovementProjectComplexity } from "@rgtools/db/schema-quote-movement";
@@ -50,7 +49,7 @@ export default async function QuoteMovementPage({
   const sort = requestedSort === "quote_value" || requestedSort === "customer"
     ? requestedSort
     : "latest_activity";
-  const [records, refreshStatus] = await Promise.all([
+  const [records, refreshStatus, fetchOutcomes] = await Promise.all([
     listQuoteMovementRecords({
       search,
       projectComplexity:
@@ -59,6 +58,7 @@ export default async function QuoteMovementPage({
       sort,
     }),
     getQuoteMovementRefreshStatus(),
+    listQuoteMovementJobFetchOutcomes(),
   ]);
 
   return (
@@ -82,20 +82,25 @@ export default async function QuoteMovementPage({
                 className="w-40 rounded-md border border-border bg-surface px-3 py-2 text-sm text-text-primary"
                 id="quote-movement-job-number"
                 name="jobNumber"
-                placeholder="Job number"
+                placeholder="Q260101; Q260102"
                 type="search"
               />
               <button
                 className="rounded-md border border-border bg-surface px-3 py-2 text-sm font-semibold text-text-primary"
                 type="submit"
               >
-                Fetch job
+                Fetch jobs
               </button>
             </form>
-            <QuoteMovementRefreshButton
-              action={refreshQuoteMovementAction}
-              refreshPending={refreshStatus.isPending}
-            />
+            {fetchOutcomes.length > 0 ? (
+              <ul aria-label="Job fetch outcomes" className="w-full text-xs text-text-muted">
+                {fetchOutcomes.map((outcome) => (
+                  <li key={`${outcome.jobNumber}-${outcome.createdAt.toISOString()}`}>
+                    <span className="font-semibold">{outcome.jobNumber}</span>: {formatFetchOutcome(outcome.status, outcome.syncedCount, outcome.errorMessage)}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </div>
         }
       />
@@ -136,4 +141,12 @@ export default async function QuoteMovementPage({
 
 function stringParam(value: string | string[] | undefined) {
   return typeof value === "string" ? value : "";
+}
+
+function formatFetchOutcome(status: string, syncedCount: number, errorMessage: string | null) {
+  if (status === "failed") return errorMessage ?? "Fetch failed.";
+  if (status === "queued") return "Queued.";
+  if (status === "fetching" || status === "pending") return "Fetching.";
+  if (syncedCount === 0) return "Not an active Quote.";
+  return "Fetched.";
 }
