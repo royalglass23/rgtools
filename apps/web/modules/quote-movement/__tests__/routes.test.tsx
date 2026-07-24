@@ -21,8 +21,8 @@ vi.mock('../actions', () => ({
   updateQuoteMovementComplexityAction: vi.fn(),
 }))
 vi.mock('../QuoteMovementRefreshButton', () => ({
-  QuoteMovementRefreshButton: ({ refreshPending }: { refreshPending: boolean }) => (
-    <button type="button" disabled={refreshPending}>
+  QuoteMovementRefreshButton: ({ refreshPending, automatic }: { refreshPending: boolean; automatic?: boolean }) => (
+    <button type="button" disabled={refreshPending} data-automatic={String(automatic)}>
       {refreshPending ? 'Refresh pending' : 'Refresh now'}
     </button>
   ),
@@ -146,6 +146,25 @@ describe('Quote Movement routes', () => {
     render(await QuoteMovementPage({ searchParams: Promise.resolve({}) }))
 
     expect(screen.getByText('No active ServiceM8 Quote jobs.')).toBeInTheDocument()
+  })
+
+  it('keeps automatic retry enabled after an expired pending refresh', async () => {
+    getQuoteMovementRefreshStatus.mockResolvedValue({
+      lastSuccessfulAt: null,
+      lastSuccessfulCount: 0,
+      latestFailure: null,
+      pendingSince: null,
+      isPending: false,
+      hasExpiredPending: true,
+      isStale: true,
+    })
+
+    render(await QuoteMovementPage({ searchParams: Promise.resolve({}) }))
+
+    expect(screen.getByRole('button', { name: 'Refresh now' })).toHaveAttribute(
+      'data-automatic',
+      'true',
+    )
   })
 
   it('uses validated URL controls to load and present the selected list', async () => {

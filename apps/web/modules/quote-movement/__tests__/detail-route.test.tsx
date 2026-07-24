@@ -40,6 +40,7 @@ describe('Quote Movement detail route shell', () => {
       latestFailure: null,
       pendingSince: null,
       isPending: false,
+      hasExpiredPending: false,
       isStale: false,
     })
     getQuoteMovementRecord.mockResolvedValue({
@@ -194,6 +195,7 @@ describe('Quote Movement detail route shell', () => {
       latestFailure: null,
       pendingSince: null,
       isPending: false,
+      hasExpiredPending: false,
       isStale: true,
     })
     getQuoteMovementRecord.mockResolvedValue({

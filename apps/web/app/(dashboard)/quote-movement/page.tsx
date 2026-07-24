@@ -95,6 +95,7 @@ export default async function QuoteMovementPage({
             <QuoteMovementRefreshButton
               action={refreshQuoteMovementAction}
               refreshPending={refreshStatus.isPending}
+              automatic={!refreshStatus.isPending}
             />
           </div>
         }

@@ -62,6 +62,7 @@ describe("deriveQuoteMovementRefreshStatus", () => {
     ).toMatchObject({
       pendingSince: null,
       isPending: false,
+      hasExpiredPending: true,
       isStale: true,
     });
   });
