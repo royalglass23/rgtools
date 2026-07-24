@@ -7,15 +7,18 @@ import {
   precisionSecondaryLinkClassName,
 } from "@/components/precision-ui/PrecisionUI";
 import { requireModule } from "@/lib/guard";
-import { refreshQuoteMovementAction } from "@/modules/quote-movement/actions";
+import { refreshQuoteMovementDetailAction } from "@/modules/quote-movement/actions";
 import {
   formatQuoteMovementCurrency,
   formatQuoteMovementDate,
+  formatQuoteMovementActivity,
   quoteMovementDisplayName,
 } from "@/modules/quote-movement/presentation";
 import {
   getQuoteMovementRecord,
+  getQuoteMovementActivity,
   getQuoteMovementRefreshStatus,
+  listQuoteMovementJobFetchOutcomes,
 } from "@/modules/quote-movement/queries";
 import { QuoteMovementRefreshButton } from "@/modules/quote-movement/QuoteMovementRefreshButton";
 import { QuoteMovementRefreshStatus } from "@/modules/quote-movement/QuoteMovementRefreshStatus";
@@ -28,12 +31,15 @@ export default async function QuoteMovementDetailPage({
 }) {
   await requireModule("quote-tracker");
   const { id } = await params;
-  const [record, refreshStatus] = await Promise.all([
-    getQuoteMovementRecord(id),
-    getQuoteMovementRefreshStatus(),
-  ]);
+  const record = await getQuoteMovementRecord(id);
 
   if (!record) notFound();
+
+  const [refreshStatus, activity, fetchOutcomes] = await Promise.all([
+    getQuoteMovementRefreshStatus(),
+    getQuoteMovementActivity(id),
+    listQuoteMovementJobFetchOutcomes(record.jobNumber ? [record.jobNumber] : []),
+  ]);
 
   return (
     <div className="space-y-5">
@@ -44,8 +50,10 @@ export default async function QuoteMovementDetailPage({
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <QuoteMovementRefreshButton
-              action={refreshQuoteMovementAction}
-              refreshPending={refreshStatus.isPending}
+              action={() => refreshQuoteMovementDetailAction(record.jobNumber ?? "")}
+              refreshPending={false}
+              idleLabel="Refresh this job"
+              pendingLabel="Refreshing this job"
             />
             <StatusBadge tone={record.servicem8Active ? "positive" : "muted"}>
               {record.convertedAt
@@ -79,6 +87,11 @@ export default async function QuoteMovementDetailPage({
       />
 
       <QuoteMovementRefreshStatus status={refreshStatus} showCount={false} />
+      {fetchOutcomes[0] ? (
+        <p role="status" className="text-sm text-text-secondary">
+          Latest fetch: {formatFetchOutcome(fetchOutcomes[0].status, fetchOutcomes[0].syncedCount, fetchOutcomes[0].errorMessage)}
+        </p>
+      ) : null}
 
       <DataPanel title="Quote summary" eyebrow="ServiceM8 source">
         <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -169,6 +182,41 @@ export default async function QuoteMovementDetailPage({
           </div>
         )}
       </DataPanel>
+
+      <DataPanel title="Activity" eyebrow="Retained source history">
+        {activity.length === 0 ? (
+          <p className="text-sm text-text-secondary">No retained activity yet.</p>
+        ) : (
+          <ol className="space-y-3">
+            {activity.map((item) => {
+              const display = formatQuoteMovementActivity(
+                item.sourceType,
+                item.content,
+                item.interpretationSummary,
+                item.safeError,
+              );
+              return (
+              <li key={item.id} className="rounded-md border border-border bg-surface-subtle px-3 py-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-text-muted">
+                  <span className="font-semibold uppercase">{display.label}</span>
+                  <time dateTime={item.occurredAt?.toISOString()}>
+                    {formatQuoteMovementDate(item.occurredAt)}
+                  </time>
+                </div>
+                <details className="mt-1">
+                  <summary className="cursor-pointer text-sm text-text-primary">
+                    {display.preview}
+                  </summary>
+                  <pre className="mt-2 whitespace-pre-wrap break-words text-xs text-text-secondary">
+                    {display.body}
+                  </pre>
+                </details>
+              </li>
+              );
+            })}
+          </ol>
+        )}
+      </DataPanel>
     </div>
   );
 }
@@ -208,6 +256,14 @@ function SummarySection({
       </ul>
     </section>
   );
+}
+
+function formatFetchOutcome(status: string, syncedCount: number, errorMessage: string | null) {
+  if (status === "failed") return errorMessage ?? "Fetch failed.";
+  if (status === "queued") return "Queued.";
+  if (status === "fetching" || status === "pending") return "Fetching.";
+  if (syncedCount === 0) return "Not an active Quote.";
+  return "Fetched.";
 }
 
 function SourceCoverage({

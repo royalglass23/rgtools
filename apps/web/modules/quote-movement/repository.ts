@@ -187,6 +187,8 @@ async function persistQuoteMovementRefreshOutcome(
   await executor.insert(quoteMovementRefreshRuns).values({
     ...values,
     actorId: context.actorId,
+    jobNumber: context.jobNumber ?? null,
+    batchRunId: context.batchRunId ?? null,
     createdAt: context.refreshedAt,
     completedAt: context.refreshedAt,
   });

@@ -484,6 +484,20 @@
       "when": 1784595600000,
       "tag": "0068_quote_movement_refresh_coordination",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1784635200000,
+      "tag": "0069_quote_movement_job_outcomes",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1784635260000,
+      "tag": "0070_quote_movement_batch_outcomes",
+      "breakpoints": true
     }
   ]
 }

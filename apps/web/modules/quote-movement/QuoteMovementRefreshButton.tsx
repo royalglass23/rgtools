@@ -8,10 +8,14 @@ export function QuoteMovementRefreshButton({
   action,
   refreshPending,
   automatic = true,
+  idleLabel = "Refresh now",
+  pendingLabel = "Refresh pending",
 }: {
   action: () => Promise<{ status: "requested" | "already_pending" }>;
   refreshPending: boolean;
   automatic?: boolean;
+  idleLabel?: string;
+  pendingLabel?: string;
 }) {
   const router = useRouter();
   const automaticRequested = useRef(false);
@@ -41,10 +45,10 @@ export function QuoteMovementRefreshButton({
   }, [refreshPending, router]);
 
   const label = refreshPending
-    ? "Refresh pending"
+    ? pendingLabel
     : requestPending
       ? "Requesting refresh"
-      : "Refresh now";
+      : idleLabel;
 
   return (
     <PrecisionButton

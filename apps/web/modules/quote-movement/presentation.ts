@@ -18,6 +18,36 @@ export function formatQuoteMovementDate(value: Date | null) {
   }).format(value)
 }
 
+export function formatQuoteMovementActivity(
+  sourceType: string,
+  content: Record<string, unknown>,
+  summary: string | null,
+  safeError: string | null,
+) {
+  if (sourceType === "tracked_open") {
+    return {
+      label: "Tracked customer open",
+      preview: "Customer opened the tracked quote.",
+      body: "Customer opened the tracked quote.",
+    };
+  }
+  if (sourceType === "tracked_download") {
+    return {
+      label: "Tracked customer download",
+      preview: "Customer downloaded the tracked quote.",
+      body: "Customer downloaded the tracked quote.",
+    };
+  }
+  const readable = summary ?? String(
+    content.subject ?? content.text ?? content.body ?? content.name ?? safeError ?? "Activity",
+  );
+  return {
+    label: sourceType.replaceAll("_", " "),
+    preview: readable,
+    body: summary ?? String(content.body ?? content.text ?? content.subject ?? content.name ?? safeError ?? "No readable content."),
+  };
+}
+
 export function quoteMovementDisplayName({
   jobNumber,
   customerName,

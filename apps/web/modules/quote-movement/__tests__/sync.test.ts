@@ -2,11 +2,24 @@
 
 import { describe, expect, it, vi } from "vitest";
 import {
+  parseQuoteMovementJobNumbers,
   safeQuoteMovementRefreshError,
   syncQuoteMovementFromServiceM8,
   type QuoteMovementSnapshotInput,
   type QuoteMovementSnapshotRepository,
 } from "../sync";
+
+describe("parseQuoteMovementJobNumbers", () => {
+  it("normalizes semicolon-separated job numbers and removes duplicates", () => {
+    expect(
+      parseQuoteMovementJobNumbers(" Q260101;Q260102 ; q260101; ; Q260102 "),
+    ).toEqual(["Q260101", "Q260102", "q260101"]);
+  });
+
+  it("returns an empty list for blank input", () => {
+    expect(parseQuoteMovementJobNumbers(" ;  ; ")).toEqual([]);
+  });
+});
 
 function createMemoryRepository() {
   const rows = new Map<
