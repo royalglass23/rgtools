@@ -278,11 +278,11 @@ test.describe("MT-225 secured Quote Movement V1 journey", () => {
     const listUsableMs = Date.now() - listStartedAt;
     expect(listUsableMs).toBeLessThan(10_000);
 
-    const refreshButton = page.getByRole("button", {
-      name: /Requesting refresh|Refresh pending/,
-    });
-    await expect(refreshButton).toBeDisabled();
-    await expect(page.getByText(/previous cached data was kept/i)).toBeVisible({
+    await page.getByLabel("Job number to fetch").fill(completeJobNumber);
+    await page.getByRole("button", { name: "Fetch jobs" }).click();
+    await page.reload();
+    await expect(page.getByRole("button", { name: "Fetch jobs" })).toBeVisible();
+    await expect(page.getByText(/Cached data may be out of date/i)).toBeVisible({
       timeout: 20_000,
     });
     await expect(

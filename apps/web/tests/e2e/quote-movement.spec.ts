@@ -147,12 +147,12 @@ test.describe("MT-224 Quote Movement refresh resilience", () => {
     await expect(page.getByText("MT-224 Cached Customer")).toBeVisible();
     expect(Date.now() - listStartedAt).toBeLessThan(10_000);
 
-    const pendingButton = page.getByRole("button", {
-      name: /Requesting refresh|Refresh pending/,
-    });
-    await expect(pendingButton).toBeDisabled();
+    await page.getByLabel("Job number to fetch").fill(jobNumber);
+    await page.getByRole("button", { name: "Fetch jobs" }).click();
+    await page.reload();
+    await expect(page.getByRole("button", { name: "Fetch jobs" })).toBeVisible();
     await expect(page.getByText("MT-224 Cached Customer")).toBeVisible();
-    await expect(page.getByText(/previous cached data was kept/i)).toBeVisible({
+    await expect(page.getByText(/Cached data may be out of date/i)).toBeVisible({
       timeout: 20_000,
     });
     await expect(page.getByText("MT-224 Cached Customer")).toBeVisible();

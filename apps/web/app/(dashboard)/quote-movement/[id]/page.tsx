@@ -40,6 +40,10 @@ export default async function QuoteMovementDetailPage({
     getQuoteMovementActivity(id),
     listQuoteMovementJobFetchOutcomes(record.jobNumber ? [record.jobNumber] : []),
   ]);
+  const refreshDetail = refreshQuoteMovementDetailAction.bind(
+    null,
+    record.jobNumber ?? "",
+  );
 
   return (
     <div className="space-y-5">
@@ -50,7 +54,7 @@ export default async function QuoteMovementDetailPage({
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <QuoteMovementRefreshButton
-              action={() => refreshQuoteMovementDetailAction(record.jobNumber ?? "")}
+              action={refreshDetail}
               refreshPending={false}
               idleLabel="Refresh this job"
               pendingLabel="Refreshing this job"
