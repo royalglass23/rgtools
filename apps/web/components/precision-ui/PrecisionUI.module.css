@@ -71,6 +71,29 @@
   gap: var(--space-4);
 }
 
+.collapsibleSummary {
+  display: block;
+  cursor: pointer;
+  list-style: none;
+}
+
+.collapsibleSummary::-webkit-details-marker {
+  display: none;
+}
+
+.collapsibleSummary::after {
+  position: absolute;
+  top: var(--space-5);
+  right: var(--space-5);
+  color: var(--text-muted);
+  content: "▸";
+  font-size: 1rem;
+}
+
+details[open] > .collapsibleSummary::after {
+  content: "▾";
+}
+
 .kpiCard {
   min-width: 0;
   padding: 1.15rem 1.2rem 0.85rem;
