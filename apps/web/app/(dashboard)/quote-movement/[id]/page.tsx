@@ -51,8 +51,10 @@ export default async function QuoteMovementDetailPage({
 
   return (
     <div className="space-y-5">
+      <Link href="/quote-movement" className={precisionSecondaryLinkClassName}>
+        Back to Quote Movement
+      </Link>
       <PageHeader
-        eyebrow="Quote movement detail"
         title={quoteMovementDisplayName(record)}
         description={`Cached from ServiceM8 on ${formatQuoteMovementDate(record.lastServiceM8SyncedAt)}`}
         actions={
@@ -84,12 +86,6 @@ export default async function QuoteMovementDetailPage({
                 </span>
               )
             ) : null}
-            <Link
-              href="/quote-movement"
-              className={precisionSecondaryLinkClassName}
-            >
-              Back to Quote Movement
-            </Link>
           </div>
         }
       />

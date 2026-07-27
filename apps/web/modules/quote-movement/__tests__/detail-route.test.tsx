@@ -83,6 +83,10 @@ describe("Quote Movement detail route shell", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Alpha Homes")).toBeInTheDocument();
     expect(
+      screen.getByRole("link", { name: "Back to Quote Movement" }),
+    ).toHaveAttribute("href", "/quote-movement");
+    expect(screen.queryByText("Quote movement detail")).not.toBeInTheDocument();
+    expect(
       screen.getByRole("heading", { name: "What Matters Now" }),
     ).toBeInTheDocument();
   });
