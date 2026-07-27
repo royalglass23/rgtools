@@ -182,6 +182,8 @@ export const quoteMovementRefreshRuns = pgTable(
     actorId: uuid("actor_id").references(() => users.id, {
       onDelete: "set null",
     }),
+    jobNumber: text("job_number"),
+    batchRunId: uuid("batch_run_id"),
     status: text("status").notNull(),
     syncedCount: integer("synced_count").default(0).notNull(),
     errorMessage: text("error_message"),
@@ -193,6 +195,8 @@ export const quoteMovementRefreshRuns = pgTable(
   (table) => [
     index("quote_movement_refresh_runs_created_at_idx").on(table.createdAt),
     index("quote_movement_refresh_runs_status_idx").on(table.status),
+    index("quote_movement_refresh_runs_job_number_idx").on(table.jobNumber),
+    index("quote_movement_refresh_runs_batch_run_id_idx").on(table.batchRunId),
   ],
 );
 

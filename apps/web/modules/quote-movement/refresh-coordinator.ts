@@ -2,6 +2,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { quoteMovementRefreshRuns } from "@rgtools/db/schema-quote-movement";
 import { QUOTE_MOVEMENT_REFRESH_WINDOW_SECONDS } from "./refresh-policy";
+import type { QuoteMovementJobFetchOutcome } from "./service";
 
 const REFRESH_LOCK_NAME = "quote-movement-refresh";
 const ABANDONED_REFRESH_MESSAGE =
@@ -14,6 +15,8 @@ export type QuoteMovementRefreshRequest =
 export type QuoteMovementRefreshCoordinator = {
   request(actorId: string | null): Promise<QuoteMovementRefreshRequest>;
   finish(runId: string): Promise<void>;
+  recordJobStatus?(actorId: string | null, jobNumber: string, batchRunId: string, status: "queued" | "fetching"): Promise<void>;
+  complete?(runId: string, outcomes: QuoteMovementJobFetchOutcome[]): Promise<void>;
 };
 
 export const quoteMovementRefreshCoordinator: QuoteMovementRefreshCoordinator =
@@ -69,6 +72,33 @@ export const quoteMovementRefreshCoordinator: QuoteMovementRefreshCoordinator =
         .set({
           status: "failed",
           errorMessage: ABANDONED_REFRESH_MESSAGE,
+          completedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(quoteMovementRefreshRuns.id, runId),
+            eq(quoteMovementRefreshRuns.status, "pending"),
+          ),
+        );
+      await releaseRefreshLock(runId);
+    },
+    async recordJobStatus(actorId, jobNumber, batchRunId, status) {
+      await db.insert(quoteMovementRefreshRuns).values({
+        actorId,
+        jobNumber,
+        batchRunId,
+        status,
+        syncedCount: 0,
+      });
+    },
+    async complete(runId, outcomes) {
+      const failed = outcomes.filter((outcome) => outcome.status === "failed");
+      await db
+        .update(quoteMovementRefreshRuns)
+        .set({
+          status: failed.length > 0 ? "failed" : "success",
+          syncedCount: outcomes.filter((outcome) => outcome.status === "fetched").length,
+          errorMessage: failed.length > 0 ? failed.map((outcome) => outcome.message).join(" ") : null,
           completedAt: new Date(),
         })
         .where(

@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 import { after } from 'next/server'
 import { auth } from '@/lib/auth'
 import { requireModule } from '@/lib/guard'
-import { requestQuoteMovementRefresh } from './service'
+import { requestQuoteMovementJobFetch, requestQuoteMovementRefresh } from './service'
 import { safeQuoteMovementRefreshError } from './sync'
 import { updateQuoteMovementProjectComplexity } from './repository'
 import {
@@ -29,6 +29,41 @@ export async function refreshQuoteMovementAction() {
     redirect(`/quote-movement?refreshError=${encodeURIComponent(message)}`)
   }
 
+}
+
+export async function refreshQuoteMovementJobAction(formData: FormData) {
+  await requireModule('quote-tracker')
+  const session = await auth()
+  const jobNumber = formData.get('jobNumber')
+  if (typeof jobNumber !== 'string' || jobNumber.trim() === '') {
+    redirect('/quote-movement?refreshError=Enter%20a%20job%20number%20to%20fetch.')
+  }
+
+  try {
+    await requestQuoteMovementJobFetch({
+      actorId: session?.user?.id ?? null,
+      input: jobNumber.trim(),
+      schedule: after,
+    })
+    revalidatePath('/quote-movement')
+  } catch (error) {
+    const message = safeQuoteMovementRefreshError(error)
+    redirect(`/quote-movement?refreshError=${encodeURIComponent(message)}`)
+  }
+}
+
+export async function refreshQuoteMovementDetailAction(jobNumber: string) {
+  await requireModule('quote-tracker')
+  const normalizedJobNumber = jobNumber.trim()
+  if (!normalizedJobNumber) throw new Error('Quote Movement job number is required.')
+  const session = await auth()
+  const result = await requestQuoteMovementJobFetch({
+    actorId: session?.user?.id ?? null,
+    input: normalizedJobNumber,
+    schedule: after,
+  })
+  revalidatePath('/quote-movement')
+  return result
 }
 
 export async function updateQuoteMovementComplexityAction(

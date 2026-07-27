@@ -3,19 +3,24 @@ import { notFound } from "next/navigation";
 import {
   DataPanel,
   PageHeader,
+  SectionHeading,
   StatusBadge,
   precisionSecondaryLinkClassName,
 } from "@/components/precision-ui/PrecisionUI";
+import precisionStyles from "@/components/precision-ui/PrecisionUI.module.css";
 import { requireModule } from "@/lib/guard";
-import { refreshQuoteMovementAction } from "@/modules/quote-movement/actions";
+import { refreshQuoteMovementDetailAction } from "@/modules/quote-movement/actions";
 import {
   formatQuoteMovementCurrency,
   formatQuoteMovementDate,
+  formatQuoteMovementActivity,
   quoteMovementDisplayName,
 } from "@/modules/quote-movement/presentation";
 import {
   getQuoteMovementRecord,
+  getQuoteMovementActivity,
   getQuoteMovementRefreshStatus,
+  listQuoteMovementJobFetchOutcomes,
 } from "@/modules/quote-movement/queries";
 import { QuoteMovementRefreshButton } from "@/modules/quote-movement/QuoteMovementRefreshButton";
 import { QuoteMovementRefreshStatus } from "@/modules/quote-movement/QuoteMovementRefreshStatus";
@@ -28,24 +33,37 @@ export default async function QuoteMovementDetailPage({
 }) {
   await requireModule("quote-tracker");
   const { id } = await params;
-  const [record, refreshStatus] = await Promise.all([
-    getQuoteMovementRecord(id),
-    getQuoteMovementRefreshStatus(),
-  ]);
+  const record = await getQuoteMovementRecord(id);
 
   if (!record) notFound();
 
+  const [refreshStatus, activity, fetchOutcomes] = await Promise.all([
+    getQuoteMovementRefreshStatus(),
+    getQuoteMovementActivity(id),
+    listQuoteMovementJobFetchOutcomes(
+      record.jobNumber ? [record.jobNumber] : [],
+    ),
+  ]);
+  const refreshDetail = refreshQuoteMovementDetailAction.bind(
+    null,
+    record.jobNumber ?? "",
+  );
+
   return (
     <div className="space-y-5">
+      <Link href="/quote-movement" className={precisionSecondaryLinkClassName}>
+        Back to Quote Movement
+      </Link>
       <PageHeader
-        eyebrow="Quote movement detail"
         title={quoteMovementDisplayName(record)}
         description={`Cached from ServiceM8 on ${formatQuoteMovementDate(record.lastServiceM8SyncedAt)}`}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <QuoteMovementRefreshButton
-              action={refreshQuoteMovementAction}
-              refreshPending={refreshStatus.isPending}
+              action={refreshDetail}
+              refreshPending={false}
+              idleLabel="Refresh this job"
+              pendingLabel="Refreshing this job"
             />
             <StatusBadge tone={record.servicem8Active ? "positive" : "muted"}>
               {record.convertedAt
@@ -68,17 +86,21 @@ export default async function QuoteMovementDetailPage({
                 </span>
               )
             ) : null}
-            <Link
-              href="/quote-movement"
-              className={precisionSecondaryLinkClassName}
-            >
-              Back to Quote Movement
-            </Link>
           </div>
         }
       />
 
       <QuoteMovementRefreshStatus status={refreshStatus} showCount={false} />
+      {fetchOutcomes[0] ? (
+        <p role="status" className="text-sm text-text-secondary">
+          Latest fetch:{" "}
+          {formatFetchOutcome(
+            fetchOutcomes[0].status,
+            fetchOutcomes[0].syncedCount,
+            fetchOutcomes[0].errorMessage,
+          )}
+        </p>
+      ) : null}
 
       <DataPanel title="Quote summary" eyebrow="ServiceM8 source">
         <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -96,11 +118,6 @@ export default async function QuoteMovementDetailPage({
       <DataPanel title="What Matters Now" eyebrow="Complete source history">
         {record.importantDetailsSummary ? (
           <div className="space-y-5">
-            <SourceCoverage
-              status={record.sourceCoverage}
-              unreadCount={record.sourceUnreadCount}
-              details={record.sourceCoverageDetails}
-            />
             {record.summaryLastError ? (
               <p className="rounded-md border border-warning-border bg-warning-surface px-3 py-2 text-sm text-text-secondary">
                 {record.summaryLastError}
@@ -109,27 +126,22 @@ export default async function QuoteMovementDetailPage({
             <SummarySection
               title="Current Position"
               statements={[record.importantDetailsSummary.currentPosition]}
-              recordId={record.id}
             />
             <SummarySection
               title="Unresolved Matters"
               statements={record.importantDetailsSummary.unresolvedMatters}
-              recordId={record.id}
             />
             <SummarySection
               title="Material Facts"
               statements={record.importantDetailsSummary.materialFacts}
-              recordId={record.id}
             />
             <SummarySection
               title="Important Dates"
               statements={record.importantDetailsSummary.importantDates}
-              recordId={record.id}
             />
             <SummarySection
               title="Participants"
               statements={record.importantDetailsSummary.participants}
-              recordId={record.id}
             />
             <SummarySection
               title="Latest Meaningful Movement"
@@ -138,7 +150,6 @@ export default async function QuoteMovementDetailPage({
                   ? [record.importantDetailsSummary.latestMeaningfulMovement]
                   : []
               }
-              recordId={record.id}
             />
             <SummarySection
               title="Consent State"
@@ -147,16 +158,10 @@ export default async function QuoteMovementDetailPage({
                   ? [record.importantDetailsSummary.consentState]
                   : []
               }
-              recordId={record.id}
             />
           </div>
         ) : (
           <div className="space-y-3">
-            <SourceCoverage
-              status={record.sourceCoverage}
-              unreadCount={record.sourceUnreadCount}
-              details={record.sourceCoverageDetails}
-            />
             {record.summaryLastError ? (
               <p className="rounded-md border border-warning-border bg-warning-surface px-3 py-2 text-sm text-text-secondary">
                 {record.summaryLastError}
@@ -169,6 +174,51 @@ export default async function QuoteMovementDetailPage({
           </div>
         )}
       </DataPanel>
+
+      <details className={precisionStyles.dataPanel}>
+        <summary className={precisionStyles.collapsibleSummary}>
+          <SectionHeading title="Activity" eyebrow="Retained source history" />
+        </summary>
+        {activity.length === 0 ? (
+          <p className="text-sm text-text-secondary">
+            No retained activity yet.
+          </p>
+        ) : (
+          <ol className="space-y-3">
+            {activity.map((item) => {
+              const display = formatQuoteMovementActivity(
+                item.sourceType,
+                item.content,
+                item.interpretationSummary,
+                item.safeError,
+              );
+              return (
+                <li
+                  key={item.id}
+                  className="rounded-md border border-border bg-surface-subtle px-3 py-2"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-text-muted">
+                    <span className="font-semibold uppercase">
+                      {display.label}
+                    </span>
+                    <time dateTime={item.occurredAt?.toISOString()}>
+                      {formatQuoteMovementDate(item.occurredAt)}
+                    </time>
+                  </div>
+                  <details className="mt-1">
+                    <summary className="cursor-pointer text-sm text-text-primary">
+                      {display.preview}
+                    </summary>
+                    <pre className="mt-2 whitespace-pre-wrap break-words text-xs text-text-secondary">
+                      {display.body}
+                    </pre>
+                  </details>
+                </li>
+              );
+            })}
+          </ol>
+        )}
+      </details>
     </div>
   );
 }
@@ -176,11 +226,9 @@ export default async function QuoteMovementDetailPage({
 function SummarySection({
   title,
   statements,
-  recordId,
 }: {
   title: string;
   statements: QuoteMovementSummaryStatement[];
-  recordId: string;
 }) {
   if (statements.length === 0) return null;
   return (
@@ -190,19 +238,6 @@ function SummarySection({
         {statements.map((statement, index) => (
           <li key={`${title}-${index}`} className="text-sm text-text-secondary">
             <p>{statement.text}</p>
-            {statement.evidenceSourceIdentities.length > 0 ? (
-              <div className="mt-1 flex flex-wrap gap-2 text-xs">
-                {statement.evidenceSourceIdentities.map((identity) => (
-                  <Link
-                    key={identity}
-                    href={`/quote-movement/${recordId}/evidence/${encodeURIComponent(identity)}`}
-                    className="text-brand underline-offset-2 hover:underline"
-                  >
-                    View supporting evidence
-                  </Link>
-                ))}
-              </div>
-            ) : null}
           </li>
         ))}
       </ul>
@@ -210,40 +245,16 @@ function SummarySection({
   );
 }
 
-function SourceCoverage({
-  status,
-  unreadCount,
-  details,
-}: {
-  status?: string;
-  unreadCount?: number;
-  details?: string[];
-}) {
-  const complete = status === "complete";
-  const safeUnreadCount = unreadCount ?? 0;
-  const safeDetails = details ?? [];
-  return (
-    <aside
-      aria-label="Source Coverage"
-      className="rounded-md border border-border bg-surface-subtle px-3 py-2 text-sm"
-    >
-      <p className="font-semibold text-text-primary">
-        {complete ? "Complete Source Coverage" : "Incomplete Source Coverage"}
-      </p>
-      {!complete ? (
-        <p className="text-text-secondary">
-          {safeUnreadCount} unread {safeUnreadCount === 1 ? "source" : "sources"}
-        </p>
-      ) : null}
-      {safeDetails.length > 0 ? (
-        <ul className="mt-1 list-disc pl-5 text-xs text-text-muted">
-          {safeDetails.map((detail) => (
-            <li key={detail}>{detail}</li>
-          ))}
-        </ul>
-      ) : null}
-    </aside>
-  );
+function formatFetchOutcome(
+  status: string,
+  syncedCount: number,
+  errorMessage: string | null,
+) {
+  if (status === "failed") return errorMessage ?? "Fetch failed.";
+  if (status === "queued") return "Queued.";
+  if (status === "fetching" || status === "pending") return "Fetching.";
+  if (syncedCount === 0) return "Not an active Quote.";
+  return "Fetched.";
 }
 
 function Field({

@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const requireModule = vi.hoisted(() => vi.fn())
 const auth = vi.hoisted(() => vi.fn())
 const requestQuoteMovementRefresh = vi.hoisted(() => vi.fn())
+const requestQuoteMovementJobFetch = vi.hoisted(() => vi.fn())
 const updateQuoteMovementProjectComplexity = vi.hoisted(() => vi.fn())
 const revalidatePath = vi.hoisted(() => vi.fn())
 const redirect = vi.hoisted(() => vi.fn((url: string) => {
@@ -14,7 +15,7 @@ const after = vi.hoisted(() => vi.fn())
 
 vi.mock('@/lib/guard', () => ({ requireModule }))
 vi.mock('@/lib/auth', () => ({ auth }))
-vi.mock('../service', () => ({ requestQuoteMovementRefresh }))
+vi.mock('../service', () => ({ requestQuoteMovementRefresh, requestQuoteMovementJobFetch }))
 vi.mock('../repository', () => ({ updateQuoteMovementProjectComplexity }))
 vi.mock('next/cache', () => ({ revalidatePath }))
 vi.mock('next/navigation', () => ({ redirect }))
@@ -22,6 +23,7 @@ vi.mock('next/server', () => ({ after }))
 
 import {
   refreshQuoteMovementAction,
+  refreshQuoteMovementJobAction,
   updateQuoteMovementComplexityAction,
 } from '../actions'
 
@@ -31,6 +33,7 @@ describe('refreshQuoteMovementAction', () => {
     requireModule.mockResolvedValue(undefined)
     auth.mockResolvedValue({ user: { id: 'user-1' } })
     requestQuoteMovementRefresh.mockResolvedValue({ status: 'requested' })
+    requestQuoteMovementJobFetch.mockResolvedValue({ status: 'requested' })
   })
 
   it('requests non-blocking refresh work through the existing Quote Tracker permission', async () => {
@@ -65,6 +68,27 @@ describe('refreshQuoteMovementAction', () => {
         'Quote Movement could not refresh from ServiceM8. The previous cached list was kept.',
       )}`,
     })
+  })
+
+  it('requests a scoped refresh for the submitted job number', async () => {
+    const formData = new FormData()
+    formData.set('jobNumber', ' Q260223 ')
+
+    await expect(refreshQuoteMovementJobAction(formData)).resolves.toBeUndefined()
+
+    expect(requestQuoteMovementJobFetch).toHaveBeenCalledWith({
+      actorId: 'user-1',
+      input: 'Q260223',
+      schedule: after,
+    })
+    expect(revalidatePath).toHaveBeenCalledWith('/quote-movement')
+  })
+
+  it('rejects a scoped refresh without a job number', async () => {
+    await expect(refreshQuoteMovementJobAction(new FormData())).rejects.toMatchObject({
+      url: '/quote-movement?refreshError=Enter%20a%20job%20number%20to%20fetch.',
+    })
+    expect(requestQuoteMovementRefresh).not.toHaveBeenCalled()
   })
 })
 

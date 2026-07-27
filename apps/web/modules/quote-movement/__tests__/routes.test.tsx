@@ -4,7 +4,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const requireModule = vi.hoisted(() => vi.fn())
 const listQuoteMovementRecords = vi.hoisted(() => vi.fn())
 const getQuoteMovementRefreshStatus = vi.hoisted(() => vi.fn())
+const listQuoteMovementJobFetchOutcomes = vi.hoisted(() => vi.fn())
 const refreshQuoteMovementAction = vi.hoisted(() => vi.fn())
+const refreshQuoteMovementJobAction = vi.hoisted(() => vi.fn())
 const routerRefresh = vi.hoisted(() => vi.fn())
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: routerRefresh }) }))
@@ -13,14 +15,16 @@ vi.mock('@/lib/guard', () => ({ requireModule }))
 vi.mock('../queries', () => ({
   listQuoteMovementRecords,
   getQuoteMovementRefreshStatus,
+  listQuoteMovementJobFetchOutcomes,
 }))
 vi.mock('../actions', () => ({
   refreshQuoteMovementAction,
+  refreshQuoteMovementJobAction,
   updateQuoteMovementComplexityAction: vi.fn(),
 }))
 vi.mock('../QuoteMovementRefreshButton', () => ({
-  QuoteMovementRefreshButton: ({ refreshPending }: { refreshPending: boolean }) => (
-    <button type="button" disabled={refreshPending}>
+  QuoteMovementRefreshButton: ({ refreshPending, automatic }: { refreshPending: boolean; automatic?: boolean }) => (
+    <button type="button" disabled={refreshPending} data-automatic={String(automatic)}>
       {refreshPending ? 'Refresh pending' : 'Refresh now'}
     </button>
   ),
@@ -42,6 +46,7 @@ describe('Quote Movement routes', () => {
       isPending: false,
       isStale: true,
     })
+    listQuoteMovementJobFetchOutcomes.mockResolvedValue([])
     refreshQuoteMovementAction.mockResolvedValue({ status: 'requested' })
   })
 
@@ -137,13 +142,30 @@ describe('Quote Movement routes', () => {
 
     expect(screen.getByText('Cached Customer')).toBeVisible()
     expect(screen.getByText(/cached quotes remain available while/i)).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Refresh pending' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Fetch jobs' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Refresh pending' })).not.toBeInTheDocument()
   })
 
   it('shows a clear empty state when the cached active list is empty', async () => {
     render(await QuoteMovementPage({ searchParams: Promise.resolve({}) }))
 
     expect(screen.getByText('No active ServiceM8 Quote jobs.')).toBeInTheDocument()
+  })
+
+  it('does not issue an automatic global refresh after an expired pending refresh', async () => {
+    getQuoteMovementRefreshStatus.mockResolvedValue({
+      lastSuccessfulAt: null,
+      lastSuccessfulCount: 0,
+      latestFailure: null,
+      pendingSince: null,
+      isPending: false,
+      hasExpiredPending: true,
+      isStale: true,
+    })
+
+    render(await QuoteMovementPage({ searchParams: Promise.resolve({}) }))
+
+    expect(screen.queryByRole('button', { name: 'Refresh now' })).not.toBeInTheDocument()
   })
 
   it('uses validated URL controls to load and present the selected list', async () => {
