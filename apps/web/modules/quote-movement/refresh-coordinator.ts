@@ -98,6 +98,7 @@ export const quoteMovementRefreshCoordinator: QuoteMovementRefreshCoordinator =
       });
     },
     async complete(runId, outcomes) {
+      const completedAt = new Date();
       const failed = outcomes.filter((outcome) => outcome.status === "failed");
       await db
         .update(quoteMovementRefreshRuns)
@@ -105,7 +106,7 @@ export const quoteMovementRefreshCoordinator: QuoteMovementRefreshCoordinator =
           status: failed.length > 0 ? "failed" : "success",
           syncedCount: outcomes.filter((outcome) => outcome.status === "fetched").length,
           errorMessage: failed.length > 0 ? failed.map((outcome) => outcome.message).join(" ") : null,
-          completedAt: new Date(),
+          completedAt,
         })
         .where(
           and(
@@ -113,6 +114,22 @@ export const quoteMovementRefreshCoordinator: QuoteMovementRefreshCoordinator =
             eq(quoteMovementRefreshRuns.status, "pending"),
           ),
         );
+      for (const outcome of outcomes) {
+        await db
+          .update(quoteMovementRefreshRuns)
+          .set({
+            status: outcome.status,
+            syncedCount: outcome.status === "fetched" ? 1 : 0,
+            errorMessage: outcome.status === "failed" ? outcome.message : null,
+            completedAt,
+          })
+          .where(
+            and(
+              eq(quoteMovementRefreshRuns.batchRunId, runId),
+              eq(quoteMovementRefreshRuns.jobNumber, outcome.jobNumber),
+            ),
+          );
+      }
       await releaseRefreshLock(runId);
     },
   };
