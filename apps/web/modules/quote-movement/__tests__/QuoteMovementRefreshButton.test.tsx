@@ -38,7 +38,7 @@ describe('QuoteMovementRefreshButton', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Refresh pending')
   })
 
-  it('automatically requests background work after cached content renders', async () => {
+  it('does not request background work merely because cached content renders', async () => {
     const action = vi.fn(async () => ({ status: 'requested' as const }))
     render(
       <QuoteMovementRefreshButton
@@ -48,6 +48,20 @@ describe('QuoteMovementRefreshButton', () => {
     )
 
     expect(screen.getByRole('button')).toBeInTheDocument()
+    await waitFor(() => expect(action).not.toHaveBeenCalled())
+    expect(refresh).not.toHaveBeenCalled()
+  })
+
+  it('can explicitly request background work when automatic refresh is enabled', async () => {
+    const action = vi.fn(async () => ({ status: 'requested' as const }))
+    render(
+      <QuoteMovementRefreshButton
+        action={action}
+        automatic
+        refreshPending={false}
+      />,
+    )
+
     await waitFor(() => expect(action).toHaveBeenCalledOnce())
     expect(refresh).toHaveBeenCalled()
   })

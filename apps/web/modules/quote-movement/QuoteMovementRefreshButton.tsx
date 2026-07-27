@@ -7,7 +7,7 @@ import { PrecisionButton } from "@/components/precision-ui/PrecisionUI";
 export function QuoteMovementRefreshButton({
   action,
   refreshPending,
-  automatic = true,
+  automatic = false,
 }: {
   action: () => Promise<{ status: "requested" | "already_pending" }>;
   refreshPending: boolean;
