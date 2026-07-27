@@ -21,10 +21,13 @@ The sync reads:
 - `/job.json` filtered separately to active `Work Order` jobs for conversion evidence.
 - `/company.json` for customer names.
 - `/jobmaterial.json` filtered to active lines for ex-GST value totals.
-- The complete accessible note, email, file, photo, and quote-change source sets for each active Quote job.
+- On the first sync for a job, the complete accessible note, email, file, photo, and quote-change source sets.
+- On later syncs, note, email, file, photo, and quote-change collections are filtered from that job's last successful source checkpoint with a five-minute overlap. The overlap protects records that land exactly on the previous boundary.
 - Existing rgtools tracked-open and tracked-download events associated with the ServiceM8 job.
 
-The resulting Quote snapshot is upserted into `quote_movement_records`. An existing monitored record whose ServiceM8 UUID appears in the active Work Order response receives a one-way `converted_at` marker and keeps its Project Complexity, sources, and enrichment history. Previously cached records absent from both responses are marked inactive but are not inferred to be converted. A failed ServiceM8 read leaves the previous cache and conversion state intact.
+Job and Work Order metadata remains a full read on global refresh by design. That small reconciliation set detects new Quotes, status changes, inactive jobs, and Quote-to-Work Order conversion evidence. The checkpoint optimization applies to the larger retained source-history payload, not to this status-safety index.
+
+The resulting Quote snapshot is upserted into `quote_movement_records`. An existing monitored record whose ServiceM8 UUID appears in the active Work Order response receives a one-way `converted_at` marker and keeps its Project Complexity, sources, and enrichment history. Previously cached records absent from both responses are marked inactive but are not inferred to be converted. A failed source collection does not advance that job's source checkpoint, so the next refresh retries the missed window. A failed ServiceM8 read leaves the previous cache and conversion state intact.
 
 After source persistence commits, the summary repository fingerprints the meaningful record fields and complete retained source set. A first-seen or changed fingerprint is sent automatically to the controlled What Matters Now summarisation adapter; unchanged history is skipped. The adapter uses strict structured output and may extract only Current Position, Material Facts, Important Dates, Participants, Unresolved Matters, Latest Meaningful Movement, relevant Consent State, and retained source identities as Supporting Evidence. It must not produce scores, rankings, recommendations, sales actions, drafts, or a raw chronological history.
 
@@ -36,7 +39,7 @@ Source collection is intentionally fail-safe. A failed collection or interpretat
 
 ## Tables
 
-- `quote_movement_records` stores ServiceM8 job identity, customer/address fields, ex-GST quote value, active status, nullable `converted_at` evidence, RG-owned Project Complexity, source update time, meaningful latest activity, source-coverage state/counts, the structured cached summary, summary fingerprint/generation state, and last rgtools sync time.
+- `quote_movement_records` stores ServiceM8 job identity, customer/address fields, ex-GST quote value, active status, nullable `converted_at` evidence, RG-owned Project Complexity, source update time, meaningful latest activity, source-coverage state/counts, the structured cached summary, summary fingerprint/generation state, last rgtools sync time, and the nullable last successful ServiceM8 source checkpoint.
 - `quote_movement_sources` retains immutable provider evidence by stable source identity. A later refresh updates the same retained source if ServiceM8 reclassifies it; absence from a later response never deletes it.
 - `quote_movement_source_enrichment` stores RG-owned interpretation state, staff-safe errors, and summaries separately from provider evidence.
 - `quote_movement_refresh_runs` stores pending/success/failure metadata, request and completion timestamps, synced row count, optional actor, and safe error text.

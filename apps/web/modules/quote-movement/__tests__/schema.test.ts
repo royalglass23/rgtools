@@ -64,6 +64,7 @@ describe("Quote Movement persistence", () => {
         "source_failed_count",
         "source_coverage_details",
         "last_servicem8_synced_at",
+        "last_servicem8_source_checkpoint_at",
       ]),
     );
     expect(

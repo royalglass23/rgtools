@@ -33,6 +33,23 @@ type QuoteMovementRefreshOutcome =
 
 export const quoteMovementSnapshotRepository: QuoteMovementSnapshotRepository =
   {
+    async listServiceM8SourceCheckpoints() {
+      const rows = await db
+        .select({
+          servicem8JobUuid: quoteMovementRecords.servicem8JobUuid,
+          lastServiceM8SourceCheckpointAt:
+            quoteMovementRecords.lastServiceM8SourceCheckpointAt,
+        })
+        .from(quoteMovementRecords);
+      return new Map(
+        rows.flatMap((row) =>
+          row.lastServiceM8SourceCheckpointAt
+            ? [[row.servicem8JobUuid, row.lastServiceM8SourceCheckpointAt] as const]
+            : [],
+        ),
+      );
+    },
+
     async replaceActiveSnapshot(records, context) {
       await db.transaction((tx) =>
         persistQuoteMovementSnapshot(tx, records, context),
@@ -276,6 +293,8 @@ function quoteRecordValues(
     sourceFailedCount: record.sourceCoverage.failedCount,
     sourceCoverageDetails: record.sourceCoverage.details,
     lastServiceM8SyncedAt: record.lastServiceM8SyncedAt,
+    lastServiceM8SourceCheckpointAt:
+      record.lastServiceM8SourceCheckpointAt ?? null,
     updatedAt: refreshedAt,
   };
 }
