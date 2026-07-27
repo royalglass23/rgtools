@@ -16,6 +16,7 @@ const ACTIVE_WORK_ORDER_FILTER = "active eq 1 and status eq 'Work Order'";
 const ACTIVE_FILTER = "active eq 1";
 const SERVICEM8_MAX_PAGES = 25;
 const SOURCE_COLLECTION_CONCURRENCY = 4;
+const SOURCE_CHECKPOINT_OVERLAP_MS = 5 * 60 * 1000;
 
 export function parseQuoteMovementJobNumbers(input: string) {
   const seen = new Set<string>();
@@ -168,6 +169,7 @@ export type QuoteMovementSnapshotInput = {
   sourceCoverage: QuoteMovementSourceCoverage;
   sources: QuoteMovementSourceInput[];
   lastServiceM8SyncedAt: Date;
+  lastServiceM8SourceCheckpointAt?: Date | null;
 };
 
 export type QuoteMovementRefreshContext = {
@@ -181,6 +183,7 @@ export type QuoteMovementRefreshContext = {
 };
 
 export interface QuoteMovementSnapshotRepository {
+  listServiceM8SourceCheckpoints?(): Promise<ReadonlyMap<string, Date>>;
   replaceActiveSnapshot(
     records: QuoteMovementSnapshotInput[],
     context: QuoteMovementRefreshContext,
@@ -266,6 +269,8 @@ export async function syncQuoteMovementFromServiceM8({
         "job material",
       ),
     ]);
+    const syncCheckpoints =
+      (await repository.listServiceM8SourceCheckpoints?.()) ?? new Map();
     const records = await buildActiveQuoteSnapshot(
       jobs,
       companies,
@@ -274,6 +279,7 @@ export async function syncQuoteMovementFromServiceM8({
       request,
       interpretAttachments,
       readTrackedEngagement,
+      syncCheckpoints,
     );
 
     const convertedJobUuids = Array.from(
@@ -349,6 +355,7 @@ async function buildActiveQuoteSnapshot(
   request: ServiceM8FetchRequest,
   interpretAttachments: QuoteMovementAttachmentInterpreter,
   readTrackedEngagement: QuoteMovementTrackedEngagementReader,
+  syncCheckpoints: ReadonlyMap<string, Date>,
 ): Promise<QuoteMovementSnapshotInput[]> {
   const companiesByUuid = new Map(
     companies.flatMap((company) => {
@@ -402,6 +409,7 @@ async function buildActiveQuoteSnapshot(
         record.servicem8JobUuid,
         interpretAttachments,
         readTrackedEngagement,
+        syncCheckpointForJob(syncCheckpoints.get(record.servicem8JobUuid)),
       );
       return {
         ...record,
@@ -411,6 +419,11 @@ async function buildActiveQuoteSnapshot(
           sourceResult.coverageIssues,
         ),
         sources: sourceResult.sources,
+        lastServiceM8SyncedAt: refreshedAt,
+        lastServiceM8SourceCheckpointAt:
+          sourceResult.coverageIssues.length > 0
+            ? syncCheckpoints.get(record.servicem8JobUuid) ?? null
+            : refreshedAt,
       };
     },
   );
@@ -442,13 +455,16 @@ async function readSourcesForJob(
   servicem8JobUuid: string,
   interpretAttachments: QuoteMovementAttachmentInterpreter,
   readTrackedEngagement: QuoteMovementTrackedEngagementReader,
+  sourceSince: Date | undefined,
 ): Promise<{
   sources: QuoteMovementSourceInput[];
   coverageIssues: QuoteMovementCoverageIssue[];
 }> {
-  const jobFilter = odataFilter(
+  const sourceFilter = [
     `related_object_uuid eq '${escapeOdataString(servicem8JobUuid)}'`,
-  );
+    ...(sourceSince ? [`edit_date gt '${sourceSince.toISOString()}'`] : []),
+  ].join(" and ");
+  const jobFilter = odataFilter(sourceFilter);
   const [noteResult, emailResult, attachmentResult, engagementResult] =
     await Promise.all([
       readSourceCollection<ServiceM8Note>(
@@ -888,6 +904,11 @@ function serviceM8CursorPath(path: string, cursor: string) {
 
 function odataFilter(expression: string) {
   return `?%24filter=${encodeURIComponent(expression)}`;
+}
+
+function syncCheckpointForJob(checkpoint: Date | undefined) {
+  if (!checkpoint) return undefined;
+  return new Date(checkpoint.getTime() - SOURCE_CHECKPOINT_OVERLAP_MS);
 }
 
 function escapeOdataString(value: string) {

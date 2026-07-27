@@ -90,6 +90,10 @@ export const quoteMovementRecords = pgTable(
     lastServiceM8SyncedAt: timestamp("last_servicem8_synced_at", {
       withTimezone: true,
     }).notNull(),
+    lastServiceM8SourceCheckpointAt: timestamp(
+      "last_servicem8_source_checkpoint_at",
+      { withTimezone: true },
+    ),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

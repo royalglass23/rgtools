@@ -48,6 +48,153 @@ function createMemoryRepository() {
 }
 
 describe("syncQuoteMovementFromServiceM8", () => {
+  it("fetches only source history after each job's last successful sync with a boundary overlap", async () => {
+    const requestedPaths: string[] = [];
+    const request = vi.fn(async (path: string) => {
+      requestedPaths.push(path);
+      const url = new URL(path, "https://servicem8.example");
+      const filter = url.searchParams.get("$filter") ?? "";
+
+      if (
+        url.pathname === "/job.json" &&
+        filter.includes("status eq 'Quote'")
+      ) {
+        return Response.json([
+          {
+            uuid: "job-1",
+            active: 1,
+            status: "Quote",
+            company_uuid: "company-1",
+            generated_job_id: "Q260223",
+          },
+        ]);
+      }
+      if (url.pathname === "/company.json" || url.pathname === "/jobmaterial.json") {
+        return Response.json([]);
+      }
+      return Response.json([]);
+    });
+
+    await syncQuoteMovementFromServiceM8({
+      actorId: "user-1",
+      request,
+      repository: {
+        async listServiceM8SourceCheckpoints() {
+          return new Map([
+            ["job-1", new Date("2026-07-20T00:00:00.000Z")],
+          ]);
+        },
+        async replaceActiveSnapshot() {},
+        async recordFailure() {},
+      },
+      interpretAttachments: async () => ({ files: [] }),
+      readTrackedEngagement: async () => [],
+    });
+
+    const sourceFilters = requestedPaths
+      .filter((path) => /\/(note|email|attachment)\.json/.test(path))
+      .map(
+        (path) =>
+          new URL(path, "https://servicem8.example").searchParams.get(
+            "$filter",
+          ) ?? "",
+      );
+    expect(sourceFilters).toHaveLength(3);
+    expect(sourceFilters.every((filter) => filter.includes("edit_date gt"))).toBe(
+      true,
+    );
+    expect(
+      sourceFilters.every((filter) =>
+        filter.includes("2026-07-19T23:55:00.000Z"),
+      ),
+    ).toBe(true);
+    const metadataFilters = requestedPaths
+      .filter((path) => new URL(path, "https://servicem8.example").pathname === "/job.json")
+      .map(
+        (path) =>
+          new URL(path, "https://servicem8.example").searchParams.get(
+            "$filter",
+          ) ?? "",
+      );
+    expect(metadataFilters.every((filter) => !filter.includes("edit_date gt"))).toBe(
+      true,
+    );
+  });
+
+  it("fetches complete source history when no checkpoint exists", async () => {
+    const requestedPaths: string[] = [];
+    const request = vi.fn(async (path: string) => {
+      requestedPaths.push(path);
+      const url = new URL(path, "https://servicem8.example");
+      const filter = url.searchParams.get("$filter") ?? "";
+      if (url.pathname === "/job.json" && filter.includes("status eq 'Quote'")) {
+        return Response.json([{ uuid: "job-1", active: 1, status: "Quote" }]);
+      }
+      return Response.json([]);
+    });
+
+    await syncQuoteMovementFromServiceM8({
+      actorId: "user-1",
+      request,
+      repository: {
+        async listServiceM8SourceCheckpoints() {
+          return new Map();
+        },
+        async replaceActiveSnapshot() {},
+        async recordFailure() {},
+      },
+      interpretAttachments: async () => ({ files: [] }),
+      readTrackedEngagement: async () => [],
+    });
+
+    const sourceFilters = requestedPaths
+      .filter((path) => /\/(note|email|attachment)\.json/.test(path))
+      .map(
+        (path) =>
+          new URL(path, "https://servicem8.example").searchParams.get(
+            "$filter",
+          ) ?? "",
+      );
+    expect(sourceFilters).toHaveLength(3);
+    expect(sourceFilters.every((filter) => !filter.includes("edit_date gt"))).toBe(
+      true,
+    );
+  });
+
+  it("retains the previous source checkpoint when a source collection fails", async () => {
+    const previousCheckpoint = new Date("2026-07-20T00:00:00.000Z");
+    let savedRecords: QuoteMovementSnapshotInput[] = [];
+    const request = vi.fn(async (path: string) => {
+      const url = new URL(path, "https://servicem8.example");
+      const filter = url.searchParams.get("$filter") ?? "";
+      if (url.pathname === "/job.json" && filter.includes("status eq 'Quote'")) {
+        return Response.json([{ uuid: "job-1", active: 1, status: "Quote" }]);
+      }
+      if (url.pathname === "/note.json") throw new Error("source unavailable");
+      return Response.json([]);
+    });
+
+    await syncQuoteMovementFromServiceM8({
+      actorId: "user-1",
+      request,
+      repository: {
+        async listServiceM8SourceCheckpoints() {
+          return new Map([["job-1", previousCheckpoint]]);
+        },
+        async replaceActiveSnapshot(records) {
+          savedRecords = records;
+        },
+        async recordFailure() {},
+      },
+      interpretAttachments: async () => ({ files: [] }),
+      readTrackedEngagement: async () => [],
+    });
+
+    expect(savedRecords[0]?.lastServiceM8SourceCheckpointAt).toEqual(
+      previousCheckpoint,
+    );
+  });
+
   it("automatically stores What Matters Now when a quote first appears", async () => {
     let retainedRecords: QuoteMovementSnapshotInput[] = [];
     const repository: QuoteMovementSnapshotRepository = {

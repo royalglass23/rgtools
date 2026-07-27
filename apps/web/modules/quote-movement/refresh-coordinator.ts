@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { quoteMovementRefreshRuns } from "@rgtools/db/schema-quote-movement";
 import { QUOTE_MOVEMENT_REFRESH_WINDOW_SECONDS } from "./refresh-policy";
@@ -52,7 +52,13 @@ export const quoteMovementRefreshCoordinator: QuoteMovementRefreshCoordinator =
               errorMessage: ABANDONED_REFRESH_MESSAGE,
               completedAt,
             })
-            .where(eq(quoteMovementRefreshRuns.status, "pending"));
+            .where(
+              inArray(quoteMovementRefreshRuns.status, [
+                "pending",
+                "queued",
+                "fetching",
+              ]),
+            );
           await tx.insert(quoteMovementRefreshRuns).values({
             id: runId,
             actorId,

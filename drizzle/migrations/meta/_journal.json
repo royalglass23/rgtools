@@ -498,6 +498,13 @@
       "when": 1784635260000,
       "tag": "0070_quote_movement_batch_outcomes",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1784640000000,
+      "tag": "0071_quote_movement_source_checkpoint",
+      "breakpoints": true
     }
   ]
 }
