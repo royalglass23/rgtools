@@ -91,6 +91,27 @@ describe("Quote Movement detail route shell", () => {
     ).toBeInTheDocument();
   });
 
+  it("keeps the targeted refresh pending while this job is fetching", async () => {
+    listQuoteMovementJobFetchOutcomes.mockResolvedValue([
+      {
+        jobNumber: "Q260101",
+        status: "fetching",
+        syncedCount: 0,
+        errorMessage: null,
+        createdAt: new Date("2026-07-28T01:00:00Z"),
+        completedAt: null,
+      },
+    ]);
+
+    render(
+      await QuoteMovementDetailPage({
+        params: Promise.resolve({ id: "record-1" }),
+      }),
+    );
+
+    expect(screen.getByRole("button", { name: "Refresh pending" })).toBeDisabled();
+  });
+
   it("presents material summary sections without supporting evidence links", async () => {
     getQuoteMovementRecord.mockResolvedValue({
       id: "record-1",

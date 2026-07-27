@@ -48,6 +48,9 @@ export default async function QuoteMovementDetailPage({
     null,
     record.jobNumber ?? "",
   );
+  const targetedFetchPending =
+    fetchOutcomes[0]?.status === "queued" ||
+    fetchOutcomes[0]?.status === "fetching";
 
   return (
     <div className="space-y-5">
@@ -61,7 +64,7 @@ export default async function QuoteMovementDetailPage({
           <div className="flex flex-wrap items-center gap-2">
             <QuoteMovementRefreshButton
               action={refreshDetail}
-              refreshPending={false}
+              refreshPending={targetedFetchPending}
               idleLabel="Refresh this job"
               pendingLabel="Refreshing this job"
             />
