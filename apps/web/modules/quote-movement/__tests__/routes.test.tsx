@@ -146,6 +146,30 @@ describe('Quote Movement routes', () => {
     expect(screen.queryByRole('button', { name: 'Refresh pending' })).not.toBeInTheDocument()
   })
 
+  it('removes completed fetched jobs from the live outcome list', async () => {
+    listQuoteMovementJobFetchOutcomes.mockResolvedValue([
+      {
+        jobNumber: 'Q260101',
+        status: 'fetched',
+        syncedCount: 1,
+        errorMessage: null,
+        createdAt: new Date('2026-07-27T00:00:00Z'),
+      },
+      {
+        jobNumber: 'Q260102',
+        status: 'fetching',
+        syncedCount: 0,
+        errorMessage: null,
+        createdAt: new Date('2026-07-27T00:01:00Z'),
+      },
+    ])
+
+    render(await QuoteMovementPage({ searchParams: Promise.resolve({}) }))
+
+    expect(screen.queryByText(/Q260101/)).not.toBeInTheDocument()
+    expect(screen.getByText('Q260102')).toBeInTheDocument()
+  })
+
   it('shows a clear empty state when the cached active list is empty', async () => {
     render(await QuoteMovementPage({ searchParams: Promise.resolve({}) }))
 

@@ -60,6 +60,9 @@ export default async function QuoteMovementPage({
     getQuoteMovementRefreshStatus(),
     listQuoteMovementJobFetchOutcomes(),
   ]);
+  const visibleFetchOutcomes = fetchOutcomes.filter(
+    (outcome) => outcome.status !== "fetched",
+  );
 
   return (
     <div className="space-y-5">
@@ -92,9 +95,9 @@ export default async function QuoteMovementPage({
                 Fetch jobs
               </button>
             </form>
-            {fetchOutcomes.length > 0 ? (
+            {visibleFetchOutcomes.length > 0 ? (
               <ul aria-label="Job fetch outcomes" className="w-full text-xs text-text-muted">
-                {fetchOutcomes.map((outcome) => (
+                {visibleFetchOutcomes.map((outcome) => (
                   <li key={`${outcome.jobNumber}-${outcome.createdAt.toISOString()}`}>
                     <span className="font-semibold">{outcome.jobNumber}</span>: {formatFetchOutcome(outcome.status, outcome.syncedCount, outcome.errorMessage)}
                   </li>
