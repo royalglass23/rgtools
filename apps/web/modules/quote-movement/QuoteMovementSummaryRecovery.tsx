@@ -9,7 +9,7 @@ export function QuoteMovementSummaryRecovery({
 }: {
   recordId: string;
   error: string;
-  retryAction: (recordId: string) => Promise<void>;
+  retryAction: (recordId: string) => Promise<unknown>;
 }) {
   const [isPending, startTransition] = useTransition();
   const [retryError, setRetryError] = useState<string | null>(null);
