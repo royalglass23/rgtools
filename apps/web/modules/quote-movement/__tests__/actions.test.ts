@@ -93,6 +93,18 @@ describe('refreshQuoteMovementAction', () => {
     expect(requestQuoteMovementRefresh).not.toHaveBeenCalled()
   })
 
+  it('rejects a scoped refresh containing multiple job numbers', async () => {
+    const formData = new FormData()
+    formData.set('jobNumber', 'Q260101;Q260102')
+
+    await expect(refreshQuoteMovementJobAction(formData)).rejects.toMatchObject({
+      url: `/quote-movement?refreshError=${encodeURIComponent(
+        'Only one Quote Movement job number can be fetched at a time.',
+      )}`,
+    })
+    expect(requestQuoteMovementJobFetch).not.toHaveBeenCalled()
+  })
+
   it('retries a failed summary for the selected cached record', async () => {
     retryQuoteMovementSummary.mockResolvedValue(undefined)
 

@@ -78,7 +78,7 @@ describe('Quote Movement routes', () => {
     expect(getQuoteMovementRefreshStatus).not.toHaveBeenCalled()
   })
 
-  it('renders cached active Quote jobs with refresh metadata and detail links', async () => {
+  it('renders the single-job fetch control without global refresh metadata', async () => {
     listQuoteMovementRecords.mockResolvedValue([{
       id: 'record-1',
       servicem8JobUuid: 'job-1',
@@ -114,10 +114,13 @@ describe('Quote Movement routes', () => {
     expect(screen.getByText('$1,250.00')).toBeInTheDocument()
     expect(screen.getByText('Active')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Q260101' })).toHaveAttribute('href', '/quote-movement/record-1')
-    expect(screen.getByText(/Last refreshed/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Fetch job' })).toBeEnabled()
+    expect(screen.getByPlaceholderText('P241388')).toBeInTheDocument()
+    expect(screen.queryByText(/Last refreshed|Cached active jobs/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Fetched|out of date|refresh retries/)).not.toBeInTheDocument()
   })
 
-  it('keeps cached rows visible while refresh and stale states are explicit', async () => {
+  it('keeps cached rows visible without global refresh or stale notices', async () => {
     listQuoteMovementRecords.mockResolvedValue([{
       id: 'record-1',
       jobNumber: 'Q260224',
@@ -141,12 +144,11 @@ describe('Quote Movement routes', () => {
     render(await QuoteMovementPage({ searchParams: Promise.resolve({}) }))
 
     expect(screen.getByText('Cached Customer')).toBeVisible()
-    expect(screen.getByText(/cached quotes remain available while/i)).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Fetch jobs' })).toBeEnabled()
-    expect(screen.queryByRole('button', { name: 'Refresh pending' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Fetch job' })).toBeEnabled()
+    expect(screen.queryByText(/cached quotes remain available while|out of date|refresh retries/i)).not.toBeInTheDocument()
   })
 
-  it('removes completed fetched jobs from the live outcome list', async () => {
+  it('does not render historical fetch outcomes', async () => {
     listQuoteMovementJobFetchOutcomes.mockResolvedValue([
       {
         jobNumber: 'Q260101',
@@ -167,7 +169,8 @@ describe('Quote Movement routes', () => {
     render(await QuoteMovementPage({ searchParams: Promise.resolve({}) }))
 
     expect(screen.queryByText(/Q260101/)).not.toBeInTheDocument()
-    expect(screen.getByText('Q260102')).toBeInTheDocument()
+    expect(screen.queryByText('Q260102')).not.toBeInTheDocument()
+    expect(screen.queryByRole('list', { name: 'Job fetch outcomes' })).not.toBeInTheDocument()
   })
 
   it('shows a clear empty state when the cached active list is empty', async () => {

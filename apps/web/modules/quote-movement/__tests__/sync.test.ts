@@ -10,10 +10,10 @@ import {
 } from "../sync";
 
 describe("parseQuoteMovementJobNumbers", () => {
-  it("normalizes semicolon-separated job numbers and removes duplicates", () => {
-    expect(
-      parseQuoteMovementJobNumbers(" Q260101;Q260102 ; q260101; ; Q260102 "),
-    ).toEqual(["Q260101", "Q260102", "q260101"]);
+  it("rejects multiple job numbers", () => {
+    expect(() => parseQuoteMovementJobNumbers("Q260101;Q260102")).toThrow(
+      "Only one Quote Movement job number can be fetched at a time.",
+    );
   });
 
   it("returns an empty list for blank input", () => {

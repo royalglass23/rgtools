@@ -200,40 +200,21 @@ describe("refreshQuoteMovementFromServiceM8", () => {
 });
 
 describe("fetchQuoteMovementJobs", () => {
-  it("normalizes duplicates, preserves successes, and reports independent outcomes", async () => {
-    const sync = vi.fn(async ({ jobNumber }: { jobNumber: string }) => {
-      if (jobNumber === "Q260102") throw new Error("provider detail");
-      return { synced: jobNumber === "Q260103" ? 0 : 1, refreshedAt: new Date() };
-    });
-
+  it("rejects a batch input before any job is fetched", async () => {
+    const sync = vi.fn();
     await expect(
       fetchQuoteMovementJobs({
-        input: " Q260101; Q260102; Q260101; Q260103 ",
+        input: " Q260101; Q260102 ",
         batchRunId: "batch-1",
         sync,
       }),
-    ).resolves.toEqual({
-      outcomes: [
-        { jobNumber: "Q260101", status: "fetched" },
-        {
-          jobNumber: "Q260102",
-          status: "failed",
-          message: "Quote Movement could not refresh from ServiceM8. The previous cached list was kept.",
-        },
-        { jobNumber: "Q260103", status: "not_active" },
-      ],
-    });
-    expect(sync).toHaveBeenCalledTimes(3);
-    expect(sync).toHaveBeenNthCalledWith(1, {
-      actorId: null,
-      jobNumber: "Q260101",
-      batchRunId: "batch-1",
-    });
+    ).rejects.toThrow("Only one Quote Movement job number can be fetched at a time.");
+    expect(sync).not.toHaveBeenCalled();
   });
 });
 
 describe("requestQuoteMovementRefresh", () => {
-  it("keeps the batch run coherent while recording each targeted job outcome", async () => {
+  it("finishes the coordinator without scheduling a multi-job fetch", async () => {
     const scheduled: Array<() => Promise<void>> = [];
     const refresh = vi.fn(async ({ jobNumber }: { jobNumber: string }) => ({
       synced: jobNumber === "Q260101" ? 1 : 0,
@@ -254,25 +235,14 @@ describe("requestQuoteMovementRefresh", () => {
       schedule: (work) => scheduled.push(work),
     });
 
-    await expect(scheduled[0]!()).resolves.toBeUndefined();
+    await expect(scheduled[0]!()).rejects.toThrow(
+      "Only one Quote Movement job number can be fetched at a time.",
+    );
 
-    expect(refresh).toHaveBeenNthCalledWith(1, {
-      actorId: "user-1",
-      jobNumber: "Q260101",
-      batchRunId: "batch-1",
-    });
-    expect(refresh).toHaveBeenNthCalledWith(2, {
-      actorId: "user-1",
-      jobNumber: "Q260102",
-      batchRunId: "batch-1",
-    });
-    expect(coordinator.complete).toHaveBeenCalledWith("batch-1", [
-      { jobNumber: "Q260101", status: "fetched" },
-      { jobNumber: "Q260102", status: "not_active" },
-    ]);
-    expect(coordinator.recordJobStatus).toHaveBeenCalledWith("user-1", "Q260101", "batch-1", "queued");
-    expect(coordinator.recordJobStatus).toHaveBeenCalledWith("user-1", "Q260101", "batch-1", "fetching");
-    expect(coordinator.finish).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
+    expect(coordinator.complete).not.toHaveBeenCalled();
+    expect(coordinator.finish).toHaveBeenCalledWith("batch-1");
+    expect(coordinator.recordJobStatus).not.toHaveBeenCalled();
   });
 
   it("returns immediately after scheduling accepted work and carries the durable run identity", async () => {
