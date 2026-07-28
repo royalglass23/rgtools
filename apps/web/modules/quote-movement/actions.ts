@@ -6,7 +6,10 @@ import { after } from 'next/server'
 import { auth } from '@/lib/auth'
 import { requireModule } from '@/lib/guard'
 import { requestQuoteMovementJobFetch, requestQuoteMovementRefresh } from './service'
-import { safeQuoteMovementRefreshError } from './sync'
+import {
+  parseQuoteMovementJobNumbers,
+  safeQuoteMovementRefreshError,
+} from './sync'
 import { updateQuoteMovementProjectComplexity } from './repository'
 import { retryQuoteMovementSummary } from './summary-recovery'
 import {
@@ -38,6 +41,12 @@ export async function refreshQuoteMovementJobAction(formData: FormData) {
   const jobNumber = formData.get('jobNumber')
   if (typeof jobNumber !== 'string' || jobNumber.trim() === '') {
     redirect('/quote-movement?refreshError=Enter%20a%20job%20number%20to%20fetch.')
+  }
+  try {
+    parseQuoteMovementJobNumbers(jobNumber.trim())
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Enter one job number to fetch.'
+    redirect(`/quote-movement?refreshError=${encodeURIComponent(message)}`)
   }
 
   try {

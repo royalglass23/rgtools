@@ -29,6 +29,12 @@ export function parseQuoteMovementJobNumbers(input: string) {
     jobNumbers.push(jobNumber);
   }
 
+  if (jobNumbers.length > 1) {
+    throw new Error(
+      "Only one Quote Movement job number can be fetched at a time.",
+    );
+  }
+
   return jobNumbers;
 }
 

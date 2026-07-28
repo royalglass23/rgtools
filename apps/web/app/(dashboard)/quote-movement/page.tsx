@@ -5,13 +5,9 @@ import {
   updateQuoteMovementComplexityAction,
 } from "@/modules/quote-movement/actions";
 import {
-  getQuoteMovementRefreshStatus,
-  listQuoteMovementJobFetchOutcomes,
   listQuoteMovementRecords,
 } from "@/modules/quote-movement/queries";
 import { QuoteMovementList } from "@/modules/quote-movement/QuoteMovementList";
-import { QuoteMovementRefreshStatus } from "@/modules/quote-movement/QuoteMovementRefreshStatus";
-import { DismissibleNotice } from "@/modules/ui/DismissibleNotice";
 import type { QuoteMovementProjectComplexity } from "@rgtools/db/schema-quote-movement";
 
 const PROJECT_COMPLEXITIES: QuoteMovementProjectComplexity[] = [
@@ -29,10 +25,6 @@ export default async function QuoteMovementPage({
 }) {
   await requireModule("quote-tracker");
   const resolvedSearchParams = await searchParams;
-  const refreshError =
-    typeof resolvedSearchParams.refreshError === "string"
-      ? resolvedSearchParams.refreshError
-      : null;
   const search = stringParam(resolvedSearchParams.search);
   const requestedComplexity = stringParam(
     resolvedSearchParams.projectComplexity,
@@ -49,20 +41,13 @@ export default async function QuoteMovementPage({
   const sort = requestedSort === "quote_value" || requestedSort === "customer"
     ? requestedSort
     : "latest_activity";
-  const [records, refreshStatus, fetchOutcomes] = await Promise.all([
-    listQuoteMovementRecords({
-      search,
-      projectComplexity:
-        projectComplexity === "all" ? undefined : projectComplexity,
-      lifecycle,
-      sort,
-    }),
-    getQuoteMovementRefreshStatus(),
-    listQuoteMovementJobFetchOutcomes(),
-  ]);
-  const visibleFetchOutcomes = fetchOutcomes.filter(
-    (outcome) => outcome.status !== "fetched",
-  );
+  const records = await listQuoteMovementRecords({
+    search,
+    projectComplexity:
+      projectComplexity === "all" ? undefined : projectComplexity,
+    lifecycle,
+    sort,
+  });
 
   return (
     <div className="space-y-5">
@@ -85,40 +70,19 @@ export default async function QuoteMovementPage({
                 className="w-40 rounded-md border border-border bg-surface px-3 py-2 text-sm text-text-primary"
                 id="quote-movement-job-number"
                 name="jobNumber"
-                placeholder="Q260101; Q260102"
+                placeholder="P241388"
                 type="search"
               />
               <button
                 className="rounded-md border border-border bg-surface px-3 py-2 text-sm font-semibold text-text-primary"
                 type="submit"
               >
-                Fetch jobs
+                Fetch job
               </button>
             </form>
-            {visibleFetchOutcomes.length > 0 ? (
-              <ul aria-label="Job fetch outcomes" className="w-full text-xs text-text-muted">
-                {visibleFetchOutcomes.map((outcome) => (
-                  <li key={`${outcome.jobNumber}-${outcome.createdAt.toISOString()}`}>
-                    <span className="font-semibold">{outcome.jobNumber}</span>: {formatFetchOutcome(outcome.status, outcome.syncedCount, outcome.errorMessage)}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
           </div>
         }
       />
-
-      <QuoteMovementRefreshStatus status={refreshStatus} />
-
-      {refreshError && !refreshStatus.latestFailure && (
-        <DismissibleNotice
-          tone="error"
-          noticeKey={refreshError}
-          dismissalStorageKey="quote-movement-refresh-error"
-        >
-          Quote Movement could not refresh from ServiceM8: {refreshError}
-        </DismissibleNotice>
-      )}
 
       <section className="space-y-3" aria-label="Active quotes">
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -148,12 +112,4 @@ export default async function QuoteMovementPage({
 
 function stringParam(value: string | string[] | undefined) {
   return typeof value === "string" ? value : "";
-}
-
-function formatFetchOutcome(status: string, syncedCount: number, errorMessage: string | null) {
-  if (status === "failed") return errorMessage ?? "Fetch failed.";
-  if (status === "queued") return "Queued.";
-  if (status === "fetching" || status === "pending") return "Fetching.";
-  if (syncedCount === 0) return "Not an active Quote.";
-  return "Fetched.";
 }
