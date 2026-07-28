@@ -22,8 +22,8 @@ type QuoteMovementSummaryExecutor =
   | QuoteMovementPersistenceTransaction;
 
 export const quoteMovementSummaryRepository: QuoteMovementSummaryRepository = {
-  listPendingSummaries(servicem8JobUuids) {
-    return listPendingQuoteMovementSummaries(servicem8JobUuids);
+  listPendingSummaries(servicem8JobUuids, options) {
+    return listPendingQuoteMovementSummaries(servicem8JobUuids, db, options);
   },
   saveValidSummary(summary) {
     return saveValidQuoteMovementSummary(summary);
@@ -36,6 +36,7 @@ export const quoteMovementSummaryRepository: QuoteMovementSummaryRepository = {
 export async function listPendingQuoteMovementSummaries(
   servicem8JobUuids: string[],
   executor: QuoteMovementSummaryExecutor = db,
+  options: { force?: boolean } = {},
 ) {
   if (servicem8JobUuids.length === 0) return [];
   const records = await executor
@@ -99,6 +100,7 @@ export async function listPendingQuoteMovementSummaries(
     };
     const sourceFingerprint = fingerprintForSummary(candidateRecord);
     if (
+      !options.force &&
       record.importantDetailsSummary &&
       record.summarySourceFingerprint === sourceFingerprint
     ) {

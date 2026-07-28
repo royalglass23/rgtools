@@ -7,6 +7,7 @@ const getQuoteMovementRefreshStatus = vi.hoisted(() => vi.fn());
 const getQuoteMovementActivity = vi.hoisted(() => vi.fn());
 const listQuoteMovementJobFetchOutcomes = vi.hoisted(() => vi.fn());
 const refreshQuoteMovementDetailAction = vi.hoisted(() => vi.fn());
+const retryQuoteMovementSummaryAction = vi.hoisted(() => vi.fn());
 const routerRefresh = vi.hoisted(() => vi.fn());
 const notFound = vi.hoisted(() =>
   vi.fn(() => {
@@ -21,7 +22,10 @@ vi.mock("../queries", () => ({
   getQuoteMovementActivity,
   listQuoteMovementJobFetchOutcomes,
 }));
-vi.mock("../actions", () => ({ refreshQuoteMovementDetailAction }));
+vi.mock("../actions", () => ({
+  refreshQuoteMovementDetailAction,
+  retryQuoteMovementSummaryAction,
+}));
 vi.mock("../QuoteMovementRefreshButton", () => ({
   QuoteMovementRefreshButton: ({
     refreshPending,

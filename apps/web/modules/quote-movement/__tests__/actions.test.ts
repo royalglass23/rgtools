@@ -7,6 +7,7 @@ const auth = vi.hoisted(() => vi.fn())
 const requestQuoteMovementRefresh = vi.hoisted(() => vi.fn())
 const requestQuoteMovementJobFetch = vi.hoisted(() => vi.fn())
 const updateQuoteMovementProjectComplexity = vi.hoisted(() => vi.fn())
+const retryQuoteMovementSummary = vi.hoisted(() => vi.fn())
 const revalidatePath = vi.hoisted(() => vi.fn())
 const redirect = vi.hoisted(() => vi.fn((url: string) => {
   throw Object.assign(new Error('NEXT_REDIRECT'), { url })
@@ -17,6 +18,7 @@ vi.mock('@/lib/guard', () => ({ requireModule }))
 vi.mock('@/lib/auth', () => ({ auth }))
 vi.mock('../service', () => ({ requestQuoteMovementRefresh, requestQuoteMovementJobFetch }))
 vi.mock('../repository', () => ({ updateQuoteMovementProjectComplexity }))
+vi.mock('../summary-recovery', () => ({ retryQuoteMovementSummary }))
 vi.mock('next/cache', () => ({ revalidatePath }))
 vi.mock('next/navigation', () => ({ redirect }))
 vi.mock('next/server', () => ({ after }))
@@ -89,6 +91,16 @@ describe('refreshQuoteMovementAction', () => {
       url: '/quote-movement?refreshError=Enter%20a%20job%20number%20to%20fetch.',
     })
     expect(requestQuoteMovementRefresh).not.toHaveBeenCalled()
+  })
+
+  it('retries a failed summary for the selected cached record', async () => {
+    retryQuoteMovementSummary.mockResolvedValue(undefined)
+
+    const result = await (await import('../actions')).retryQuoteMovementSummaryAction('record-1')
+
+    expect(result).toEqual({ status: 'retried' })
+    expect(retryQuoteMovementSummary).toHaveBeenCalledWith('record-1', 'user-1')
+    expect(revalidatePath).toHaveBeenCalledWith('/quote-movement')
   })
 })
 

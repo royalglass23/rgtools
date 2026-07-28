@@ -4,6 +4,64 @@ import { describe, expect, it } from 'vitest'
 import { DismissibleNotice } from '../DismissibleNotice'
 
 describe('DismissibleNotice', () => {
+  it('keeps a dismissed notice hidden after a remount for the same notice', () => {
+    window.localStorage.clear()
+    const { unmount } = render(
+      <DismissibleNotice
+        tone="error"
+        noticeKey="refresh-1"
+        dismissalStorageKey="quote-movement-refresh-error"
+      >
+        Quote Movement could not refresh.
+      </DismissibleNotice>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close notification' }))
+    unmount()
+
+    render(
+      <DismissibleNotice
+        tone="error"
+        noticeKey="refresh-1"
+        dismissalStorageKey="quote-movement-refresh-error"
+      >
+        Quote Movement could not refresh.
+      </DismissibleNotice>,
+    )
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    window.localStorage.clear()
+  })
+
+  it('keeps a dismissed notice hidden after a remount for the same notice', () => {
+    window.localStorage.clear()
+    const { unmount } = render(
+      <DismissibleNotice
+        tone="error"
+        noticeKey="refresh-1"
+        dismissalStorageKey="quote-movement-refresh-error"
+      >
+        Quote Movement could not refresh.
+      </DismissibleNotice>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close notification' }))
+    unmount()
+
+    render(
+      <DismissibleNotice
+        tone="error"
+        noticeKey="refresh-1"
+        dismissalStorageKey="quote-movement-refresh-error"
+      >
+        Quote Movement could not refresh.
+      </DismissibleNotice>,
+    )
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    window.localStorage.clear()
+  })
+
   it('lets the user dismiss an error notice', () => {
     render(
       <DismissibleNotice tone="error">

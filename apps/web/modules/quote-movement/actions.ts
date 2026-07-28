@@ -8,6 +8,7 @@ import { requireModule } from '@/lib/guard'
 import { requestQuoteMovementJobFetch, requestQuoteMovementRefresh } from './service'
 import { safeQuoteMovementRefreshError } from './sync'
 import { updateQuoteMovementProjectComplexity } from './repository'
+import { retryQuoteMovementSummary } from './summary-recovery'
 import {
   quoteMovementProjectComplexityEnum,
   type QuoteMovementProjectComplexity,
@@ -64,6 +65,15 @@ export async function refreshQuoteMovementDetailAction(jobNumber: string) {
   })
   revalidatePath('/quote-movement')
   return result
+}
+
+export async function retryQuoteMovementSummaryAction(recordId: string) {
+  await requireModule('quote-tracker')
+  const session = await auth()
+  await retryQuoteMovementSummary(recordId.trim(), session?.user?.id ?? null)
+  revalidatePath('/quote-movement')
+  revalidatePath(`/quote-movement/${recordId.trim()}`)
+  return { status: 'retried' as const }
 }
 
 export async function updateQuoteMovementComplexityAction(
