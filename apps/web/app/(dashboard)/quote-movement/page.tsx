@@ -111,7 +111,11 @@ export default async function QuoteMovementPage({
       <QuoteMovementRefreshStatus status={refreshStatus} />
 
       {refreshError && !refreshStatus.latestFailure && (
-        <DismissibleNotice tone="error" noticeKey={refreshError}>
+        <DismissibleNotice
+          tone="error"
+          noticeKey={refreshError}
+          dismissalStorageKey="quote-movement-refresh-error"
+        >
           Quote Movement could not refresh from ServiceM8: {refreshError}
         </DismissibleNotice>
       )}

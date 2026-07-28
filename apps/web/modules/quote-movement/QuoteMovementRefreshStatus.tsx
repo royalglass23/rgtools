@@ -47,6 +47,7 @@ export function QuoteMovementRefreshStatus({
         <DismissibleNotice
           tone="warning"
           noticeKey={`quote-movement-stale-${status.lastSuccessfulAt?.toISOString() ?? "never"}`}
+          dismissalStorageKey="quote-movement-stale"
         >
           Cached data may be out of date. The last valid quotes remain available
           while refresh retries.
@@ -57,6 +58,7 @@ export function QuoteMovementRefreshStatus({
         <DismissibleNotice
           tone="error"
           noticeKey={`${status.latestFailure.at.toISOString()}-${status.latestFailure.message}`}
+          dismissalStorageKey="quote-movement-refresh-error"
         >
           Latest refresh could not complete. The previous cached data was kept.{" "}
           {status.latestFailure.message}

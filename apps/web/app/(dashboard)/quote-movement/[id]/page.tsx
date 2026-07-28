@@ -9,7 +9,10 @@ import {
 } from "@/components/precision-ui/PrecisionUI";
 import precisionStyles from "@/components/precision-ui/PrecisionUI.module.css";
 import { requireModule } from "@/lib/guard";
-import { refreshQuoteMovementDetailAction } from "@/modules/quote-movement/actions";
+import {
+  refreshQuoteMovementDetailAction,
+  retryQuoteMovementSummaryAction,
+} from "@/modules/quote-movement/actions";
 import {
   formatQuoteMovementCurrency,
   formatQuoteMovementDate,
@@ -25,6 +28,7 @@ import {
 import { QuoteMovementRefreshButton } from "@/modules/quote-movement/QuoteMovementRefreshButton";
 import { QuoteMovementRefreshStatus } from "@/modules/quote-movement/QuoteMovementRefreshStatus";
 import type { QuoteMovementSummaryStatement } from "@rgtools/db/schema-quote-movement";
+import { QuoteMovementSummaryRecovery } from "@/modules/quote-movement/QuoteMovementSummaryRecovery";
 
 export default async function QuoteMovementDetailPage({
   params,
@@ -122,9 +126,11 @@ export default async function QuoteMovementDetailPage({
         {record.importantDetailsSummary ? (
           <div className="space-y-5">
             {record.summaryLastError ? (
-              <p className="rounded-md border border-warning-border bg-warning-surface px-3 py-2 text-sm text-text-secondary">
-                {record.summaryLastError}
-              </p>
+                <QuoteMovementSummaryRecovery
+                  recordId={record.id}
+                  error={record.summaryLastError}
+                  retryAction={retryQuoteMovementSummaryAction}
+                />
             ) : null}
             <SummarySection
               title="Current Position"
@@ -166,9 +172,11 @@ export default async function QuoteMovementDetailPage({
         ) : (
           <div className="space-y-3">
             {record.summaryLastError ? (
-              <p className="rounded-md border border-warning-border bg-warning-surface px-3 py-2 text-sm text-text-secondary">
-                {record.summaryLastError}
-              </p>
+                <QuoteMovementSummaryRecovery
+                  recordId={record.id}
+                  error={record.summaryLastError}
+                  retryAction={retryQuoteMovementSummaryAction}
+                />
             ) : null}
             <p className="max-w-[70ch] text-sm text-text-secondary">
               Not yet summarised. What Matters Now updates automatically after

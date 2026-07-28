@@ -43,6 +43,7 @@ export type QuoteMovementSavedSummary = {
 export interface QuoteMovementSummaryRepository {
   listPendingSummaries(
     servicem8JobUuids: string[],
+    options?: { force?: boolean },
   ): Promise<QuoteMovementSummaryCandidate[]>;
   saveValidSummary(summary: QuoteMovementSavedSummary): Promise<void>;
   recordSummaryFailure(
