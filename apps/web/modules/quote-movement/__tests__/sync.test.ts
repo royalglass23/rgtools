@@ -69,7 +69,10 @@ describe("syncQuoteMovementFromServiceM8", () => {
           },
         ]);
       }
-      if (url.pathname === "/company.json" || url.pathname === "/jobmaterial.json") {
+      if (
+        url.pathname === "/company.json" ||
+        url.pathname === "/jobmaterial.json"
+      ) {
         return Response.json([]);
       }
       return Response.json([]);
@@ -80,9 +83,7 @@ describe("syncQuoteMovementFromServiceM8", () => {
       request,
       repository: {
         async listServiceM8SourceCheckpoints() {
-          return new Map([
-            ["job-1", new Date("2026-07-20T00:00:00.000Z")],
-          ]);
+          return new Map([["job-1", new Date("2026-07-20T00:00:00.000Z")]]);
         },
         async replaceActiveSnapshot() {},
         async recordFailure() {},
@@ -100,25 +101,28 @@ describe("syncQuoteMovementFromServiceM8", () => {
           ) ?? "",
       );
     expect(sourceFilters).toHaveLength(3);
-    expect(sourceFilters.every((filter) => filter.includes("edit_date gt"))).toBe(
-      true,
-    );
+    expect(
+      sourceFilters.every((filter) => filter.includes("edit_date gt")),
+    ).toBe(true);
     expect(
       sourceFilters.every((filter) =>
         filter.includes("2026-07-19T23:55:00.000Z"),
       ),
     ).toBe(true);
     const metadataFilters = requestedPaths
-      .filter((path) => new URL(path, "https://servicem8.example").pathname === "/job.json")
+      .filter(
+        (path) =>
+          new URL(path, "https://servicem8.example").pathname === "/job.json",
+      )
       .map(
         (path) =>
           new URL(path, "https://servicem8.example").searchParams.get(
             "$filter",
           ) ?? "",
       );
-    expect(metadataFilters.every((filter) => !filter.includes("edit_date gt"))).toBe(
-      true,
-    );
+    expect(
+      metadataFilters.every((filter) => !filter.includes("edit_date gt")),
+    ).toBe(true);
   });
 
   it("fetches complete source history when no checkpoint exists", async () => {
@@ -127,7 +131,10 @@ describe("syncQuoteMovementFromServiceM8", () => {
       requestedPaths.push(path);
       const url = new URL(path, "https://servicem8.example");
       const filter = url.searchParams.get("$filter") ?? "";
-      if (url.pathname === "/job.json" && filter.includes("status eq 'Quote'")) {
+      if (
+        url.pathname === "/job.json" &&
+        filter.includes("status eq 'Quote'")
+      ) {
         return Response.json([{ uuid: "job-1", active: 1, status: "Quote" }]);
       }
       return Response.json([]);
@@ -156,9 +163,9 @@ describe("syncQuoteMovementFromServiceM8", () => {
           ) ?? "",
       );
     expect(sourceFilters).toHaveLength(3);
-    expect(sourceFilters.every((filter) => !filter.includes("edit_date gt"))).toBe(
-      true,
-    );
+    expect(
+      sourceFilters.every((filter) => !filter.includes("edit_date gt")),
+    ).toBe(true);
   });
 
   it("retains the previous source checkpoint when a source collection fails", async () => {
@@ -167,7 +174,10 @@ describe("syncQuoteMovementFromServiceM8", () => {
     const request = vi.fn(async (path: string) => {
       const url = new URL(path, "https://servicem8.example");
       const filter = url.searchParams.get("$filter") ?? "";
-      if (url.pathname === "/job.json" && filter.includes("status eq 'Quote'")) {
+      if (
+        url.pathname === "/job.json" &&
+        filter.includes("status eq 'Quote'")
+      ) {
         return Response.json([{ uuid: "job-1", active: 1, status: "Quote" }]);
       }
       if (url.pathname === "/note.json") throw new Error("source unavailable");

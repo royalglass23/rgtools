@@ -428,7 +428,7 @@ async function buildActiveQuoteSnapshot(
         lastServiceM8SyncedAt: refreshedAt,
         lastServiceM8SourceCheckpointAt:
           sourceResult.coverageIssues.length > 0
-            ? syncCheckpoints.get(record.servicem8JobUuid) ?? null
+            ? (syncCheckpoints.get(record.servicem8JobUuid) ?? null)
             : refreshedAt,
       };
     },
