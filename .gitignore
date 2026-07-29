@@ -71,6 +71,8 @@ docs/dev/*
 !docs/dev/work-order-existing-item-rollout.md
 !docs/dev/work-order-existing-item-rollout-performance.md
 !docs/dev/royal-glass-precision-ui.md
+!docs/dev/setup.md
+!docs/dev/architecture.md
 CONTEXT.md
 workers/tracker/.dev.vars
 

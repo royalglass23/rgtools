@@ -10,30 +10,31 @@ Sessions last 4 hours. You will be redirected to the login page when your sessio
 
 ## The dashboard
 
-After logging in you land on the dashboard at `/`. It has three main areas.
+After logging in you land on the operations dashboard at `/`. It highlights attention queues,
+next actions, business performance for administrators, and configurable live-data tables.
 
-### KPI row
+### Needs attention
+
+The priority queue links directly to items needing review, including unsynchronised leads, stale
+leads, expiring or unopened quotes, suspected quote forwarding, and quotes that have gone cold.
+
+### Business performance
+
+Administrators can see pipeline value, conversion rate, and lead-volume trend. Staff see the
+operational dashboard without the administrator-only performance panel.
+
+### Live data tables
+
+The remaining dashboard sections are configurable by an administrator under **Admin -> Dashboard
+Settings**. If no tables are selected, the dashboard explains how to restore them.
+
+### KPI definitions
 
 | Card | What it shows |
 |------|---------------|
-| **Tracked Quote Value** | Total dollar value of active tracked quotes that are not archived, expired, won, or lost |
-| **Active Tracked Quotes** | Count of active tracked quote links |
-| **Hot/Warm Quotes** | Count of active tracked quotes tagged hot or warm from engagement |
-| **Viewed Quotes** | Count of active tracked quotes with at least one recorded open |
-
-### Needs Attention
-
-A table of the hottest open quotes, ordered by engagement score. These are the quotes to follow up first.
-
-### Pipeline snapshot
-
-| Stage | Meaning |
-|-------|---------|
-| **Estimate** | Early-stage, not yet quoted |
-| **Pending** | Quote being prepared |
-| **Sent** | Quote sent to client, awaiting response |
-| **Scoring** | Under intent scoring review |
-| **Closed** | Won or lost |
+| **Pipeline value** | Active hot and warm quote value shown to administrators |
+| **Conversion rate** | Won quotes out of all closed quotes |
+| **Lead volume** | Current lead volume and its recent trend |
 
 ## Navigation
 
@@ -45,7 +46,8 @@ Current navigation groups include:
 |------|------------------|
 | **Lead Intake** | Lead intake form, Leads list, and admin-only Lead Intake configuration |
 | **PS Generator** | Generate PS and admin-only PS Configuration |
-| **Quote Tracker** | Tracked quote list, quote details, viewer analytics, email gate settings, and AI Guidance when enabled |
+| **Quotes** | Quote Tracker links and analytics plus Quote Movement evidence, source coverage, summaries, and conversion context |
+| **Work Orders** | Current ServiceM8 Work Order jobs, item labels, Production Specifications, and internal operational fields |
 | **Clients** | Client records and linked lead/job context |
 | **Admin** | User management, settings, tracking settings, dashboard tables, audit/error exports, and admin tools |
 
@@ -76,4 +78,5 @@ If you try to access a tool you have not been granted, rgtools redirects you bac
 - Use [Leads](../how-to/leads.md) to review leads and link them to ServiceM8.
 - Use [Clients](../how-to/clients.md) to review a customer record across leads and tracked quotes.
 - Use [Quote Tracker](../how-to/quotes.md) to create tracked quote links and read engagement.
+- Use [Work Orders](../how-to/work-orders.md) to review active jobs and maintain RG-owned operational details.
 - Use [PS Generator](../how-to/ps-generator.md) to generate PS1 and PS3 Producer Statement packages.

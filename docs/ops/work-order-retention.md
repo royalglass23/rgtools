@@ -9,9 +9,11 @@ The Work Order retention cleanup runs weekly through Vercel Cron at `15:00 UTC` 
 
 ## Deployment
 
-1. Apply Work Order migrations through `0056_work_order_retention_index.sql`.
+1. Apply the committed Work Order retention migration `0056_work_order_retention_index.sql` and
+   all later migrations through the current migration head with `pnpm db:migrate`.
 2. Set a strong `CRON_SECRET` in the Vercel Production environment.
-3. Deploy `main`. Vercel registers the schedule from `apps/web/vercel.json` on the production deployment.
+3. Promote the reviewed `dev` changes to `main`. Vercel registers the schedule from
+   `apps/web/vercel.json` on the production deployment.
 4. Confirm `/api/cron/work-orders-retention` appears in the Vercel Cron Jobs page.
 
 The endpoint fails closed with `401` when `CRON_SECRET` is missing or the bearer token does not
@@ -20,11 +22,11 @@ response and write the error to Vercel logs.
 
 ## Manual verification
 
-Run the same cleanup directly from `apps/web` only when the target `DATABASE_URL` has been
+Run the same cleanup from the repository root only when the target `DATABASE_URL` has been
 explicitly verified and approved:
 
 ```powershell
-pnpm work-orders:retention-cleanup
+pnpm --filter @rgtools/web work-orders:retention-cleanup
 ```
 
 After the first scheduled run, confirm a `200` result in Vercel Cron logs and record the deletion
@@ -34,6 +36,7 @@ counts. Investigate any `401`, `500`, missing invocation, or unexpected count be
 
 Disable the cron entry or remove the schedule and redeploy if cleanup must stop. The endpoint can
 remain deployed while disabled because it is protected by `CRON_SECRET`. Migration `0056` adds only
-an index and does not need to be removed to stop cleanup. Deleted expired records are not restored
+an index and does not need to be removed to stop cleanup. Later migrations may have changed the
+schema, so do not roll back the database merely to disable the cron. Deleted expired records are not restored
 by an application rollback; database point-in-time recovery is the recovery path for an erroneous
 cleanup, so the target database retention and recovery window must remain enabled.

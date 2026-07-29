@@ -34,7 +34,7 @@ Critical fixes may be expedited, but production should still receive only review
 
 ## More Detail
 
-- [Security runbook](dev/security.md)
 - [Developer setup](dev/setup.md)
-- [Deployment](dev/deployment.md)
-- [Quote tracking privacy note](dev/quote-tracking.md)
+- [Architecture overview](dev/architecture.md)
+- [Work Order retention operations](ops/work-order-retention.md)
+- [Quote tracking how-to](how-to/quotes.md)
