@@ -155,13 +155,21 @@ describe('getDashboardActionCounts – goneCold', () => {
     vi.useRealTimers()
   })
 
-  it('includes or with lte on last_opened_at with 14-day back cutoff', async () => {
+  it('includes only active hot or warm quotes with no engagement for 14 days', async () => {
     await getDashboardActionCounts()
 
     const cutoff = new Date('2026-06-13T00:00:00Z')
     expect(whereCalls[5]).toEqual(expect.objectContaining({
       type: 'and',
       conditions: expect.arrayContaining([
+        { type: 'isNull', column: 'archived_at' },
+        expect.objectContaining({
+          type: 'or',
+          conditions: expect.arrayContaining([
+            { type: 'isNull', column: 'expires_at' },
+            expect.objectContaining({ type: 'gt', column: 'expires_at' }),
+          ]),
+        }),
         expect.objectContaining({
           type: 'or',
           conditions: expect.arrayContaining([

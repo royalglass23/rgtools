@@ -249,6 +249,8 @@ export async function getDashboardActionCounts() {
       .from(quotes)
       .leftJoin(quoteEngagement, eq(quoteEngagement.quoteId, quotes.id))
       .where(and(
+        isNull(quotes.archivedAt),
+        or(isNull(quotes.expiresAt), gt(quotes.expiresAt, sql`now()`)),
         or(eq(quotes.statusTag, 'hot'), eq(quotes.statusTag, 'warm')),
         or(isNull(quoteEngagement.lastOpenedAt), lte(quoteEngagement.lastOpenedAt, coldCutoff)),
       )),
