@@ -1,22 +1,32 @@
-'use server'
+"use server";
 
-import { signIn } from '@/lib/auth'
-import { AuthError } from 'next-auth'
+import { signIn } from "@/lib/auth";
+import { AuthError } from "next-auth";
 
-type LoginResult = { error: string } | { redirectTo: string }
+type LoginResult = { error: string } | { redirectTo: string };
 
-export async function loginAction(_: unknown, formData: FormData): Promise<LoginResult> {
+export async function loginAction(
+  _: unknown,
+  formData: FormData,
+): Promise<LoginResult> {
   try {
-    await signIn('credentials', {
-      username: formData.get('username') as string,
-      password: formData.get('password') as string,
+    await signIn("credentials", {
+      username: formData.get("username") as string,
+      password: formData.get("password") as string,
       redirect: false,
-    })
+    });
   } catch (error) {
     if (error instanceof AuthError) {
-      return { error: 'Invalid username or password' }
+      if (error.type !== "CredentialsSignin") {
+        console.error("Authentication service error", error);
+        return {
+          error:
+            "Sign-in service is temporarily unavailable. Please try again.",
+        };
+      }
+      return { error: "Invalid username or password" };
     }
-    throw error
+    throw error;
   }
-  return { redirectTo: '/' }
+  return { redirectTo: "/" };
 }

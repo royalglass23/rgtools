@@ -1,115 +1,244 @@
-# rgtools
+# RG Tools
 
-Internal operations toolkit for Royal Glass, covering lead intake and scoring, client records, quote pipeline tracking, quote engagement analytics, Producer Statement generation, and operational admin workflows.
+RG Tools is Royal Glass's internal operations system for lead intake and scoring, client records,
+quote tracking, quote engagement, Quote Movement, Work Orders, Producer Statement generation, and
+operational administration.
 
-## Workspace layout
+## Current workspace
 
-This repo is a pnpm workspace:
+This repository is a pnpm workspace:
 
-- `apps/web` - the internal RG Tools Next.js app.
-- `apps/catalog` - placeholder public catalog app for `catalog.royalglass.co.nz`.
-- `packages/db` - shared Drizzle schema and database client.
-- `workers/*` - Cloudflare Workers deployed separately from the apps.
+| Path | Purpose |
+| --- | --- |
+| `apps/web` | Authenticated internal Next.js application at `http://localhost:3000` |
+| `apps/catalog` | Placeholder public catalog app at `http://localhost:3001` |
+| `packages/db` | Shared Drizzle schema and Neon PostgreSQL client |
+| `workers/viewer` | Public quote PDF viewer and email gate |
+| `workers/tracker` | Public quote engagement beacon |
+| `workers/notifier` | Quote engagement notification cron |
+| `workers/cleanup` | Quote and personal-data cleanup cron |
 
-## What it does
+See [the architecture overview](docs/dev/architecture.md) for ownership boundaries and request
+flow.
 
-| Module | Description |
-|--------|-------------|
-| **Dashboard** | KPI overview for active tracked quotes, plus configurable operational tables |
-| **Lead Intake** | Staff form to capture and score inbound enquiries, auto-syncs to ServiceM8 |
-| **Leads** | Paginated lead list and detail view with tier, ServiceM8, table, and date filters |
-| **Clients** | Canonical client records, linked lead/job context, and merge review tooling |
-| **Quote Tracker** | Pull a ServiceM8 quote into a tracked short link, share it, inspect client engagement, and generate AI follow-up guidance |
-| **Work Orders** | Grouped active installation jobs and ServiceM8 item lines, with AI-assisted production labels, manual corrections, operational fields, and portal-safe timeline candidates |
-| **PS Generator** | Generate PS1 and PS3 Producer Statement PDF packages from published system, option, template, mapping, and wording configuration |
-| **Admin** | User/module access, pricing/tracking settings, dashboard tables, audit/error exports, and client merge review |
+## Product areas
 
-## Tech stack
+| Area | What it does |
+| --- | --- |
+| **Dashboard** | Shows operational attention queues, next actions, business performance, and configurable live-data tables. |
+| **Lead Intake** | Captures and scores enquiries, then synchronises eligible lead records with ServiceM8. |
+| **Leads** | Searches leads, shows tier and follow-up context, and links to ServiceM8 jobs. |
+| **Clients** | Maintains canonical RG Tools client records, linked context, and merge review. |
+| **Quote Tracker** | Creates tracked quote links from ServiceM8 PDFs and records viewer engagement. |
+| **Quote Movement** | Retains ServiceM8 Quote evidence, reports source coverage, and preserves converted Quote context. |
+| **Work Orders** | Reconciles active ServiceM8 Work Order jobs and manages RG-owned operational enrichment. |
+| **PS Generator** | Generates PS1 and PS3 Producer Statement packages from published configuration and templates. |
+| **Admin** | Manages users, module grants, pricing, tracking, dashboard tables, Work Order configuration, and audit/error exports. |
 
-- **Next.js 16** (App Router) + **React 19** + **Tailwind CSS 4**
-- **pnpm workspace** for apps, workers, and shared packages
-- **Drizzle ORM** + **Neon PostgreSQL** (serverless)
-- **NextAuth v5** - credential-based auth, JWT sessions, admin/staff roles
-- **Google Maps** - Places autocomplete + Distance Matrix
-- **Cloudflare Workers + R2** - `rg-viewer`, `rg-tracker`, `rg-notifier`, and `rg-cleanup`
-- **Resend** - transactional email
-- **OpenAI API** - optional lead and quote AI guidance
-- **Vitest** and **Playwright** - unit, integration, workspace, and e2e tests
+### Workflow boundaries
 
-## Developer docs
+ServiceM8 remains the source of truth for ServiceM8 job identity, status, and source fields. RG Tools
+retains context and RG-owned enrichment so staff can work from one operational view.
 
-- [Local setup](docs/dev/setup.md) - prerequisites, env vars, DB migration, seeding, testing
-- [Architecture](docs/dev/architecture.md) - system design, modules, auth, and lead scoring
-- [Deployment](docs/dev/deployment.md) - Vercel + Cloudflare Worker deployment
-- [Branch workflow](docs/dev/branch-workflow.md) - feature to staging and staging to production flow
-- [Changelog](docs/CHANGELOG.md) - release history and unreleased notes
-- [Security policy](docs/SECURITY.md) - reporting and operational security expectations
-- [Security runbook](docs/dev/security.md) - auth, access control, secrets, data boundaries, and incident response
-- [Quote tracking privacy note](docs/dev/quote-tracking.md) - what is collected, retention, access
-- [ServiceM8 sync architecture](docs/dev/servicem8-sync-architecture.md) - lead-to-ServiceM8 sync model
-- [ServiceM8 MCP notes](docs/dev/servicem8-mcp.md) - ServiceM8 MCP setup and limits
-- [Domain and environment setup](docs/dev/rgtools-domain-and-env-setup.md) - Royal Glass domains, Neon branches, and env separation
-- [Cloudflare DNS migration](docs/dev/dns-migration-cloudflare.md) - DNS migration plan
-- [Cloudflare DNS record](docs/dev/dns-migration-cloudflare-record.md) - migration record and caveats
+Quote Movement is a read-oriented monitoring surface. It does not rank or score quotes, assign
+owners, draft customer messages, or silently write changes back to ServiceM8. Its summaries organise
+retained evidence and explicitly show incomplete source coverage.
 
-## User docs
+Work Orders initially reads active ServiceM8 jobs in `Work Order` status. Staff can manage RG-owned
+fields and reviewed production labels, but Work Orders does not silently write operational changes
+back to ServiceM8.
 
-- [Getting started](docs/user/getting-started.md) - login, dashboard, roles
-- [Lead intake form](docs/how-to/lead-intake.md) - field-by-field guide
-- [Leads dashboard](docs/how-to/leads.md) - list, filters, detail view, ServiceM8 fetch
-- [RG Leads manual checklist](apps/web/tests/rg-leads-test-plan.md) - safe human verification for Quote-status lead workflows
-- [Client records](docs/how-to/clients.md) - client list, detail, links, and merge review
-- [Scoring guide](docs/user/scoring-guide.md) - Decision Matrix fields, tiers A-E, and follow-up actions
-- [Phone script](docs/user/phone-script-lead-intake.md) - call structure for consistent lead capture
-- [Quote Tracker how-to](docs/how-to/quotes.md) - create tracked quotes, share links, read engagement, troubleshooting
-- [PS Generator how-to](docs/how-to/ps-generator.md) - generate PS packages, understand configuration, and seed prerequisites
+## Technology
 
-## Security
+- Next.js 16 App Router, React 19, and Tailwind CSS 4.
+- pnpm 11.7.0 workspace with TypeScript.
+- Drizzle ORM and Neon PostgreSQL.
+- NextAuth v5 credentials authentication with JWT sessions and module grants.
+- Google Maps, ServiceM8, Cloudflare Workers/R2, Resend, and optional OpenAI integrations.
+- Vitest and Playwright for unit, integration, workspace, and end-to-end tests.
 
-See [docs/SECURITY.md](docs/SECURITY.md) for reporting and operational security expectations. The short version: do not commit secrets, keep local and preview environments off production data unless explicitly performing a production operation, and use the documented module-access and audit boundaries for staff-facing changes.
+## Install for local development
 
-## Changelog
+The complete collaborator setup is in [Developer setup](docs/dev/setup.md). The short version is:
 
-See [docs/CHANGELOG.md](docs/CHANGELOG.md) for version history.
+### 1. Install prerequisites
 
-## Quick start (dev)
+Install Git, Node.js 20.9 or newer, and pnpm 11.7.0. Verify them:
+
+```text
+node --version
+pnpm --version
+```
+
+If needed, install the pinned pnpm version with Corepack:
+
+```text
+corepack enable
+corepack prepare pnpm@11.7.0 --activate
+```
+
+### 2. Clone and install dependencies
+
+```text
+git clone <repository-url>
+cd rgtools
+pnpm install
+```
+
+### 3. Configure a development database and environment
+
+Create `.env.local` from the committed template. On Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env.local
+```
+
+On macOS or Linux:
 
 ```bash
-pnpm install
-cp .env.example .env.local   # fill in values - see docs/dev/setup.md
+cp .env.example .env.local
+```
+
+Set at least:
+
+```dotenv
+DATABASE_URL=postgresql://...        # pooled Neon dev-branch URL
+AUTH_URL=http://localhost:3000
+AUTH_SECRET=<unique-random-secret>
+CRON_SECRET=<unique-random-secret>
+```
+
+Use the Neon `dev` branch for local development and Vercel Preview. Never put a production
+connection string in a collaborator's `.env.local`; keep secrets out of Git. The template lists
+optional Google Maps, ServiceM8, R2, Resend, OpenAI, calculator, and Turnstile settings.
+
+### 4. Migrate and seed the development database
+
+```text
 pnpm db:migrate
-pnpm seed                    # creates initial admin user and module rows
-pnpm seed:ps-generator       # seeds published PS Generator config
-pnpm seed:tracking           # seeds quote tracking settings
+pnpm seed
+pnpm seed:ps-generator
+pnpm seed:tracking
+```
+
+The base seed creates a local-only bootstrap administrator: username `rgadmin`, password
+`*royalglass23`. Use this only against an isolated local database. An administrator can create
+collaborator accounts from **Admin -> Administration**.
+
+### 5. Start the web app
+
+```text
 pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3000](http://localhost:3000). The placeholder catalog runs separately:
 
-For a one-off production migration without changing `.env.local`, set `DB_URL_PROD`
-to the production Neon pooled URL and run:
-
-```bash
-pnpm db:migrate:prod
+```text
+pnpm --filter @rgtools/catalog dev
 ```
 
-## Quote pipeline scripts
+It opens at [http://localhost:3001](http://localhost:3001).
 
-```bash
-pnpm quote:pull --latest        # pull metadata + PDF from ServiceM8 to tmp/
-pnpm quote:preview --latest     # local viewer in browser
-pnpm quote:share --latest       # public Cloudflare tunnel link
-pnpm quote:create --job R260210 # create a tracked quote in the DB
+The PS Generator seed creates published configuration but actual PDF generation also requires the
+configured template PDFs in local storage or R2. Optional ServiceM8, Google Maps, email, storage,
+and OpenAI features remain unavailable until their corresponding variables are configured.
+
+## Common commands
+
+Run commands from the repository root:
+
+```text
+pnpm dev                  # web app
+pnpm build                # web and catalog production builds
+pnpm start                # start the built web app
+pnpm lint                 # web and catalog lint
+pnpm test                 # workspace tests, then web unit tests
+pnpm test:workspace       # root guardrail tests
+pnpm test:integration     # DB-backed integration tests
+pnpm test:e2e             # Playwright tests
+pnpm db:generate          # generate SQL after a schema change
+pnpm db:migrate           # apply development migrations
+pnpm db:studio            # open Drizzle Studio
+```
+
+Focused web tests can be run with:
+
+```text
+pnpm --filter @rgtools/web test:run -- modules/lead-intake/__tests__/actions.test.ts
+```
+
+Integration tests use `DATABASE_URL`. Mutating Work Order and Quote Movement E2E journeys require a
+separate sentinel-protected `E2E_DATABASE_URL`; do not point them at shared development or
+production data.
+
+### Quote and operations scripts
+
+```text
+pnpm quote:pull --latest        # pull ServiceM8 metadata and PDF to tmp/
+pnpm quote:preview --latest     # preview a pulled quote locally
+pnpm quote:share --latest       # temporary trycloudflare.com share link
+pnpm quote:create --job R260210 # create a tracked quote in the database
 pnpm quotes:client-backfill     # link historical quotes to client records
 pnpm clients:merge-cleanup      # apply reviewed client merge cleanup
 ```
 
-## Tests
+The quote share tunnel is temporary and is not suitable for sending to real customers.
 
-```bash
-pnpm test             # workspace tests, then web app test run
-pnpm test:run         # alias for the full test command
-pnpm test:workspace   # root workspace guardrail tests only
-pnpm test:integration # live DB integration tests
-pnpm test:e2e         # Playwright e2e tests
+### Workers
+
+Workers are separate Cloudflare deployables. Run their tests or local server in the relevant
+package:
+
+```text
+pnpm --dir workers/viewer test
+pnpm --dir workers/tracker test
+pnpm --dir workers/notifier test
+pnpm --dir workers/cleanup test
+pnpm --dir workers/viewer dev
 ```
+
+Worker secrets are set with Wrangler and must not be committed to `wrangler.toml`.
+
+## Database and release safety
+
+- Use `dev` as the normal base branch. `main` is reserved for explicit production promotion.
+- After schema changes, run `pnpm db:generate`, review the SQL, and apply it to the intended
+  development database with `pnpm db:migrate`.
+- For a one-off production migration, leave `DATABASE_URL` on development, set `DB_URL_PROD`, and
+  run `pnpm db:migrate:prod` only after independently verifying the target.
+- Never commit `.env.local`, database URLs, API keys, R2 credentials, OpenAI keys, Resend keys,
+  ServiceM8 keys, or Wrangler secrets.
+
+Read [Security policy](docs/SECURITY.md) before handling customer, quote, or generated PDF data.
+
+## Documentation
+
+### Developer documentation
+
+- [Developer setup](docs/dev/setup.md) - prerequisites, environment, database, tests, workers, and troubleshooting
+- [Architecture overview](docs/dev/architecture.md) - workspace boundaries, modules, data ownership, and permissions
+- [Royal Glass Precision UI](docs/dev/royal-glass-precision-ui.md) - UI theme and presentation rules
+- [Work Order enrichment](docs/dev/work-order-enrichment.md) - enrichment operations and privacy boundary
+- [Work Order existing-item rollout](docs/dev/work-order-existing-item-rollout.md) - supervised rollout notes
+- [Work Order rollout performance](docs/dev/work-order-existing-item-rollout-performance.md) - performance notes
+- [Work Order retention operations](docs/ops/work-order-retention.md) - protected cleanup schedule and rollback
+- [Product context](apps/web/PRODUCT.md) - product purpose and design principles
+
+### Staff documentation
+
+- [Getting started](docs/user/getting-started.md) - dashboard, navigation, roles, and appearance
+- [Lead intake](docs/how-to/lead-intake.md) - capture and score enquiries
+- [Leads](docs/how-to/leads.md) - review and follow up leads
+- [Clients](docs/how-to/clients.md) - client records and merge review
+- [Quotes and Quote Movement](docs/how-to/quotes.md) - tracked links, engagement, retained evidence, and troubleshooting
+- [Work Orders](docs/how-to/work-orders.md) - refresh, filters, operational fields, and Production Specifications
+- [PS Generator](docs/how-to/ps-generator.md) - generate PS packages and manage configuration
+- [Scoring guide](docs/user/scoring-guide.md) - scoring fields, tiers, and follow-up actions
+- [Phone script](docs/user/phone-script-lead-intake.md) - consistent lead-intake calls
+
+Historical planning briefs are kept under `docs/codex/` for project traceability and are not the
+current installation or product manual.
+
+## Changelog
+
+See [docs/CHANGELOG.md](docs/CHANGELOG.md) for release history and unreleased documentation notes.

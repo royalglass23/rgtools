@@ -8,6 +8,7 @@ const mockInsert = vi.hoisted(() => vi.fn())
 const mockUpdate = vi.hoisted(() => vi.fn())
 const mockSelect = vi.hoisted(() => vi.fn())
 const mockDelete = vi.hoisted(() => vi.fn())
+const mockExecute = vi.hoisted(() => vi.fn(async () => ({ rows: [{}] })))
 const mockTransaction = vi.hoisted(() => vi.fn())
 const mockAuth = vi.hoisted(() => vi.fn())
 const mockLogAudit = vi.hoisted(() => vi.fn())
@@ -28,6 +29,7 @@ vi.mock('@/lib/db', () => ({
     update: mockUpdate,
     select: mockSelect,
     delete: mockDelete,
+    execute: mockExecute,
     transaction: mockTransaction,
   },
 }))
@@ -64,6 +66,7 @@ import {
   saveWorkOrderSummaryConfigAction,
   updateWorkOrderItemOperationalFieldAction,
   updateWorkOrderItemLabelAction,
+  updateWorkOrderByJobNumberAction,
 } from '../actions'
 
 beforeEach(() => {
@@ -117,6 +120,10 @@ describe('work order action permissions', () => {
     mockAssertCanManage.mockRejectedValue(new Error('Forbidden: Work Orders manage access is required.'))
 
     await expect(refreshWorkOrdersAction()).rejects.toThrow('Forbidden: Work Orders manage access is required.')
+    expect(mockLogAudit).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'work_order.refresh.denied',
+      actorId: 'user-1',
+    }))
     expect(mockInsert).not.toHaveBeenCalled()
     expect(mockRevalidatePath).not.toHaveBeenCalled()
   })
@@ -129,6 +136,25 @@ describe('work order action permissions', () => {
       'Forbidden: Work Orders manage access is required.',
     )
     expect(request).not.toHaveBeenCalled()
+    expect(mockTransaction).not.toHaveBeenCalled()
+    expect(mockLogAudit).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'work_order.refresh.denied',
+      actorId: 'user-1',
+    }))
+  })
+
+  it('returns a safe error when a view-only user tries to update one job', async () => {
+    mockAssertCanManage.mockRejectedValue(new Error('Forbidden: Work Orders manage access is required.'))
+    const formData = new FormData()
+    formData.set('jobNumber', 'R260210')
+
+    await expect(updateWorkOrderByJobNumberAction(
+      { status: 'idle', message: '' },
+      formData,
+    )).resolves.toEqual({
+      status: 'error',
+      message: 'You do not have permission to update Work Orders.',
+    })
     expect(mockTransaction).not.toHaveBeenCalled()
   })
 
@@ -455,6 +481,39 @@ describe('work order action permissions', () => {
     expect(mockLogAudit).not.toHaveBeenCalled()
   })
 
+  it('rejects an independent manual label change for a confirmed Production Specification', async () => {
+    const txUpdate = vi.fn()
+    const txInsert = vi.fn()
+    mockTransaction.mockImplementationOnce(async (callback: (tx: unknown) => Promise<void>) => callback({
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn(async () => [{
+              id: 'item-1',
+              workOrderId: 'work-order-1',
+              originalDescription: 'Confirmed ServiceM8 description',
+              generatedLabel: 'Legacy label',
+              manualLabelOverride: null,
+              isActive: true,
+              productionSpecificationStatus: 'confirmed',
+            }]),
+          })),
+        })),
+      })),
+      update: txUpdate,
+      insert: txInsert,
+    }))
+    const formData = new FormData()
+    formData.set('label', 'Forged confirmed label')
+
+    await expect(updateWorkOrderItemLabelAction('item-1', formData)).rejects.toThrow(
+      'Confirmed Production Specification labels must be changed through the specification review.',
+    )
+
+    expect(txUpdate).not.toHaveBeenCalled()
+    expect(txInsert).not.toHaveBeenCalled()
+  })
+
   it('rejects a manual label change when refresh removes the item between read and write', async () => {
     const returning = vi.fn(async () => [])
     const where = vi.fn(() => ({ returning }))
@@ -605,6 +664,31 @@ describe('work order action permissions', () => {
 
     await expect(regenerateWorkOrderItemLabelAction('item-1')).rejects.toThrow(
       'Work Order Item item-1 is removed and cannot be edited.',
+    )
+
+    expect(mockGenerateWorkOrderItemLabel).not.toHaveBeenCalled()
+    expect(mockTransaction).not.toHaveBeenCalled()
+  })
+
+  it('rejects AI label regeneration for a confirmed Production Specification before calling OpenAI', async () => {
+    mockSelect.mockReturnValue({
+      from: vi.fn(() => ({
+        where: vi.fn(() => ({
+          limit: vi.fn(async () => [{
+            id: 'item-1',
+            workOrderId: 'work-order-1',
+            originalDescription: 'Confirmed ServiceM8 description',
+            generatedLabel: 'Legacy label',
+            manualLabelOverride: null,
+            isActive: true,
+            productionSpecificationStatus: 'confirmed',
+          }]),
+        })),
+      })),
+    })
+
+    await expect(regenerateWorkOrderItemLabelAction('item-1')).rejects.toThrow(
+      'Confirmed Production Specification labels must be changed through the specification review.',
     )
 
     expect(mockGenerateWorkOrderItemLabel).not.toHaveBeenCalled()

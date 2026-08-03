@@ -5,12 +5,18 @@ import { clientContacts, clients, leads } from '@rgtools/db/schema-leads'
 import {
   workOrderHardwareStatusOptions,
   workOrderEvents,
+  workOrderItemEnrichmentJobs,
+  workOrderItemProductionSpecificationRevisions,
+  workOrderItemProductionSpecifications,
   workOrderInstallers,
   workOrderItems,
   workOrderRefreshRuns,
+  workOrderSpecificationCatalogueOptions,
   workOrders,
   workOrderStageOptions,
+  type WorkOrderItemEnrichmentStatusValue,
 } from '@rgtools/db/schema-workorders'
+import { fingerprintSourceDescription } from './item-label-lifecycle'
 import type { WorkOrderLevel } from './domain'
 import type { WorkOrderListFilters, WorkOrderSort, WorkOrderSortDirection } from './list-filters'
 import {
@@ -19,6 +25,12 @@ import {
   type WorkOrderItemSummaryRow,
 } from './work-order-items'
 import type { WorkOrderRefreshStatusValue } from './WorkOrderRefreshStatus'
+import {
+  INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE,
+  type ProductionSpecificationCatalogueOption,
+} from './production-specifications'
+
+export const WORK_ORDER_EXPORT_MAX_ROWS = 10_000
 
 export type WorkOrderBaseRow = {
   id: string
@@ -138,9 +150,70 @@ const workOrderItemSummarySelection = {
   dateCompleted: workOrderItems.dateCompleted,
   riskLevel: sql<WorkOrderLevel | null>`coalesce(${workOrderItems.riskLevelOverride}, ${workOrderItems.aiRiskLevel})`,
   importance: sql<WorkOrderLevel | null>`coalesce(${workOrderItems.importanceOverride}, ${workOrderItems.aiImportance})`,
+  productionSpecification: {
+    id: workOrderItemProductionSpecifications.id,
+    status: workOrderItemProductionSpecifications.status,
+    draftData: workOrderItemProductionSpecifications.draftData,
+    confirmedData: workOrderItemProductionSpecifications.confirmedData,
+    productionLabel: workOrderItemProductionSpecifications.productionLabel,
+    confirmedAt: workOrderItemProductionSpecifications.confirmedAt,
+    confirmedRevision: workOrderItemProductionSpecifications.confirmedRevision,
+    draftRevision: workOrderItemProductionSpecifications.draftRevision,
+    sourceDescription: workOrderItemProductionSpecifications.sourceDescription,
+    sourceDescriptionFingerprint: workOrderItemProductionSpecifications.sourceDescriptionFingerprint,
+    draftSourceDescription: workOrderItemProductionSpecifications.draftSourceDescription,
+    draftSourceDescriptionFingerprint: workOrderItemProductionSpecifications.draftSourceDescriptionFingerprint,
+    ignoredSourceDescriptionFingerprint: workOrderItemProductionSpecifications.ignoredSourceDescriptionFingerprint,
+    evidenceData: workOrderItemProductionSpecifications.evidenceData,
+    ambiguityFlags: workOrderItemProductionSpecifications.ambiguityFlags,
+    history: sql<Array<{
+      id: string
+      revisionType: string
+      actorUsername: string | null
+      previousSnapshot: unknown
+      newSnapshot: unknown
+      reasonCode: string | null
+      note: string | null
+      createdAt: Date
+    }>>`coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', ${workOrderItemProductionSpecificationRevisions.id},
+        'revisionType', ${workOrderItemProductionSpecificationRevisions.revisionType},
+        'actorUsername', ${users.username},
+        'previousSnapshot', ${workOrderItemProductionSpecificationRevisions.previousSnapshot},
+        'newSnapshot', ${workOrderItemProductionSpecificationRevisions.newSnapshot},
+        'reasonCode', ${workOrderItemProductionSpecificationRevisions.reasonCode},
+        'note', ${workOrderItemProductionSpecificationRevisions.note},
+        'changes', ${workOrderItemProductionSpecificationRevisions.changes},
+        'createdAt', ${workOrderItemProductionSpecificationRevisions.createdAt}
+      ) order by ${workOrderItemProductionSpecificationRevisions.createdAt} asc)
+      from ${workOrderItemProductionSpecificationRevisions}
+      left join ${users} on ${users.id} = ${workOrderItemProductionSpecificationRevisions.actorId}
+      where ${workOrderItemProductionSpecificationRevisions.workOrderItemId} = ${workOrderItems.id}
+    ), '[]'::jsonb)`,
+  },
+  enrichmentStatus: {
+    status: sql<WorkOrderItemEnrichmentStatusValue | null>`(
+      select ${workOrderItemEnrichmentJobs.status}
+      from ${workOrderItemEnrichmentJobs}
+      where ${workOrderItemEnrichmentJobs.workOrderItemId} = ${workOrderItems.id}
+      order by ${workOrderItemEnrichmentJobs.createdAt} desc
+      limit 1
+    )`,
+    lastSafeError: sql<string | null>`(
+      select ${workOrderItemEnrichmentJobs.lastSafeError}
+      from ${workOrderItemEnrichmentJobs}
+      where ${workOrderItemEnrichmentJobs.workOrderItemId} = ${workOrderItems.id}
+      order by ${workOrderItemEnrichmentJobs.createdAt} desc
+      limit 1
+    )`,
+  },
 }
 
-export async function listWorkOrders(filters: WorkOrderListFilters) {
+export async function listWorkOrders(
+  filters: WorkOrderListFilters,
+  catalogue: readonly ProductionSpecificationCatalogueOption[] = INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE,
+) {
   const where = listWhere(filters)
   const offset = (filters.page - 1) * filters.size
 
@@ -171,7 +244,7 @@ export async function listWorkOrders(filters: WorkOrderListFilters) {
   const total = totalRow?.total ?? 0
   const groupedRows = attachActiveItemsToWorkOrders(rows, activeItems)
   return {
-    rows: applyWorkOrderItemListFilters(groupedRows, filters),
+    rows: applyWorkOrderItemListFilters(groupedRows, filters, catalogue),
     total,
     pageCount: Math.max(1, Math.ceil(total / filters.size)),
   }
@@ -179,6 +252,7 @@ export async function listWorkOrders(filters: WorkOrderListFilters) {
 
 export async function listWorkOrdersForExport(
   filters: WorkOrderListFilters,
+  catalogue: readonly ProductionSpecificationCatalogueOption[] = INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE,
 ): Promise<WorkOrderExportRow[]> {
   const rows = await db
     .select(workOrderRowSelection)
@@ -188,15 +262,29 @@ export async function listWorkOrdersForExport(
     .leftJoin(workOrderHardwareStatusOptions, eq(workOrders.hardwareStatusOptionId, workOrderHardwareStatusOptions.id))
     .where(listWhere(filters))
     .orderBy(...listOrderBy(filters.sort))
+    .limit(WORK_ORDER_EXPORT_MAX_ROWS + 1)
+
+  if (rows.length > WORK_ORDER_EXPORT_MAX_ROWS) {
+    throw new Error(
+      `Work Order export exceeds the ${WORK_ORDER_EXPORT_MAX_ROWS}-row limit. Narrow the filters and try again.`,
+    )
+  }
 
   if (rows.length === 0) return []
 
   const items = await listWorkOrderSummaryItems(
     rows.map((row) => row.id),
     filters.showRemovedItems,
+    WORK_ORDER_EXPORT_MAX_ROWS + 1,
   )
 
-  return applyWorkOrderItemListFilters(attachActiveItemsToWorkOrders(rows, items), filters)
+  if (items.length > WORK_ORDER_EXPORT_MAX_ROWS) {
+    throw new Error(
+      `Work Order export exceeds the ${WORK_ORDER_EXPORT_MAX_ROWS}-row limit. Narrow the filters and try again.`,
+    )
+  }
+
+  const exportRows = applyWorkOrderItemListFilters(attachActiveItemsToWorkOrders(rows, items), filters, catalogue)
     .flatMap<WorkOrderExportRow>(({ items: matchingItems, activeItemCount, matchingActiveItemCount, ...workOrder }) => {
       void activeItemCount
       void matchingActiveItemCount
@@ -204,17 +292,33 @@ export async function listWorkOrdersForExport(
         ? matchingItems.map((item) => ({ ...workOrder, item }))
         : [{ ...workOrder, item: null }]
     })
+
+  if (exportRows.length > WORK_ORDER_EXPORT_MAX_ROWS) {
+    throw new Error(
+      `Work Order export exceeds the ${WORK_ORDER_EXPORT_MAX_ROWS}-row limit. Narrow the filters and try again.`,
+    )
+  }
+
+  return exportRows
 }
 
-async function listWorkOrderSummaryItems(workOrderIds: string[], showRemovedItems: boolean) {
+async function listWorkOrderSummaryItems(
+  workOrderIds: string[],
+  showRemovedItems: boolean,
+  limit?: number,
+) {
   if (workOrderIds.length === 0) return []
 
-  return db
+  const query = db
     .select(workOrderItemSummarySelection)
     .from(workOrderItems)
     .leftJoin(workOrderInstallers, eq(workOrderItems.installerId, workOrderInstallers.id))
     .leftJoin(workOrderStageOptions, eq(workOrderItems.stageOptionId, workOrderStageOptions.id))
     .leftJoin(workOrderHardwareStatusOptions, eq(workOrderItems.hardwareStatusOptionId, workOrderHardwareStatusOptions.id))
+    .leftJoin(
+      workOrderItemProductionSpecifications,
+      eq(workOrderItems.id, workOrderItemProductionSpecifications.workOrderItemId),
+    )
     .where(showRemovedItems
       ? inArray(workOrderItems.workOrderId, workOrderIds)
       : and(
@@ -222,6 +326,45 @@ async function listWorkOrderSummaryItems(workOrderIds: string[], showRemovedItem
         eq(workOrderItems.isActive, true),
       ))
     .orderBy(asc(workOrderItems.workOrderId), asc(workOrderItems.sortOrder), asc(workOrderItems.id))
+
+  const rows = await (limit === undefined ? query : query.limit(limit))
+  return rows.map((row) => {
+    if (!('productionSpecification' in row)) return row
+    const enrichmentStatus = row.enrichmentStatus?.status
+    return {
+      ...row,
+      productionSpecification: row.productionSpecification?.id
+        ? sourceComparisonSummary(row.originalDescription, row.productionSpecification)
+        : null,
+      enrichmentStatus: enrichmentStatus
+        ? {
+          status: enrichmentStatus,
+          lastSafeError: row.enrichmentStatus.lastSafeError,
+        }
+        : null,
+    }
+  })
+}
+
+function sourceComparisonSummary<T extends {
+  confirmedData: unknown
+  sourceDescription: string | null
+  sourceDescriptionFingerprint: string | null
+  ignoredSourceDescriptionFingerprint: string | null
+}>(currentSourceDescription: string, specification: T) {
+  const currentSourceDescriptionFingerprint = fingerprintSourceDescription(currentSourceDescription)
+  const sourceDiffers = specification.sourceDescriptionFingerprint
+    ? specification.sourceDescriptionFingerprint !== currentSourceDescriptionFingerprint
+    : specification.sourceDescription !== null && specification.sourceDescription !== currentSourceDescription
+  return {
+    ...specification,
+    currentSourceDescriptionFingerprint,
+    sourceChanged: Boolean(
+      specification.confirmedData
+      && sourceDiffers
+      && specification.ignoredSourceDescriptionFingerprint !== currentSourceDescriptionFingerprint
+    ),
+  }
 }
 
 export async function getWorkOrderFilterOptions() {
@@ -426,6 +569,15 @@ function matchingItemExists(filters: WorkOrderListFilters, searchPattern?: strin
   if (filters.importance !== 'all') {
     conditions.push(eq(sql`coalesce(${workOrderItems.importanceOverride}, ${workOrderItems.aiImportance})`, filters.importance))
   }
+  for (const [field, catalogueId] of Object.entries(filters.specification ?? {})) {
+    conditions.push(sql`exists (
+      select 1
+      from ${workOrderItemProductionSpecifications} as current_specification
+      where current_specification.work_order_item_id = ${workOrderItems.id}
+        and current_specification.confirmed_data -> ${field} ->> 'state' = 'selected'
+        and current_specification.confirmed_data -> ${field} ->> 'catalogueId' = ${catalogueId}
+    )`)
+  }
   if (searchPattern) {
     const itemSearchCondition = or(
       ilike(workOrderItems.itemCode, searchPattern),
@@ -434,6 +586,7 @@ function matchingItemExists(filters: WorkOrderListFilters, searchPattern?: strin
         searchPattern,
       ),
       ilike(workOrderItems.originalDescription, searchPattern),
+      currentProductionSpecificationSearchExists(searchPattern),
     )
     if (itemSearchCondition) conditions.push(itemSearchCondition)
   }
@@ -447,6 +600,62 @@ function hasConfiguredItemFilters(filters: WorkOrderListFilters) {
     || filters.maintenanceProgram !== 'all'
     || filters.risk !== 'all'
     || filters.importance !== 'all'
+    || Object.keys(filters.specification ?? {}).length > 0
+}
+
+function currentProductionSpecificationSearchExists(searchPattern: string) {
+  return sql`exists (
+    select 1
+    from ${workOrderItemProductionSpecifications} as current_specification
+    where current_specification.work_order_item_id = ${workOrderItems.id}
+      and current_specification.confirmed_data is not null
+      and (
+        current_specification.production_label ilike ${searchPattern}
+        or exists (
+          select 1
+          from ${workOrderSpecificationCatalogueOptions} as catalogue_option
+          where catalogue_option.display_label ilike ${searchPattern}
+            and current_specification.confirmed_data
+              -> catalogue_option.field_name
+              ->> 'catalogueId' = catalogue_option.id
+        )
+        or exists (
+          select 1
+          from jsonb_each(current_specification.confirmed_data) as specification_field(field_name, field_value)
+          where (
+            specification_field.field_value ->> 'state' = 'tbc'
+            and 'TBC' ilike ${searchPattern}
+          ) or (
+            specification_field.field_value ->> 'state' = 'unmapped'
+            and concat('Unmapped - ', specification_field.field_value ->> 'raw') ilike ${searchPattern}
+          )
+        )
+        or exists (
+          select 1
+          from jsonb_array_elements(coalesce(current_specification.confirmed_data -> 'measurements', '[]'::jsonb)) as measurement(value)
+          where measurement.value ->> 'label' ilike ${searchPattern}
+            or measurement.value ->> 'kind' ilike ${searchPattern}
+            or measurement.value ->> 'value' ilike ${searchPattern}
+            or measurement.value ->> 'unit' ilike ${searchPattern}
+        )
+        or exists (
+          select 1
+          from jsonb_array_elements(coalesce(current_specification.confirmed_data -> 'additionalComponents', '[]'::jsonb)) as component(value)
+          where component.value ->> 'name' ilike ${searchPattern}
+            or component.value ->> 'quantity' ilike ${searchPattern}
+            or component.value ->> 'dimensions' ilike ${searchPattern}
+            or component.value ->> 'material' ilike ${searchPattern}
+            or component.value ->> 'finish' ilike ${searchPattern}
+            or component.value ->> 'notes' ilike ${searchPattern}
+        )
+        or exists (
+          select 1
+          from jsonb_array_elements(coalesce(current_specification.confirmed_data -> 'specialRequirements', '[]'::jsonb)) as requirement(value)
+          where requirement.value ->> 'kind' ilike ${searchPattern}
+            or requirement.value ->> 'detail' ilike ${searchPattern}
+        )
+      )
+  )`
 }
 
 function listOrderBy(sort: WorkOrderSort) {

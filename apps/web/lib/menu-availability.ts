@@ -22,8 +22,8 @@ export const MENU_DEFINITIONS: MenuDefinition[] = [
   },
   {
     key: 'quote-tracker',
-    label: 'Quote Tracker',
-    slugs: ['quote-tracker', 'admin/tracking', 'quote-tracker/guide'],
+    label: 'Quotes',
+    slugs: ['quote-movement', 'quote-tracker', 'admin/tracking', 'quote-tracker/guide'],
   },
   {
     key: 'clients',

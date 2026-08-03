@@ -1,58 +1,59 @@
 import { config } from 'dotenv'
+import type { ProductionAccessStore } from '../lib/production-access'
+
 config({ path: '.env.local' })
 
-const PRODUCTION_STAFF_MODULE_SLUGS = [
-  'lead-intake',
-  'leads',
-  'quote-tracker',
-]
-
 async function seedProductionAccess() {
-  const { and, eq, inArray } = await import('drizzle-orm')
+  const { eq } = await import('drizzle-orm')
   const { db } = await import('../lib/db')
   const { users, modules, userModuleAccess } = await import('@rgtools/db/schema')
+  const { ensureProductionAccess } = await import('../lib/production-access')
 
-  const staffUsers = await db
-    .select({ id: users.id, username: users.username })
-    .from(users)
-    .where(eq(users.role, 'staff'))
+  const store: ProductionAccessStore = {
+    async ensureActiveModule(definition) {
+      const [moduleRow] = await db
+        .insert(modules)
+        .values({ ...definition, isActive: true })
+        .onConflictDoUpdate({
+          target: modules.slug,
+          set: { ...definition, isActive: true, updatedAt: new Date() },
+        })
+        .returning({
+          id: modules.id,
+          slug: modules.slug,
+          name: modules.name,
+          adminOnly: modules.adminOnly,
+          isActive: modules.isActive,
+          sortOrder: modules.sortOrder,
+        })
 
-  const productionModules = await db
-    .select({ id: modules.id, slug: modules.slug })
-    .from(modules)
-    .where(and(
-      eq(modules.isActive, true),
-      inArray(modules.slug, PRODUCTION_STAFF_MODULE_SLUGS),
-    ))
-
-  const missingModuleSlugs = PRODUCTION_STAFF_MODULE_SLUGS.filter((slug) => (
-    !productionModules.some((moduleRow) => moduleRow.slug === slug)
-  ))
-
-  if (missingModuleSlugs.length > 0) {
-    throw new Error(`Missing production module rows: ${missingModuleSlugs.join(', ')}`)
-  }
-
-  let inserted = 0
-  for (const staffUser of staffUsers) {
-    for (const moduleRow of productionModules) {
+      return moduleRow
+    },
+    async listStaffUserIds() {
+      const staffUsers = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.role, 'staff'))
+      return staffUsers.map((user) => user.id)
+    },
+    async ensureUserModuleAccess(userId, moduleId) {
       const result = await db
         .insert(userModuleAccess)
         .values({
-          userId: staffUser.id,
-          moduleId: moduleRow.id,
+          userId,
+          moduleId,
           grantedBy: null,
         })
         .onConflictDoNothing()
         .returning({ userId: userModuleAccess.userId })
-
-      inserted += result.length
-    }
+      return result.length > 0
+    },
   }
 
-  console.log(`Checked ${staffUsers.length} staff users`)
-  console.log(`Ensured staff access to: ${PRODUCTION_STAFF_MODULE_SLUGS.join(', ')}`)
-  console.log(`Inserted ${inserted} missing access grants`)
+  const result = await ensureProductionAccess(store)
+  console.log(`Checked ${result.staffUserCount} staff users`)
+  console.log(`Ensured staff access to: ${result.ensuredModuleSlugs.join(', ')}`)
+  console.log(`Inserted ${result.insertedGrantCount} missing access grants`)
   process.exit(0)
 }
 

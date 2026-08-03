@@ -1,0 +1,35 @@
+.control {
+  display: inline-flex;
+  gap: 0.15rem;
+  padding: 0.2rem;
+  border: 1px solid var(--shell-border-interactive);
+  border-radius: var(--radius-control);
+  background: var(--shell-surface);
+}
+
+.option {
+  min-height: 1.8rem;
+  padding: 0.25rem 0.45rem;
+  border: 0;
+  border-radius: calc(var(--radius-control) - 0.2rem);
+  background: transparent;
+  color: var(--shell-text-secondary);
+  font: inherit;
+  font-size: 0.64rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.option:hover {
+  color: var(--shell-text-primary);
+}
+
+.option[aria-pressed='true'] {
+  background: var(--brand-accent);
+  color: var(--brand-on-accent);
+}
+
+.option:focus-visible {
+  outline: 2px solid var(--focus-ring-inverse);
+  outline-offset: 2px;
+}

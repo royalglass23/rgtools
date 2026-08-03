@@ -7,7 +7,22 @@ import {
   updateWorkOrderItemOperationalFieldAction,
 } from './actions'
 import { operationalFieldLabel, type WorkOrderItemOperationalField } from './item-operational-fields'
-import type { WorkOrderItemSummaryRow } from './work-order-items'
+import {
+  retryWorkOrderItemProductionSpecificationEnrichmentAction,
+  saveWorkOrderItemProductionSpecificationDraftAction,
+} from './production-specification-actions'
+import { ProductionSpecificationDetails, safeProductionSpecification } from './ProductionSpecificationSection'
+import {
+  buildProductionLabel,
+  createEmptyProductionSpecification,
+  INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE,
+  type ProductionSpecification,
+  type ProductionSpecificationCatalogueOption,
+} from './production-specifications'
+import type {
+  WorkOrderItemProductionSpecificationSummary,
+  WorkOrderItemSummaryRow,
+} from './work-order-items'
 import type { WorkOrderSummaryFieldConfig, WorkOrderSummaryFieldId } from './summary-config'
 
 type FilterOption = { id: string; label: string }
@@ -47,15 +62,19 @@ export function WorkOrderItemsSummary({
   showCount = true,
   canManage = false,
   options = EMPTY_OPTIONS,
+  catalogue = INITIAL_PRODUCTION_SPECIFICATION_CATALOGUE,
   fields,
   tone = 'white',
+  productionSpecificationsEnabled = process.env.NEXT_PUBLIC_WORK_ORDER_PRODUCTION_SPECIFICATIONS_ENABLED !== 'false',
 }: {
   items: WorkOrderItemSummaryRow[]
   showCount?: boolean
   canManage?: boolean
   options?: WorkOrderItemOptions
+  catalogue?: readonly ProductionSpecificationCatalogueOption[]
   fields?: ItemFieldConfig[]
   tone?: 'white' | 'tint'
+  productionSpecificationsEnabled?: boolean
 }) {
   if (items.length === 0) {
     return (
@@ -76,13 +95,13 @@ export function WorkOrderItemsSummary({
     return operationalField ? [{ config: field, field: operationalField }] : []
   })
   const activeTone = tone === 'tint'
-    ? 'border-[#142B3A]/25 bg-[#E8EEF1]'
-    : 'border-[#142B3A]/20 bg-white'
+    ? 'border-border bg-surface-subtle'
+    : 'border-border bg-surface'
 
   return (
     <section aria-label="Work Order items" className="space-y-2 px-4 py-3">
       {showCount && <ItemCount count={activeItemCount} />}
-      <div className="grid gap-2">
+      <div role="table" aria-label="Work Order item details" className="grid gap-2">
         {items.map((item) => {
           const lineTotal = item.lineTotalExcludingGst
             ? `$${item.lineTotalExcludingGst}`
@@ -100,30 +119,32 @@ export function WorkOrderItemsSummary({
             >
               {itemField && (
                 <ItemCompositeField
+                  key={productionSpecificationStateKey(item, productionSpecificationsEnabled)}
                   item={item}
                   hoverDetail={hoverDetail}
                   canEdit={canManage && itemField.editable && item.isActive}
+                  canManageSpecification={productionSpecificationsEnabled && canManage && item.isActive}
+                  productionSpecificationsEnabled={productionSpecificationsEnabled}
+                  catalogue={catalogue}
                 />
               )}
               {operationalFields.length > 0 && (
-                <div
-                  role="group"
-                  aria-label="Work Order item controls"
-                  className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8"
-                >
-                  {operationalFields.map(({ config, field }) => (
-                    <ItemOperationalField
-                      key={config.id}
-                      item={item}
-                      options={options}
-                      field={field}
-                      canEdit={canManage && config.editable && item.isActive}
-                    />
-                  ))}
+                <div role="cell" aria-label="Work Order item controls">
+                  <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
+                    {operationalFields.map(({ config, field }) => (
+                      <ItemOperationalField
+                        key={config.id}
+                        item={item}
+                        options={options}
+                        field={field}
+                        canEdit={canManage && config.editable && item.isActive}
+                      />
+                    ))}
+                  </dl>
                 </div>
               )}
               {!item.isActive && !visibleFields.some((field) => field.id === 'item') && (
-                <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">Removed</span>
+                <span role="cell" className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">Removed</span>
               )}
             </div>
           )
@@ -137,18 +158,60 @@ function ItemCompositeField({
   item,
   hoverDetail,
   canEdit,
+  canManageSpecification,
+  productionSpecificationsEnabled,
+  catalogue,
 }: {
   item: WorkOrderItemSummaryRow
   hoverDetail: string
   canEdit: boolean
+  canManageSpecification: boolean
+  productionSpecificationsEnabled: boolean
+  catalogue: readonly ProductionSpecificationCatalogueOption[]
 }) {
-  const effectiveLabel = item.manualLabelOverride ?? item.generatedLabel ?? truncateDescription(item.originalDescription)
-  const isLabelPending = !item.manualLabelOverride
+  const [productionSpecification, setProductionSpecification] = useState<WorkOrderItemProductionSpecificationSummary | null>(
+    productionSpecificationsEnabled ? item.productionSpecification ?? null : null,
+  )
+  const [localSpecificationDocument, setLocalSpecificationDocument] = useState<ProductionSpecification | null>(() => (
+    productionSpecificationsEnabled
+      ? safeProductionSpecification(item.productionSpecification?.confirmedData ?? item.productionSpecification?.draftData, catalogue)
+      : null
+  ))
+  const [createStatus, setCreateStatus] = useState<'idle' | 'saving' | 'error'>('idle')
+  const [createError, setCreateError] = useState<string | null>(null)
+  const structuredDocument = localSpecificationDocument ?? safeProductionSpecification(
+    productionSpecification?.confirmedData ?? productionSpecification?.draftData,
+    catalogue,
+  )
+  const draftSpecificationDocument = safeProductionSpecification(productionSpecification?.draftData, catalogue)
+  const draftProductionLabel = structuredDocument ? buildProductionLabel(structuredDocument, catalogue) : ''
+  const hasConfirmedSpecification = productionSpecification?.status === 'confirmed'
+  const specificationLabel = productionSpecification?.productionLabel
+    ?? (draftProductionLabel && draftProductionLabel !== 'Location TBC' ? draftProductionLabel : null)
+  const effectiveLabel = (hasConfirmedSpecification ? specificationLabel : item.manualLabelOverride ?? specificationLabel)
+    ?? item.generatedLabel
+    ?? truncateDescription(item.originalDescription)
+  const isLabelPending = !hasConfirmedSpecification
+    && !item.manualLabelOverride
     && !item.generatedLabel
     && (item.labelStatus === 'pending' || item.labelStatus === 'failed')
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [saveError, setSaveError] = useState<string | null>(null)
   const [retryLabel, setRetryLabel] = useState<string | null>(null)
+  const [enrichmentStatus, setEnrichmentStatus] = useState(item.enrichmentStatus ?? null)
+  const [enrichmentRetryState, setEnrichmentRetryState] = useState<'idle' | 'retrying' | 'error'>('idle')
+  const [sourceChanged, setSourceChanged] = useState(Boolean(productionSpecification?.sourceChanged))
+
+  async function retryEnrichment() {
+    setEnrichmentRetryState('retrying')
+    try {
+      await retryWorkOrderItemProductionSpecificationEnrichmentAction(item.id)
+      setEnrichmentStatus({ status: 'queued', lastSafeError: null })
+      setEnrichmentRetryState('idle')
+    } catch {
+      setEnrichmentRetryState('error')
+    }
+  }
 
   async function saveLabel(label: string) {
     setSaveStatus('saving')
@@ -168,6 +231,58 @@ function ItemCompositeField({
     }
   }
 
+  async function createSpecificationDraft() {
+    const emptyDraft = createEmptyProductionSpecification()
+    setCreateStatus('saving')
+    setCreateError(null)
+    setProductionSpecification({
+      id: `draft-${item.id}`,
+      status: 'needs_review',
+      draftData: emptyDraft,
+      confirmedData: null,
+      productionLabel: null,
+      confirmedAt: null,
+      history: [],
+    })
+    setLocalSpecificationDocument(emptyDraft)
+    try {
+      const saved = await saveWorkOrderItemProductionSpecificationDraftAction(item.id, emptyDraft, {
+        expectedConfirmedRevision: productionSpecification?.confirmedRevision ?? 0,
+        expectedDraftRevision: productionSpecification?.draftRevision ?? 0,
+      })
+      setProductionSpecification((current) => current ? { ...current, ...saved } : current)
+      setCreateStatus('idle')
+    } catch (error) {
+      setProductionSpecification(null)
+      setLocalSpecificationDocument(null)
+      setCreateStatus('error')
+      setCreateError(error instanceof Error ? error.message : 'Production Specification draft could not be created.')
+    }
+  }
+
+  async function startSpecificationCorrection() {
+    const confirmedDocument = safeProductionSpecification(productionSpecification?.confirmedData, catalogue)
+    if (!productionSpecification || !confirmedDocument) return
+    setCreateStatus('saving')
+    setCreateError(null)
+    try {
+      const saved = await saveWorkOrderItemProductionSpecificationDraftAction(item.id, confirmedDocument, {
+        expectedConfirmedRevision: productionSpecification.confirmedRevision ?? 0,
+        expectedDraftRevision: productionSpecification.draftRevision ?? 0,
+      })
+      setProductionSpecification((current) => current ? {
+        ...current,
+        ...saved,
+        draftData: confirmedDocument,
+      } : current)
+      setLocalSpecificationDocument(confirmedDocument)
+      setCreateStatus('idle')
+    } catch (error) {
+      setCreateStatus('error')
+      setCreateError(error instanceof Error ? error.message : 'Production Specification could not be opened for correction.')
+    }
+  }
+
   return (
     <div className="space-y-1" role="cell">
       <div className="flex flex-wrap items-center gap-2">
@@ -181,7 +296,7 @@ function ItemCompositeField({
         )}
       </div>
       <div title={hoverDetail} className="flex flex-wrap items-center gap-2 text-gray-950">
-        {canEdit ? (
+        {canEdit && !hasConfirmedSpecification ? (
           <>
             <form
               className="flex min-w-[260px] flex-1 gap-2"
@@ -216,7 +331,7 @@ function ItemCompositeField({
                 }
               }}
             >
-              <button type="submit" className="rounded border border-sky-300 bg-white px-2 py-1 text-xs font-medium text-sky-800 hover:bg-sky-50">
+              <button type="submit" className="rounded border border-[var(--brand-strong)] bg-surface px-2 py-1 text-xs font-medium text-[var(--brand-strong)] hover:bg-surface-subtle">
                 Regenerate with AI
               </button>
             </form>
@@ -227,18 +342,80 @@ function ItemCompositeField({
             />
           </>
         ) : (
-          <span>{effectiveLabel}</span>
+          <span className="line-clamp-2 whitespace-pre-line">{effectiveLabel}</span>
         )}
         {isLabelPending && (
-          <span className="rounded bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800">Label pending</span>
+          <span className="rounded bg-[var(--state-info-soft)] px-2 py-0.5 text-xs font-medium text-text-primary">Label pending</span>
         )}
         {item.labelStatus === 'source_changed' && (
-          <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">Source description changed</span>
+          <span className="rounded bg-[var(--state-warning-soft)] px-2 py-0.5 text-xs font-medium text-[var(--state-warning)]">Source description changed</span>
+        )}
+        {sourceChanged && (
+          <span className="rounded bg-[var(--state-warning-soft)] px-2 py-0.5 text-xs font-semibold text-[var(--state-warning)]">Source Changed</span>
         )}
         {!item.isActive && (
-          <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">Removed</span>
+          <span className="rounded bg-[var(--state-warning-soft)] px-2 py-0.5 text-xs font-medium text-[var(--state-warning)]">Removed</span>
         )}
       </div>
+      {productionSpecificationsEnabled && enrichmentStatus?.status === 'queued' && (
+        <div className="mt-2 rounded border border-[var(--state-info)] bg-[var(--state-info-soft)] px-2 py-1 text-xs text-text-primary" role="status">
+          Enrichment queued
+        </div>
+      )}
+      {productionSpecificationsEnabled && enrichmentStatus?.status === 'processing' && (
+        <div className="mt-2 rounded border border-[var(--state-info)] bg-[var(--state-info-soft)] px-2 py-1 text-xs text-text-primary" role="status">
+          Enrichment processing
+        </div>
+      )}
+      {productionSpecificationsEnabled && enrichmentStatus?.status === 'failed' && (
+        <div className="mt-2 space-y-1 rounded border border-[var(--state-critical)] bg-[var(--state-critical-soft)] px-2 py-1 text-xs text-[var(--state-critical)]" role="status">
+          {canManageSpecification ? (
+            <button
+              type="button"
+              disabled={enrichmentRetryState === 'retrying'}
+              onClick={() => void retryEnrichment()}
+              className="font-semibold underline disabled:cursor-wait disabled:opacity-60"
+            >
+              Enrichment failed - Retry
+            </button>
+          ) : (
+            <span>Enrichment failed</span>
+          )}
+          {enrichmentRetryState === 'error' && <p role="alert">Enrichment retry could not be queued.</p>}
+        </div>
+      )}
+      {canManageSpecification && !productionSpecification && !enrichmentStatus && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            disabled={createStatus === 'saving'}
+            onClick={() => void createSpecificationDraft()}
+            className="rounded border border-[var(--brand-strong)] bg-surface px-2 py-1 text-xs font-semibold text-[var(--brand-strong)] disabled:cursor-wait disabled:opacity-60"
+          >
+            Create specification draft
+          </button>
+          {createStatus === 'saving' && <span role="status" className="text-xs text-[var(--state-info)]">Creating draft</span>}
+          {createStatus === 'error' && <span role="alert" className="text-xs text-[var(--state-critical)]">{createError}</span>}
+        </div>
+      )}
+      {productionSpecification && structuredDocument && (
+        <ProductionSpecificationDetails
+          item={item}
+          persisted={productionSpecification}
+          specification={structuredDocument}
+          draftSpecification={draftSpecificationDocument}
+          canManage={canManageSpecification}
+          correctionStatus={createStatus}
+          correctionError={createError}
+          onStartCorrection={() => void startSpecificationCorrection()}
+          sourceChanged={sourceChanged}
+          onSourceIgnored={() => setSourceChanged(false)}
+          onSourceDraftCreated={(saved) => {
+            setProductionSpecification((current) => current ? { ...current, ...saved } : current)
+          }}
+          catalogue={catalogue}
+        />
+      )}
     </div>
   )
 }
@@ -339,7 +516,7 @@ function EditableOperationalField({
 
   return (
     <div>
-      <dt className="text-[11px] font-medium uppercase tracking-wide text-gray-500">{label}</dt>
+      <dt className="text-[11px] font-medium uppercase tracking-wide text-gray-600">{label}</dt>
       <dd className="mt-1">
         {type === 'date' ? (
           <input
@@ -424,6 +601,18 @@ function ItemCount({ count }: { count: number }) {
 function formatQuantity(quantity: string) {
   const parsed = Number(quantity)
   return Number.isFinite(parsed) ? String(parsed) : quantity
+}
+
+function productionSpecificationStateKey(item: WorkOrderItemSummaryRow, enabled: boolean) {
+  const specification = item.productionSpecification
+  return [
+    enabled ? 'enabled' : 'disabled',
+    specification?.id ?? 'none',
+    specification?.confirmedRevision ?? 0,
+    specification?.draftRevision ?? 0,
+    specification?.currentSourceDescriptionFingerprint ?? 'no-source',
+    specification?.sourceChanged ? 'changed' : 'unchanged',
+  ].join(':')
 }
 
 function truncateDescription(description: string) {

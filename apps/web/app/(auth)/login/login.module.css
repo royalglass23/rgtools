@@ -1,0 +1,173 @@
+.page {
+  display: grid;
+  min-height: 100vh;
+  grid-template-columns: minmax(18rem, 0.8fr) minmax(24rem, 1.2fr);
+  background: var(--canvas);
+}
+
+.brandPanel {
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(2rem, 6vw, 5rem);
+  background: var(--shell-background);
+  color: var(--shell-text-primary);
+}
+
+.brandPanel > div:nth-child(2) p,
+.signInPanel header p {
+  margin: 0;
+  color: var(--brand-highlight);
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
+.brandPanel h1 {
+  margin: 0.35rem 0 0;
+  color: var(--shell-text-primary);
+  font-size: 2.5rem;
+}
+
+.brandMark {
+  display: grid;
+  width: 3rem;
+  height: 3rem;
+  margin-bottom: 1.5rem;
+  place-items: center;
+  border: 1px solid var(--shell-border-interactive);
+  border-radius: var(--radius-control);
+  background: var(--shell-active);
+  color: var(--brand-highlight);
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.brandDescription {
+  max-width: 34rem;
+  margin: 2rem 0 0;
+  color: var(--shell-text-secondary);
+  font-size: 0.92rem;
+  line-height: 1.65;
+}
+
+.signInArea {
+  position: relative;
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 5rem 2rem 2rem;
+}
+
+.themeControl {
+  position: absolute;
+  top: 1.5rem;
+  right: 1.5rem;
+  padding: 0.35rem;
+  border-radius: var(--radius-control);
+  background: var(--shell-background);
+}
+
+.signInPanel {
+  width: min(100%, 27rem);
+  padding: 2rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-panel);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-raised);
+}
+
+.signInPanel h2 {
+  margin: 0.35rem 0 0;
+  color: var(--text-primary);
+  font-size: 1.65rem;
+}
+
+.signInPanel header span {
+  display: block;
+  margin-top: 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.form {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.6rem;
+}
+
+.form label {
+  display: grid;
+  gap: 0.4rem;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.form input {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-elevated);
+  color: var(--text-primary);
+}
+
+.form button {
+  min-height: 2.75rem;
+  border: 1px solid var(--brand-primary);
+  border-radius: var(--radius-control);
+  background: var(--brand-primary);
+  color: var(--brand-on-strong);
+  font-size: 0.85rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.form button:hover:not(:disabled) {
+  background: var(--brand-structural);
+}
+
+.form button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.error {
+  margin: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--state-critical);
+  border-radius: var(--radius-control);
+  background: var(--state-critical-soft);
+  color: var(--state-critical);
+  font-size: 0.8rem;
+}
+
+@media (max-width: 760px) {
+  .page {
+    grid-template-columns: 1fr;
+  }
+
+  .brandPanel {
+    min-height: auto;
+    padding: 2rem 1.5rem;
+  }
+
+  .brandPanel h1 {
+    font-size: 1.8rem;
+  }
+
+  .brandDescription {
+    margin-top: 1rem;
+  }
+
+  .signInArea {
+    min-height: auto;
+    padding: 5rem 1rem 2rem;
+  }
+
+  .signInPanel {
+    padding: 1.5rem;
+  }
+}

@@ -8,6 +8,7 @@ import { batchDeleteLeadsAction, restoreLeadAction } from './actions'
 import { saveTablePrefs } from './table-prefs-actions'
 import { DEFAULT_LEADS_PREFS, type TablePrefs } from './table-prefs-shared'
 import { formatAnswerKey, formatProjectType } from '../lead-intake/display-labels'
+import { StatusBadge, TableShell } from '@/components/precision-ui/PrecisionUI'
 
 type LeadRow = {
   id: string
@@ -40,26 +41,26 @@ type ColumnDef = {
 }
 
 const COLUMN_DEFS: ColumnDef[] = [
-  { key: 'date', label: 'Date', sortKey: 'createdAt', className: 'whitespace-nowrap text-gray-600', render: (lead) => formatDate(lead.createdAt) },
+  { key: 'date', label: 'Date', sortKey: 'createdAt', className: 'whitespace-nowrap text-text-secondary', render: (lead) => formatDate(lead.createdAt) },
   { key: 'client', label: 'Client', sortKey: 'clientName', render: (lead) => (
     <>
-      <span className="font-medium text-gray-950">{lead.clientName}</span>
-      {lead.companyName && <span className="block text-xs text-gray-500">{lead.companyName}</span>}
+      <span className="font-medium text-text-primary">{lead.clientName}</span>
+      {lead.companyName && <span className="block text-xs text-text-muted">{lead.companyName}</span>}
     </>
   ) },
-  { key: 'jobNumber', label: 'Job Number', className: 'whitespace-nowrap text-gray-700', render: (lead) => lead.servicem8JobNumber ?? '-' },
-  { key: 'address', label: 'Job Address', className: 'max-w-xs text-gray-700', render: (lead) => <span className="block truncate">{lead.location ?? '-'}</span> },
-  { key: 'project', label: 'Project', className: 'text-gray-700', render: (lead) => formatProjectType(lead.projectType) },
+  { key: 'jobNumber', label: 'Job Number', className: 'whitespace-nowrap text-text-secondary', render: (lead) => lead.servicem8JobNumber ?? '-' },
+  { key: 'address', label: 'Job Address', className: 'max-w-xs text-text-secondary', render: (lead) => <span className="block truncate">{lead.location ?? '-'}</span> },
+  { key: 'project', label: 'Project', className: 'text-text-secondary', render: (lead) => formatProjectType(lead.projectType) },
   { key: 'tier', label: 'Tier', sortKey: 'tier', render: (lead) => <TierBadge tier={lead.tier} /> },
-  { key: 'score', label: 'Score', sortKey: 'seedScore', className: 'text-gray-700', render: (lead) => lead.seedScore ?? '-' },
+  { key: 'score', label: 'Score', sortKey: 'seedScore', className: 'text-text-secondary', render: (lead) => lead.seedScore ?? '-' },
   { key: 'sm8', label: 'SM8', render: (lead) => <Sm8Badge linked={Boolean(lead.servicem8JobUuid)} status={lead.syncStatus} /> },
-  { key: 'completeness', label: 'Completeness', sortKey: 'completeness', className: 'text-gray-700', render: (lead) => lead.completeness === null ? '-' : `${lead.completeness}%` },
-  { key: 'rcStatus', label: 'RC', className: 'text-gray-700', render: (lead) => formatAnswerKey(lead.rcStatus) },
-  { key: 'bcStatus', label: 'BC', className: 'text-gray-700', render: (lead) => formatAnswerKey(lead.bcStatus) },
-  { key: 'buildingStage', label: 'Building Stage', className: 'text-gray-700', render: (lead) => formatAnswerKey(lead.buildingStage) },
-  { key: 'followUpDate', label: 'Follow-up date', sortKey: 'followUpDate', className: 'whitespace-nowrap text-gray-700', render: (lead) => formatNullableDate(lead.followUpDate) },
-  { key: 'updatedAt', label: 'Last update', sortKey: 'updatedAt', className: 'whitespace-nowrap text-gray-700', render: (lead) => formatDate(lead.updatedAt) },
-  { key: 'aiSuggestion', label: 'AI suggestion', className: 'max-w-xs text-gray-700', render: (lead) => <span className="block truncate">{lead.aiSuggestion ?? '-'}</span> },
+  { key: 'completeness', label: 'Completeness', sortKey: 'completeness', className: 'text-text-secondary', render: (lead) => lead.completeness === null ? '-' : `${lead.completeness}%` },
+  { key: 'rcStatus', label: 'RC', className: 'text-text-secondary', render: (lead) => formatAnswerKey(lead.rcStatus) },
+  { key: 'bcStatus', label: 'BC', className: 'text-text-secondary', render: (lead) => formatAnswerKey(lead.bcStatus) },
+  { key: 'buildingStage', label: 'Building Stage', className: 'text-text-secondary', render: (lead) => formatAnswerKey(lead.buildingStage) },
+  { key: 'followUpDate', label: 'Follow-up date', sortKey: 'followUpDate', className: 'whitespace-nowrap text-text-secondary', render: (lead) => formatNullableDate(lead.followUpDate) },
+  { key: 'updatedAt', label: 'Last update', sortKey: 'updatedAt', className: 'whitespace-nowrap text-text-secondary', render: (lead) => formatDate(lead.updatedAt) },
+  { key: 'aiSuggestion', label: 'AI suggestion', className: 'max-w-xs text-text-secondary', render: (lead) => <span className="block truncate">{lead.aiSuggestion ?? '-'}</span> },
 ]
 
 const columnDefByKey = new Map(COLUMN_DEFS.map((column) => [column.key, column]))
@@ -142,12 +143,12 @@ export function LeadsTableControls({
 
       {isAdmin && (
         <div className="flex items-center justify-between text-sm">
-          <span className="text-gray-500">{selectedIds.length} selected</span>
+          <span className="text-text-muted">{selectedIds.length} selected</span>
           <button
             type="submit"
             form="batch-delete-form"
             disabled={selectedIds.length === 0}
-            className="rounded border border-red-300 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded border border-[var(--state-critical)] px-3 py-2 text-sm font-medium text-[var(--state-critical)] hover:bg-[var(--state-critical-soft)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             Delete selected
           </button>
@@ -205,7 +206,7 @@ export function LeadsTableControls({
         />
       )}
 
-      <div className="grid grid-cols-3 items-center gap-3 text-sm text-gray-600">
+      <div className="grid grid-cols-3 items-center gap-3 text-sm text-text-secondary max-sm:grid-cols-1">
         <span>{total} leads</span>
         <div className="flex items-center justify-center gap-2">
           <PageLink filters={filters} page={Math.max(1, filters.page - 1)} disabled={filters.page <= 1} basePath={basePath} paramPrefix={paramPrefix}>Previous</PageLink>
@@ -246,7 +247,7 @@ function FilterBar({
   if (isAdmin) statusViewOptions.push(['archived', 'Archived only'])
 
   return (
-    <form key={filterKey} action={basePath} className="grid gap-3 rounded border border-gray-200 bg-white p-4 shadow-sm sm:grid-cols-8">
+    <form key={filterKey} action={basePath} className="grid gap-3 rounded-[var(--radius-panel)] border border-border bg-surface p-4 shadow-[var(--shadow-raised)] sm:grid-cols-8">
       {carryOver.map(([key, value]) => (
         <input key={key} type="hidden" name={key} value={value} />
       ))}
@@ -256,17 +257,17 @@ function FilterBar({
       <input type="hidden" name={`${paramPrefix}sortDir`} value={filters.sortDir} />
 
       <label className="block sm:col-span-2">
-        <span className="text-xs font-medium text-gray-600">Search</span>
+        <span className="text-xs font-medium text-text-secondary">Search</span>
         <div className="mt-1 flex gap-2">
           <input
             name={`${paramPrefix}q`}
             defaultValue={filters.q}
             placeholder="Client, address, phone, job number..."
-            className="min-w-0 flex-1 rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-950"
+            className="min-w-0 flex-1 rounded-[var(--radius-control)] border border-border bg-surface px-3 py-2 text-sm text-text-primary"
           />
           <button
             type="submit"
-            className="rounded bg-[#142B3A] px-3 py-2 text-sm font-medium text-white hover:bg-[#1d3d52]"
+            className="rounded-[var(--radius-control)] bg-[var(--brand-strong)] px-3 py-2 text-sm font-medium text-[var(--text-inverse)]"
           >
             Search
           </button>
@@ -279,7 +280,7 @@ function FilterBar({
       <LeadsSortSelect filters={filters} basePath={basePath} paramPrefix={paramPrefix} onSort={onSort} />
       <Select name={`${paramPrefix}statusView`} label="View" value={filters.statusView} options={statusViewOptions} />
       <div className="flex items-end justify-end">
-        <Link href={resetHref} className="rounded border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+        <Link href={resetHref} className="rounded-[var(--radius-control)] border border-border px-3 py-2 text-sm font-medium text-text-secondary hover:bg-surface-subtle">
           Reset
         </Link>
       </div>
@@ -290,12 +291,12 @@ function FilterBar({
 function Select({ name, label, value, options }: { name: string; label: string; value: string; options: Array<[string, string]> }) {
   return (
     <label className="block">
-      <span className="text-xs font-medium text-gray-600">{label}</span>
+      <span className="text-xs font-medium text-text-secondary">{label}</span>
       <select
         name={name}
         defaultValue={value}
         onChange={(event) => event.currentTarget.form?.requestSubmit()}
-        className="mt-1 w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-950"
+        className="mt-1 w-full rounded-[var(--radius-control)] border border-border bg-surface px-3 py-2 text-sm text-text-primary"
       >
         {options.map(([optionValue, optionLabel]) => <option key={optionValue} value={optionValue}>{optionLabel}</option>)}
       </select>
@@ -322,11 +323,11 @@ function LeadsSortSelect({ filters, basePath, paramPrefix, onSort }: { filters: 
 
   return (
     <label className="block">
-      <span className="text-xs font-medium text-gray-600">Sort</span>
+      <span className="text-xs font-medium text-text-secondary">Sort</span>
       <select
         value={currentValue}
         onChange={(e) => handleChange(e.target.value)}
-        className="mt-1 w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-950"
+        className="mt-1 w-full rounded-[var(--radius-control)] border border-border bg-surface px-3 py-2 text-sm text-text-primary"
       >
         <option value="clientName_asc">Client A–Z</option>
         <option value="clientName_desc">Client Z–A</option>
@@ -371,9 +372,9 @@ function LeadsTable({
   onSort: (sortColumn: string) => void
 }) {
   return (
-    <div className="overflow-hidden rounded border border-gray-200 bg-white shadow-sm">
-      <table className="min-w-full divide-y divide-gray-200 text-sm">
-        <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+    <TableShell label="Leads table">
+      <table className="min-w-full divide-y divide-border text-sm">
+        <thead className="bg-surface-subtle text-left text-xs font-semibold uppercase tracking-wide text-text-muted">
           <tr>
             {isAdmin && (
               <th className="w-10 px-4 py-3">
@@ -382,7 +383,7 @@ function LeadsTable({
                   checked={allVisibleSelected}
                   onChange={onToggleAllVisible}
                   aria-label="Select all visible leads"
-                  className="h-4 w-4 rounded border-gray-300"
+                   className="h-4 w-4 rounded border-border"
                 />
               </th>
             )}
@@ -398,9 +399,9 @@ function LeadsTable({
             )}
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-100">
+        <tbody className="divide-y divide-border">
           {rows.map((lead) => (
-            <tr key={lead.id} className="hover:bg-gray-50">
+            <tr key={lead.id} className="hover:bg-surface-subtle">
               {isAdmin && (
                 <td className="px-4 py-3">
                   <input
@@ -408,7 +409,7 @@ function LeadsTable({
                     checked={selectedSet.has(lead.id)}
                     onChange={() => onToggleLead(lead.id)}
                     aria-label={`Select lead for ${lead.clientName}`}
-                    className="h-4 w-4 rounded border-gray-300"
+                    className="h-4 w-4 rounded border-border"
                   />
                 </td>
               )}
@@ -423,7 +424,7 @@ function LeadsTable({
                     <input type="hidden" name="leadId" value={lead.id} />
                     <button
                       type="submit"
-                      className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                      className="rounded-[var(--radius-control)] border border-border px-3 py-1.5 text-sm font-medium text-text-secondary hover:bg-surface-subtle"
                     >
                       Restore
                     </button>
@@ -436,7 +437,7 @@ function LeadsTable({
             <tr>
               <td
                 colSpan={columns.length + (isAdmin ? 1 : 0) + (isAdmin && isArchivedView ? 1 : 0)}
-                className="px-4 py-8 text-center text-gray-500"
+                className="px-4 py-8 text-center text-text-muted"
               >
                 No leads found.
               </td>
@@ -444,7 +445,7 @@ function LeadsTable({
           )}
         </tbody>
       </table>
-    </div>
+    </TableShell>
   )
 }
 
@@ -458,7 +459,7 @@ function SortableHeader({ column, prefs, onSort }: { column: ColumnDef; prefs: T
     <button
       type="button"
       onClick={() => onSort(column.sortKey as string)}
-      className="text-left text-xs font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-900"
+      className="text-left text-xs font-semibold uppercase tracking-wide text-text-muted hover:text-text-primary"
     >
       {column.label}{marker}
     </button>
@@ -477,12 +478,12 @@ function PageSizeSelect({ filters, basePath, paramPrefix }: { filters: LeadsList
   }
 
   return (
-    <label className="flex items-center gap-2 text-sm text-gray-600">
+    <label className="flex items-center gap-2 text-sm text-text-secondary">
       <span className="whitespace-nowrap">Page size</span>
       <select
         value={String(filters.size)}
         onChange={(e) => handleChange(e.target.value)}
-        className="rounded border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-950"
+        className="rounded-[var(--radius-control)] border border-border bg-surface px-2 py-1.5 text-sm text-text-primary"
       >
         {(['5', '10', '20', '50', '100'] as const).map((n) => <option key={n} value={n}>{n}</option>)}
       </select>
@@ -504,30 +505,23 @@ function PageLink({ filters, page, disabled, basePath, paramPrefix, children }: 
   params.set(`${paramPrefix}sortDir`, filters.sortDir)
   params.set(`${paramPrefix}page`, String(page))
 
-  if (disabled) return <span className="rounded border border-gray-200 px-3 py-1.5 text-gray-400">{children}</span>
-  return <Link href={`${basePath}?${params}`} className="rounded border border-gray-300 px-3 py-1.5 text-gray-700 hover:bg-gray-50">{children}</Link>
+  if (disabled) return <span className="rounded-[var(--radius-control)] border border-border px-3 py-1.5 text-text-muted opacity-60">{children}</span>
+  return <Link href={`${basePath}?${params}`} className="rounded-[var(--radius-control)] border border-border px-3 py-1.5 text-text-secondary hover:bg-surface-subtle">{children}</Link>
 }
 
 function TierBadge({ tier }: { tier: string | null }) {
   if (!tier) {
-    return <span className="inline-flex rounded px-2 py-1 text-xs font-semibold bg-gray-100 text-gray-700">Needs scoring</span>
+    return <StatusBadge tone="muted">Needs scoring</StatusBadge>
   }
 
-  const classes = {
-    A: 'bg-green-100 text-green-800',
-    B: 'bg-blue-100 text-blue-800',
-    C: 'bg-yellow-100 text-yellow-800',
-    D: 'bg-gray-100 text-gray-700',
-    E: 'bg-slate-100 text-slate-700',
-  }[tier ?? 'D']
-
-  return <span className={`inline-flex rounded px-2 py-1 text-xs font-semibold ${classes}`}>{tier ?? 'D'}</span>
+  const tone = tier === 'A' ? 'positive' : tier === 'B' ? 'info' : tier === 'C' ? 'warning' : 'muted'
+  return <StatusBadge tone={tone}>{tier}</StatusBadge>
 }
 
 function Sm8Badge({ linked, status }: { linked: boolean; status: string }) {
-  if (linked) return <span className="inline-flex rounded bg-green-100 px-2 py-1 text-xs font-semibold text-green-800">Linked</span>
-  if (status === 'sync_failed') return <span className="inline-flex rounded bg-red-100 px-2 py-1 text-xs font-semibold text-red-800">Failed</span>
-  return <span className="inline-flex rounded bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">Pending</span>
+  if (linked) return <StatusBadge tone="positive">Linked</StatusBadge>
+  if (status === 'sync_failed') return <StatusBadge tone="critical">Failed</StatusBadge>
+  return <StatusBadge tone="warning">Pending</StatusBadge>
 }
 
 function formatDate(date: Date | string) {
