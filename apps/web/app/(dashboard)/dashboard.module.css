@@ -187,13 +187,17 @@
   display: grid;
 }
 
+.nextActionsPanel {
+  align-content: start;
+}
+
 .nextActionRow {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.7rem;
+  gap: var(--space-3);
   min-height: 4rem;
-  padding-block: 0.55rem;
+  padding-block: var(--space-2);
   color: var(--text-primary);
   text-decoration: none;
 }
@@ -225,7 +229,7 @@
 .nextActionCopy {
   display: grid;
   min-width: 0;
-  gap: 0.2rem;
+  gap: var(--space-1);
 }
 
 .nextActionCopy strong {

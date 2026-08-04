@@ -193,15 +193,15 @@ function dashboardActions(counts: ActionCounts): DashboardAction[] {
       href: "/leads?sm8=pending",
       tone: "critical",
       area: "Leads",
-      recommendation: "Link high-priority leads to ServiceM8",
+      recommendation: "Create or link ServiceM8 jobs",
       recommendationDetail:
-        "Tier A and B leads are waiting for an operational job record.",
+        "Leads are waiting for an operational job record.",
     },
     {
       id: "stale",
       label: "Stale leads",
       count: counts.staleLeads,
-      href: "/leads?stale=true",
+      href: "/leads?stale=true&statusView=all_statuses",
       tone: "warning",
       area: "Leads",
       recommendation: "Clear the stale-lead queue",
@@ -300,7 +300,11 @@ function NextActionsSection({ counts }: { counts: ActionCounts }) {
     .slice(0, 4);
 
   return (
-    <DataPanel title="Next actions" eyebrow="Active modules">
+    <DataPanel
+      title="Next actions"
+      eyebrow="Active modules"
+      className={styles.nextActionsPanel}
+    >
       {activeActions.length > 0 ? (
         <div className={styles.nextActionList}>
           {activeActions.map((action) => (

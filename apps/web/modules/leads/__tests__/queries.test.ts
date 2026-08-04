@@ -202,13 +202,25 @@ describe('getLeadsList – stale filter WHERE clause', () => {
     vi.useRealTimers()
   })
 
-  it('includes isNull on servicem8_job_uuid when stale is true', async () => {
-    await getLeadsList({ ...filters, stale: true })
+  it('includes every non-failed unlinked lead in the pending ServiceM8 queue', async () => {
+    await getLeadsList({ ...filters, sm8: 'pending' })
 
     expect(whereCalls[0]).toEqual(expect.objectContaining({
       type: 'and',
       conditions: expect.arrayContaining([
         { type: 'isNull', column: 'servicem8_job_uuid' },
+        { type: 'ne', column: 'sync_status', value: 'sync_failed' },
+      ]),
+    }))
+  })
+
+  it('requires a linked ServiceM8 job when stale is true', async () => {
+    await getLeadsList({ ...filters, stale: true })
+
+    expect(whereCalls[0]).toEqual(expect.objectContaining({
+      type: 'and',
+      conditions: expect.arrayContaining([
+        { type: 'isNotNull', column: 'servicem8_job_uuid' },
       ]),
     }))
   })

@@ -9,6 +9,7 @@ vi.mock('drizzle-orm', () => ({
   count: vi.fn(() => 'count'),
   eq: vi.fn((column: { name?: string }, value: unknown) => ({ type: 'eq', column: column.name, value })),
   gt: vi.fn((column: { name?: string }, value: unknown) => ({ type: 'gt', column: column.name, value })),
+  isNotNull: vi.fn((column: { name?: string }) => ({ type: 'isNotNull', column: column.name })),
   isNull: vi.fn((column: { name?: string }) => ({ type: 'isNull', column: column.name })),
   lte: vi.fn((column: { name?: string }, value: unknown) => ({ type: 'lte', column: column.name, value })),
   ne: vi.fn((column: { name?: string }, value: unknown) => ({ type: 'ne', column: column.name, value })),
@@ -71,19 +72,14 @@ beforeEach(() => {
 })
 
 describe('getDashboardActionCounts – unsynced', () => {
-  it('includes or with tier A/B and isNull on servicem8_job_uuid', async () => {
+  it('includes every non-failed lead without a ServiceM8 job', async () => {
     await getDashboardActionCounts()
 
     expect(whereCalls[1]).toEqual(expect.objectContaining({
       type: 'and',
       conditions: expect.arrayContaining([
-        expect.objectContaining({
-          type: 'or',
-          conditions: expect.arrayContaining([
-            { type: 'eq', column: 'tier', value: 'A' },
-          ]),
-        }),
         { type: 'isNull', column: 'servicem8_job_uuid' },
+        { type: 'ne', column: 'sync_status', value: 'sync_failed' },
       ]),
     }))
   })
@@ -191,13 +187,14 @@ describe('getDashboardActionCounts – staleLeads', () => {
     vi.useRealTimers()
   })
 
-  it('includes lte on created_at with 7-day back cutoff', async () => {
+  it('requires a linked ServiceM8 job and includes the 7-day back cutoff', async () => {
     await getDashboardActionCounts()
 
     const cutoff = new Date('2026-06-20T00:00:00Z')
     expect(whereCalls[0]).toEqual(expect.objectContaining({
       type: 'and',
       conditions: expect.arrayContaining([
+        { type: 'isNotNull', column: 'servicem8_job_uuid' },
         { type: 'lte', column: 'created_at', value: cutoff },
       ]),
     }))
