@@ -251,8 +251,8 @@ function listWhere(filters: LeadsListFilters, options: GetLeadsListOptions = {})
   if (filters.tier !== 'all') conditions.push(eq(leads.tier, filters.tier))
   if (filters.sm8 === 'linked') conditions.push(isNotNull(leads.servicem8JobUuid))
   if (filters.sm8 === 'pending') {
-    conditions.push(eq(leads.syncStatus, 'synced'))
     conditions.push(isNull(leads.servicem8JobUuid))
+    conditions.push(ne(leads.syncStatus, 'sync_failed'))
   }
   if (filters.sm8 === 'failed') conditions.push(eq(leads.syncStatus, 'sync_failed'))
   if (filters.date !== 'all') {
@@ -263,7 +263,7 @@ function listWhere(filters: LeadsListFilters, options: GetLeadsListOptions = {})
   if (filters.stale) {
     const cutoff = new Date()
     cutoff.setDate(cutoff.getDate() - STALE_LEAD_DAYS)
-    conditions.push(isNull(leads.servicem8JobUuid))
+    conditions.push(isNotNull(leads.servicem8JobUuid))
     conditions.push(ne(leads.syncStatus, 'sync_failed'))
     conditions.push(lte(leads.createdAt, cutoff))
   }

@@ -210,7 +210,7 @@ export async function getDashboardActionCounts() {
       .from(leads)
       .where(and(
         isNull(leads.archivedAt),
-        isNull(leads.servicem8JobUuid),
+        isNotNull(leads.servicem8JobUuid),
         ne(leads.syncStatus, 'sync_failed'),
         lte(leads.createdAt, staleCutoff),
       )),
@@ -218,8 +218,8 @@ export async function getDashboardActionCounts() {
       .from(leads)
       .where(and(
         isNull(leads.archivedAt),
-        or(eq(leads.tier, 'A'), eq(leads.tier, 'B')),
         isNull(leads.servicem8JobUuid),
+        ne(leads.syncStatus, 'sync_failed'),
       )),
     db.select({ total: count() })
       .from(quotes)
