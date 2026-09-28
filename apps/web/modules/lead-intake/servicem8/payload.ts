@@ -110,21 +110,7 @@ export function buildServiceM8InboxEmail(
   const tier = record.tier ?? 'D'
   const score = record.seedScore ?? 0
   const completeness = record.completeness ?? 0
-  const jobCard = buildServiceM8LeadJobCardFields(record)
   const projectDetails = buildReadableProjectDetails(record.freeText)
-  const leadDetails = [
-    readableLine('Client type', jobCard.clientType),
-    readableLine('Consent status', humanizeValue(record.consentStatus)),
-    readableLine('Complexity', optionLabel('projectType', record.complexity)),
-    readableLine('Price-sensitivity read', optionLabel('priceSensitivity', record.priceSensitivityRead)),
-    readableLine('Decision-makers', optionLabel('decisionMakers', record.decisionMakers)),
-    readableLine('Source', optionLabel('source', record.source)),
-    readableLine('Payment history', optionLabel('paymentHistory', record.paymentHistory)),
-    readableLine('Site access', optionLabel('siteAccess', record.siteAccess)),
-    readableLine('Installation height', optionLabel('installationHeight', record.installationHeight)),
-    readableLine('Channel', humanizeValue(record.channel)),
-    readableLine('Suburb', record.suburb),
-  ].filter((line): line is string => Boolean(line))
   const subject = [
     'RGTools Lead',
     `Leads Quality ${tier}`,
@@ -132,35 +118,10 @@ export function buildServiceM8InboxEmail(
     humanizeValue(record.projectType),
   ].filter(Boolean).join(' - ')
   const bodyLines = [
-    '--- Contact ---',
-    `Name: ${record.clientName}`,
-    record.companyName ? `Company: ${record.companyName}` : null,
-    record.phone ? `Mobile: ${record.phone}` : null,
-    record.email ? `Email: ${record.email}` : null,
-    record.location ? `Address: ${record.location}` : null,
+    ...buildContactLines(record),
     '',
-    '--- Lead Score ---',
-    `Quality: ${tier}`,
-    `Score: ${score}`,
-    `Completeness: ${completeness}%`,
-    record.strikeFlag ? `Flag: ${record.strikeFlag}` : null,
-    record.scoreReason ? `Reason: ${formatScoreReason(record.scoreReason)}` : null,
-    '',
-    '--- Project Summary ---',
-    readableLine('Product', humanizeValue(record.projectType)),
-    readableLine('Project', projectDetails.project),
-    readableLine('Budget', optionLabel('budgetBand', record.budgetBand)),
-    readableLine('Estimated price', projectDetails.estimatedPrice),
-    readableLine('Subtotal', projectDetails.subtotal),
-    readableLine('Driving distance', optionLabel('distanceBand', record.distanceBand)),
-    readableLine('Last updated', formatLeadCardDate(record.updatedAt)),
-    ...(leadDetails.length > 0 ? ['', '--- Lead Details ---', ...leadDetails] : []),
-    ...(projectDetails.installationLines.length > 0
-      ? ['', '--- Installation Details ---', ...projectDetails.installationLines]
-      : []),
-    '',
-    '--- Reference ---',
-    `RGTools Lead: ${record.leadId}`,
+    ...buildProjectSummaryLines(record, projectDetails),
+    `Reference: RGTools Lead ${record.leadId}`,
   ].filter((line): line is string => line !== null)
 
   return {
@@ -178,30 +139,45 @@ export function buildServiceM8InboxEmail(
 }
 
 export function buildServiceM8LeadJobCardFields(
-  record: Pick<ServiceM8LeadSyncRecord,
-    | 'leadId'
-    | 'clientProfileKey'
-    | 'freeText'
-    | 'projectType'
-    | 'complexity'
-    | 'tier'
-    | 'seedScore'
-    | 'completeness'
-    | 'scoreReason'
-    | 'strikeFlag'
-    | 'updatedAt'
-  >,
+  record: ServiceM8LeadSyncRecord,
 ): ServiceM8LeadJobCardFields {
   const leadQuality = record.tier ?? null
-  const jobDescriptionSegments = [
-    record.seedScore === null || record.seedScore === undefined ? null : `Score ${record.seedScore}`,
-    readableSegment('Product', humanizeValue(record.projectType)),
-    readableSegment('Project', optionLabel('projectType', record.complexity)),
+  const projectDetails = buildReadableProjectDetails(record.freeText)
+  const leadScoreLines = [
+    record.tier ? `Quality: ${record.tier}` : null,
+    record.seedScore === null || record.seedScore === undefined ? null : `Score: ${record.seedScore}`,
+    record.completeness === null || record.completeness === undefined
+      ? null
+      : `Completeness: ${record.completeness}%`,
+    record.strikeFlag ? `Flag: ${record.strikeFlag}` : null,
+    record.scoreReason ? `Reason: ${formatScoreReason(record.scoreReason)}` : null,
+  ].filter((line): line is string => Boolean(line))
+  const leadDetails = [
+    readableLine('Client type', optionLabel('clientType', record.clientProfileKey)),
+    readableLine('Consent status', humanizeValue(record.consentStatus)),
+    readableLine('Complexity', optionLabel('projectType', record.complexity)),
+    readableLine('Price-sensitivity read', optionLabel('priceSensitivity', record.priceSensitivityRead)),
+    readableLine('Decision-makers', optionLabel('decisionMakers', record.decisionMakers)),
+    readableLine('Source', optionLabel('source', record.source)),
+    readableLine('Payment history', optionLabel('paymentHistory', record.paymentHistory)),
+    readableLine('Site access', optionLabel('siteAccess', record.siteAccess)),
+    readableLine('Installation height', optionLabel('installationHeight', record.installationHeight)),
+    readableLine('Channel', humanizeValue(record.channel)),
+    readableLine('Suburb', record.suburb),
   ].filter((line): line is string => Boolean(line))
   const jobDescription = [
-    ...jobDescriptionSegments,
-    readableSegment('Last update', formatLeadCardDate(record.updatedAt)),
-  ].filter((line): line is string => Boolean(line)).join(' | ')
+    ...buildContactLines(record),
+    ...(leadScoreLines.length > 0 ? ['', '--- Lead Score ---', ...leadScoreLines] : []),
+    '',
+    ...buildProjectSummaryLines(record, projectDetails),
+    ...(leadDetails.length > 0 ? ['', '--- Lead Details ---', ...leadDetails] : []),
+    ...(projectDetails.installationLines.length > 0
+      ? ['', '--- Installation Details ---', ...projectDetails.installationLines]
+      : []),
+    '',
+    '--- Reference ---',
+    `RGTools Lead: ${record.leadId}`,
+  ].join('\n')
   const noteLines = [
     leadQuality ? `Leads Quality ${leadQuality}` : null,
     record.seedScore === null || record.seedScore === undefined ? null : `Score ${record.seedScore}`,
@@ -212,7 +188,7 @@ export function buildServiceM8LeadJobCardFields(
   ].filter((line): line is string => Boolean(line))
 
   return {
-    jobDescription: jobDescriptionSegments.length > 0 ? jobDescription : null,
+    jobDescription,
     clientType: optionLabel('clientType', record.clientProfileKey),
     leadsQuality: leadQuality,
     note: noteLines.length > 0 ? noteLines.join(' | ') : null,
@@ -231,8 +207,31 @@ function readableLine(label: string, value: string | null): string | null {
   return value ? `${label}: ${value}` : null
 }
 
-function readableSegment(label: string, value: string | null): string | null {
-  return value ? `${label}: ${value}` : null
+function buildContactLines(record: ServiceM8LeadSyncRecord): string[] {
+  return [
+    '--- Contact ---',
+    `Name: ${record.clientName}`,
+    record.companyName ? `Company: ${record.companyName}` : null,
+    record.phone ? `Mobile: ${record.phone}` : null,
+    record.email ? `Email: ${record.email}` : null,
+    record.location ? `Address: ${record.location}` : null,
+  ].filter((line): line is string => line !== null)
+}
+
+function buildProjectSummaryLines(
+  record: ServiceM8LeadSyncRecord,
+  projectDetails: ReadableProjectDetails,
+): string[] {
+  return [
+    '--- Project Summary ---',
+    readableLine('Product', humanizeValue(record.projectType)),
+    readableLine('Project', projectDetails.project),
+    readableLine('Budget', optionLabel('budgetBand', record.budgetBand)),
+    readableLine('Estimated price', projectDetails.estimatedPrice),
+    readableLine('Subtotal', projectDetails.subtotal),
+    readableLine('Driving distance', optionLabel('distanceBand', record.distanceBand)),
+    readableLine('Last updated', formatLeadCardDate(record.updatedAt)),
+  ].filter((line): line is string => line !== null)
 }
 
 function formatLeadCardDate(value: Date): string | null {

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { buildServiceM8InboxEmail, type ServiceM8LeadSyncRecord } from '../payload'
+import {
+  buildServiceM8InboxEmail,
+  buildServiceM8LeadJobCardFields,
+  type ServiceM8LeadSyncRecord,
+} from '../payload'
 
 function leadRecord(overrides: Partial<ServiceM8LeadSyncRecord> = {}): ServiceM8LeadSyncRecord {
   return {
@@ -60,36 +64,40 @@ describe('buildServiceM8LeadPayload', () => {
     expect(email.body).not.toContain('Email:')
   })
 
-  it('includes every lead intake field in the ServiceM8 note', () => {
-    const email = buildServiceM8InboxEmail(leadRecord(), ['de9f86@inbox.servicem8.com'])
+  it('includes the complete lead details, including contact, in the ServiceM8 Job Description', () => {
+    const jobCard = buildServiceM8LeadJobCardFields(leadRecord())
 
-    expect(email.body).toContain('--- Lead Score ---')
-    expect(email.body).toContain('Driving distance: Within 30 km')
-    expect(email.body).toContain('Product: Pool Fence')
-    expect(email.body).toContain('Client type: Existing Business')
-    expect(email.body).toContain('Budget: $10k to $50k')
-    expect(email.body).toContain('Consent status: Consent Under Review')
-    expect(email.body).toContain('Complexity: Standard Non Custom')
-    expect(email.body).toContain('Price-sensitivity read: Average Negotiation')
-    expect(email.body).toContain('Decision-makers: Sole Decision Maker')
-    expect(email.body).toContain('Source: Existing Client / Referral / Repeat Builder / Architect')
-    expect(email.body).toContain('Payment history: New Client')
-    expect(email.body).toContain('Site access: Easy')
-    expect(email.body).toContain('Installation height: Ground Floor / Ladder')
-    expect(email.body).toContain('Channel: Phone')
-    expect(email.body).toContain('Quality: A')
-    expect(email.body).toContain('Score: 82')
-    expect(email.body).toContain('Completeness: 100%')
-    expect(email.body).toContain('Flag: Blocker flag: remote specialised')
-    expect(email.body).toContain('Reason: strong fit')
-    expect(email.body).toContain('Details: Customer wants a frameless option.')
-    expect(email.body).toContain('RGTools Lead: lead-1')
-    expect(email.body).not.toContain('Job description:')
-    expect(email.body).not.toContain('Note: Leads Quality')
+    expect(jobCard.jobDescription).toContain('--- Contact ---')
+    expect(jobCard.jobDescription).toContain('Name: Aroha Smith')
+    expect(jobCard.jobDescription).toContain('Company: Smith Builds')
+    expect(jobCard.jobDescription).toContain('Mobile: 021 123 456')
+    expect(jobCard.jobDescription).toContain('Email: aroha@example.com')
+    expect(jobCard.jobDescription).toContain('Address: 12 Queen Street, Auckland')
+    expect(jobCard.jobDescription).toContain('--- Lead Score ---')
+    expect(jobCard.jobDescription).toContain('Driving distance: Within 30 km')
+    expect(jobCard.jobDescription).toContain('Product: Pool Fence')
+    expect(jobCard.jobDescription).toContain('Client type: Existing Business')
+    expect(jobCard.jobDescription).toContain('Budget: $10k to $50k')
+    expect(jobCard.jobDescription).toContain('Consent status: Consent Under Review')
+    expect(jobCard.jobDescription).toContain('Complexity: Standard Non Custom')
+    expect(jobCard.jobDescription).toContain('Price-sensitivity read: Average Negotiation')
+    expect(jobCard.jobDescription).toContain('Decision-makers: Sole Decision Maker')
+    expect(jobCard.jobDescription).toContain('Source: Existing Client / Referral / Repeat Builder / Architect')
+    expect(jobCard.jobDescription).toContain('Payment history: New Client')
+    expect(jobCard.jobDescription).toContain('Site access: Easy')
+    expect(jobCard.jobDescription).toContain('Installation height: Ground Floor / Ladder')
+    expect(jobCard.jobDescription).toContain('Channel: Phone')
+    expect(jobCard.jobDescription).toContain('Quality: A')
+    expect(jobCard.jobDescription).toContain('Score: 82')
+    expect(jobCard.jobDescription).toContain('Completeness: 100%')
+    expect(jobCard.jobDescription).toContain('Flag: Blocker flag: remote specialised')
+    expect(jobCard.jobDescription).toContain('Reason: strong fit')
+    expect(jobCard.jobDescription).toContain('Details: Customer wants a frameless option.')
+    expect(jobCard.jobDescription).toContain('RGTools Lead: lead-1')
   })
 
-  it('humanizes legacy/raw option keys before writing the ServiceM8 email body', () => {
-    const email = buildServiceM8InboxEmail(leadRecord({
+  it('humanizes legacy/raw option keys before writing the ServiceM8 Job Description', () => {
+    const jobCard = buildServiceM8LeadJobCardFields(leadRecord({
       source: 'calculator',
       clientProfileKey: 'new_business',
       budgetBand: '2k_to_10k',
@@ -107,33 +115,33 @@ describe('buildServiceM8LeadPayload', () => {
       seedScore: 41,
       tier: 'C',
       completeness: 44,
-    }), ['de9f86@inbox.servicem8.com'])
+    }))
 
-    expect(email.body).toContain(
+    expect(jobCard.jobDescription).toContain(
       'Reason: Client type: New Business, Budget band: $2k to $10k, Complexity: Standard Non Custom, Distance: Within 30 km',
     )
-    expect(email.body).toContain('Driving distance: Within 30 km')
-    expect(email.body).toContain('Product: Pool Fence')
-    expect(email.body).toContain('Client type: New Business')
-    expect(email.body).toContain('Budget: $2k to $10k')
-    expect(email.body).toContain('Complexity: Standard Non Custom')
-    expect(email.body).toContain('Source: Calculator')
-    expect(email.body).toContain('Project: Premium Pool Fence')
-    expect(email.body).toContain('Length: 10 m')
-    expect(email.body).toContain('Corners: 2')
-    expect(email.body).toContain('Gates: 1')
-    expect(email.body).toContain('Fixing: Stand-off Posts\nSubstrate: Tile\nHardware: Matte Black')
-    expect(email.body).toContain('Glass: 12mm Toughened / Clear')
-    expect(email.body).toContain('Call preference: Anytime')
-    expect(email.body).not.toContain('within_30km')
-    expect(email.body).not.toContain('pool_fence')
-    expect(email.body).not.toContain('new_business')
-    expect(email.body).not.toContain('2k_to_10k')
-    expect(email.body).not.toContain('standard_non_custom')
-    expect(email.body).not.toContain('premium_pool_fence')
-    expect(email.body).not.toContain('standoff_posts')
-    expect(email.body).not.toContain('matte_black')
-    expect(email.body).not.toContain('toughened_12mm')
+    expect(jobCard.jobDescription).toContain('Driving distance: Within 30 km')
+    expect(jobCard.jobDescription).toContain('Product: Pool Fence')
+    expect(jobCard.jobDescription).toContain('Client type: New Business')
+    expect(jobCard.jobDescription).toContain('Budget: $2k to $10k')
+    expect(jobCard.jobDescription).toContain('Complexity: Standard Non Custom')
+    expect(jobCard.jobDescription).toContain('Source: Calculator')
+    expect(jobCard.jobDescription).toContain('Project: Premium Pool Fence')
+    expect(jobCard.jobDescription).toContain('Length: 10 m')
+    expect(jobCard.jobDescription).toContain('Corners: 2')
+    expect(jobCard.jobDescription).toContain('Gates: 1')
+    expect(jobCard.jobDescription).toContain('Fixing: Stand-off Posts\nSubstrate: Tile\nHardware: Matte Black')
+    expect(jobCard.jobDescription).toContain('Glass: 12mm Toughened / Clear')
+    expect(jobCard.jobDescription).toContain('Call preference: Anytime')
+    expect(jobCard.jobDescription).not.toContain('within_30km')
+    expect(jobCard.jobDescription).not.toContain('pool_fence')
+    expect(jobCard.jobDescription).not.toContain('new_business')
+    expect(jobCard.jobDescription).not.toContain('2k_to_10k')
+    expect(jobCard.jobDescription).not.toContain('standard_non_custom')
+    expect(jobCard.jobDescription).not.toContain('premium_pool_fence')
+    expect(jobCard.jobDescription).not.toContain('standoff_posts')
+    expect(jobCard.jobDescription).not.toContain('matte_black')
+    expect(jobCard.jobDescription).not.toContain('toughened_12mm')
   })
 
   it('formats calculator details into readable email sections with one field per line', () => {
@@ -178,15 +186,6 @@ describe('buildServiceM8LeadPayload', () => {
     )
     expect(email.body).toContain(
       [
-        '--- Lead Score ---',
-        'Quality: E',
-        'Score: 10',
-        'Completeness: 31%',
-        'Reason: 4 of 13 scoring fields answered',
-      ].join('\n'),
-    )
-    expect(email.body).toContain(
-      [
         '--- Project Summary ---',
         'Product: Pool Fence',
         'Project: Premium Pool Fence',
@@ -195,33 +194,21 @@ describe('buildServiceM8LeadPayload', () => {
         'Subtotal: $4,950',
         'Driving distance: Within 30 km',
         'Last updated: 14 Jul 2026',
+        'Reference: RGTools Lead lead-1',
       ].join('\n'),
     )
-    expect(email.body).toContain(
-      [
-        '--- Installation Details ---',
-        'Length: 8 m',
-        'Corners: 1',
-        'Gates: 1',
-        'Fixing: Round Spigots',
-        'Substrate: Tile',
-        'Hardware: Standard Chrome',
-        'Glass: 12mm Toughened / Clear',
-        'Customer type: Homeowner',
-        'Call preference: Anytime',
-        'Consultation needed: No',
-        'Contact consent: Yes',
-        'Notes: Requires one self closing gate.',
-      ].join('\n'),
-    )
-    expect(email.body).toContain('--- Reference ---\nRGTools Lead: lead-1')
+    expect(email.body).not.toContain('--- Lead Score ---')
+    expect(email.body).not.toContain('--- Lead Details ---')
+    expect(email.body).not.toContain('--- Installation Details ---')
+    expect(email.body).not.toContain('--- Reference ---')
+    expect(email.body).not.toContain('Notes: Requires one self closing gate.')
     expect(email.body).not.toContain('Job description: Score 10 |')
     expect(email.body).not.toContain('Details: [Calculator] submitted')
     expect(email.body).not.toContain('Note: Leads Quality E |')
   })
 
-  it('humanizes stair calculator submissions like the ServiceM8 inbox preview', () => {
-    const email = buildServiceM8InboxEmail(leadRecord({
+  it('humanizes stair calculator submissions in the ServiceM8 Job Description', () => {
+    const jobCard = buildServiceM8LeadJobCardFields(leadRecord({
       source: 'calculator',
       clientProfileKey: 'homeowner',
       budgetBand: '10k_to_50k',
@@ -240,31 +227,31 @@ describe('buildServiceM8LeadPayload', () => {
       seedScore: 43,
       tier: 'B',
       completeness: 44,
-    }), ['de9f86@inbox.servicem8.com'])
+    }))
 
-    expect(email.body).toContain(
+    expect(jobCard.jobDescription).toContain(
       'Reason: Client type: Homeowner, Budget band: $10k to $50k, Complexity: Standard Non Custom, Distance: Within 30 km',
     )
-    expect(email.body).toContain('Driving distance: Within 30 km')
-    expect(email.body).toContain('Product: Stair Balustrade')
-    expect(email.body).toContain('Client type: Homeowner')
-    expect(email.body).toContain('Budget: $10k to $50k')
-    expect(email.body).toContain('Complexity: Standard Non Custom')
-    expect(email.body).toContain('Source: Calculator')
-    expect(email.body).toContain('Project: Stair Balustrade')
-    expect(email.body).toContain('Length: 10 m')
-    expect(email.body).toContain('Corners: 0')
-    expect(email.body).toContain('Gates: 0')
-    expect(email.body).toContain('Landing: 11 m')
-    expect(email.body).toContain('Fixing: JH Clamps\nSubstrate: Tile\nHardware: Matte Black')
-    expect(email.body).toContain('Glass: 12mm Toughened / Clear')
-    expect(email.body).toContain('Call preference: Anytime')
-    expect(email.body).not.toContain('within_30km')
-    expect(email.body).not.toContain('stair_balustrade')
-    expect(email.body).not.toContain('10k_to_50k')
-    expect(email.body).not.toContain('standard_non_custom')
-    expect(email.body).not.toContain('jh_clamps')
-    expect(email.body).not.toContain('matte_black')
-    expect(email.body).not.toContain('toughened_12mm_clear')
+    expect(jobCard.jobDescription).toContain('Driving distance: Within 30 km')
+    expect(jobCard.jobDescription).toContain('Product: Stair Balustrade')
+    expect(jobCard.jobDescription).toContain('Client type: Homeowner')
+    expect(jobCard.jobDescription).toContain('Budget: $10k to $50k')
+    expect(jobCard.jobDescription).toContain('Complexity: Standard Non Custom')
+    expect(jobCard.jobDescription).toContain('Source: Calculator')
+    expect(jobCard.jobDescription).toContain('Project: Stair Balustrade')
+    expect(jobCard.jobDescription).toContain('Length: 10 m')
+    expect(jobCard.jobDescription).toContain('Corners: 0')
+    expect(jobCard.jobDescription).toContain('Gates: 0')
+    expect(jobCard.jobDescription).toContain('Landing: 11 m')
+    expect(jobCard.jobDescription).toContain('Fixing: JH Clamps\nSubstrate: Tile\nHardware: Matte Black')
+    expect(jobCard.jobDescription).toContain('Glass: 12mm Toughened / Clear')
+    expect(jobCard.jobDescription).toContain('Call preference: Anytime')
+    expect(jobCard.jobDescription).not.toContain('within_30km')
+    expect(jobCard.jobDescription).not.toContain('stair_balustrade')
+    expect(jobCard.jobDescription).not.toContain('10k_to_50k')
+    expect(jobCard.jobDescription).not.toContain('standard_non_custom')
+    expect(jobCard.jobDescription).not.toContain('jh_clamps')
+    expect(jobCard.jobDescription).not.toContain('matte_black')
+    expect(jobCard.jobDescription).not.toContain('toughened_12mm_clear')
   })
 })

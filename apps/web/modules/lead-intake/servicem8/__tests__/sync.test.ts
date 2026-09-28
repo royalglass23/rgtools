@@ -138,12 +138,42 @@ describe('syncLeadToServiceM8', () => {
     await syncLeadToServiceM8('lead-1')
 
     expect(setJobLeadCardFieldsMock).toHaveBeenCalledWith('job-uuid-1', {
-      jobDescription: 'Score 70 | Product: Pool Fence | Project: New Build / Commercial Fit-out | Last update: 6 Jul 2026',
+      jobDescription: expect.stringContaining([
+        '--- Contact ---',
+        'Name: Aroha Smith',
+        'Mobile: 021 123 456',
+        'Email: aroha@example.com',
+        'Address: Albany',
+      ].join('\n')),
       clientType: 'Builder / Developer / Pool Builder / Landscaper',
       leadsQuality: 'B',
       note: 'Leads Quality B | Score 70 | 86% complete | Tier B (70): good fit | RGTools Lead lead-1',
     })
     expect(sendLeadToServiceM8InboxMock).not.toHaveBeenCalled()
+  })
+
+  it('writes the complete Job Description for a linked lead without inventing a missing score', async () => {
+    selectLimit.mockResolvedValueOnce([{
+      ...leadRow,
+      servicem8JobUuid: 'job-uuid-unscored',
+      tier: null,
+      seedScore: null,
+      completeness: null,
+      scoreReason: null,
+    }])
+
+    await syncLeadToServiceM8('lead-1')
+
+    expect(setJobLeadCardFieldsMock).toHaveBeenCalledWith(
+      'job-uuid-unscored',
+      expect.objectContaining({
+        jobDescription: expect.stringContaining('--- Contact ---\nName: Aroha Smith'),
+        leadsQuality: null,
+      }),
+    )
+    const jobDescription = setJobLeadCardFieldsMock.mock.calls[0][1].jobDescription
+    expect(jobDescription).not.toContain('Quality:')
+    expect(jobDescription).not.toContain('Score:')
   })
 
   it('does not write job card fields when the lead is not linked to a job', async () => {

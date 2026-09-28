@@ -1,7 +1,7 @@
 import { eq, or } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { logAudit } from '@/lib/audit-db'
-import { leads } from '@rgtools/db/schema-leads'
+import { clients, leads } from '@rgtools/db/schema-leads'
 import { DECISION_MATRIX, type MatrixFieldKey } from '@/modules/lead-intake/scoring/score-lead'
 import { persistLeadScore } from '@/modules/lead-intake/scoring/persist-score'
 import {
@@ -104,6 +104,12 @@ export async function fetchLeadFromServiceM8(
   const [lead] = await db
     .select({
       id: leads.id,
+      clientName: clients.name,
+      companyName: clients.companyName,
+      phone: clients.phone,
+      email: clients.email,
+      channel: leads.channel,
+      source: leads.source,
       tier: leads.tier,
       seedScore: leads.seedScore,
       scoreReason: leads.scoreReason,
@@ -112,12 +118,23 @@ export async function fetchLeadFromServiceM8(
       clientProfileKey: leads.clientTypeAnswer,
       projectType: leads.product,
       complexity: leads.projectType,
+      budgetBand: leads.budgetBand,
+      consentStatus: leads.consentStatus,
+      priceSensitivityRead: leads.priceSensitivity,
+      decisionMakers: leads.decisionMakers,
+      distanceBand: leads.distanceBand,
+      paymentHistory: leads.paymentHistory,
+      siteAccess: leads.siteAccess,
+      installationHeight: leads.installationHeight,
       freeText: leads.jobDescription,
+      location: leads.location,
+      suburb: leads.suburb,
       servicem8JobUuid: leads.servicem8JobUuid,
       createdAt: leads.createdAt,
       updatedAt: leads.updatedAt,
     })
     .from(leads)
+    .innerJoin(clients, eq(leads.clientId, clients.id))
     .where(eq(leads.id, leadId))
     .limit(1)
 
@@ -145,12 +162,29 @@ export async function fetchLeadFromServiceM8(
   const jobStatus = matchingJob.status ?? null
   const jobCardFields = buildServiceM8LeadJobCardFields({
     leadId: lead.id,
-    clientProfileKey: lead.clientProfileKey,
-    freeText: lead.freeText,
+    servicem8JobUuid: lead.servicem8JobUuid,
+    clientName: lead.clientName,
+    companyName: lead.companyName,
+    phone: lead.phone,
+    email: lead.email,
+    channel: lead.channel,
+    source: lead.source,
     projectType: lead.projectType,
+    location: lead.location,
+    suburb: lead.suburb,
+    clientProfileKey: lead.clientProfileKey,
+    budgetBand: lead.budgetBand,
+    consentStatus: lead.consentStatus,
     complexity: lead.complexity,
-    tier: lead.tier,
+    priceSensitivityRead: lead.priceSensitivityRead,
+    decisionMakers: lead.decisionMakers,
+    distanceBand: lead.distanceBand,
+    paymentHistory: lead.paymentHistory,
+    siteAccess: lead.siteAccess,
+    installationHeight: lead.installationHeight,
+    freeText: lead.freeText,
     seedScore: lead.seedScore,
+    tier: lead.tier,
     scoreReason: lead.scoreReason,
     strikeFlag: lead.strikeFlag,
     completeness: lead.completeness,

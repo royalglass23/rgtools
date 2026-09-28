@@ -28,15 +28,13 @@ export async function syncLeadToServiceM8(leadId: string): Promise<ServiceM8Lead
       const reference = `linked:${record.servicem8JobUuid}`
       const now = new Date()
 
-      // Already-linked leads skip the inbox email, but we still push the current
-      // tier to the job's Leads Quality field. Best-effort: a failed write must
-      // not fail the sync — the lead is already linked and synced.
-      if (record.tier) {
-        try {
-          await setJobLeadCardFields(record.servicem8JobUuid, buildServiceM8LeadJobCardFields(record))
-        } catch {
-          // swallow — Leads Quality is a nice-to-have; the sync still succeeds
-        }
+      // Already-linked leads skip the inbox email, but still receive the current
+      // Job Description and any available custom fields. Best-effort: a failed
+      // write must not fail the sync because the lead is already linked.
+      try {
+        await setJobLeadCardFields(record.servicem8JobUuid, buildServiceM8LeadJobCardFields(record))
+      } catch {
+        // swallow — job-card fields are best-effort; the sync still succeeds
       }
 
       await db
