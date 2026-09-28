@@ -15,6 +15,7 @@ const sendCustomerEstimateEmailMock = vi.hoisted(() => vi.fn())
 const syncLeadToServiceM8Mock = vi.hoisted(() => vi.fn())
 const saveLeadSubmitFailureMock = vi.hoisted(() => vi.fn())
 const findCalculatorLeadBySubmissionRefMock = vi.hoisted(() => vi.fn())
+const hasCompletedCustomerEstimateEmailMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/modules/lead-intake/actions', () => ({
   submitLeadIntakeForUser: submitLeadIntakeForUserMock,
@@ -42,6 +43,7 @@ vi.mock('@/modules/lead-intake/calculator/submit-failures', () => ({
 
 vi.mock('@/modules/lead-intake/calculator/idempotency', () => ({
   findCalculatorLeadBySubmissionRef: findCalculatorLeadBySubmissionRefMock,
+  hasCompletedCustomerEstimateEmail: hasCompletedCustomerEstimateEmailMock,
 }))
 
 import { OPTIONS, POST } from '../route'
@@ -128,6 +130,7 @@ beforeEach(() => {
   syncLeadToServiceM8Mock.mockResolvedValue({ ok: true, leadId: 'lead-uuid', reference: 'RGTools Lead lead-uuid' })
   saveLeadSubmitFailureMock.mockResolvedValue(undefined)
   findCalculatorLeadBySubmissionRefMock.mockResolvedValue(null)
+  hasCompletedCustomerEstimateEmailMock.mockResolvedValue(false)
 })
 
 describe('OPTIONS /api/lead-intake/calculator-submit', () => {
@@ -158,6 +161,26 @@ describe('OPTIONS /api/lead-intake/calculator-submit', () => {
 })
 
 describe('POST /api/lead-intake/calculator-submit', () => {
+  it('starts the customer email while ServiceM8 sync is still pending', async () => {
+    let finishSync!: (value: { ok: true; leadId: string; reference: string }) => void
+    syncLeadToServiceM8Mock.mockReturnValue(new Promise((resolve) => {
+      finishSync = resolve
+    }))
+
+    try {
+      const response = await POST(serverRequest())
+
+      expect(response.status).toBe(200)
+      expect(syncLeadToServiceM8Mock).toHaveBeenCalledWith('lead-uuid')
+      expect(sendCustomerEstimateEmailMock).toHaveBeenCalledWith(expect.objectContaining({
+        leadId: 'lead-uuid',
+        to: 'sarah@example.com',
+      }))
+    } finally {
+      finishSync({ ok: true, leadId: 'lead-uuid', reference: 'RGTools Lead lead-uuid' })
+    }
+  })
+
   it('saves the lead, returns its UUID, and starts email without awaiting it', async () => {
     const neverSettlingEmail = new Promise(() => undefined)
     sendCustomerEstimateEmailMock.mockReturnValue(neverSettlingEmail)
@@ -297,8 +320,104 @@ describe('POST /api/lead-intake/calculator-submit', () => {
     }))
   })
 
+  it('accepts a provisional phone collision into contact review and still schedules email and ServiceM8', async () => {
+    const databaseError = Object.assign(new Error('duplicate key contains private contact values'), {
+      code: '23505',
+      constraint: 'clients_phone_normalized_provisional_uq',
+    })
+    submitLeadIntakeForUserMock.mockRejectedValueOnce(
+      new Error('Failed query contains private contact values', { cause: databaseError }),
+    )
+    submitLeadIntakeForUserMock.mockResolvedValueOnce({
+      success: true,
+      leadId: 'review-lead-uuid',
+      clientId: 'review-client-uuid',
+      matchedExistingClient: false,
+      score: 64,
+      tier: 'B',
+      reason: 'Good fit',
+      completeness: 80,
+      distanceBand: 'within_30km',
+      flagNote: null,
+      servicem8Sync: { ok: true, leadId: 'review-lead-uuid', reference: 'deferred' },
+      contactReviewReason: 'Contact details need checking: phone matches a different provisional client.',
+    })
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    try {
+      const response = await POST(serverRequest())
+      const body = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(body).toEqual({
+        ok: true,
+        leadId: 'review-lead-uuid',
+        submissionRef: 'rgcalc_test_ref123',
+      })
+      expect(submitLeadIntakeForUserMock).toHaveBeenCalledTimes(2)
+      expect(submitLeadIntakeForUserMock).toHaveBeenLastCalledWith(
+        expect.anything(), null,
+        expect.objectContaining({
+          syncServiceM8: false,
+          forceContactReview: true,
+        }),
+      )
+      expect(syncLeadToServiceM8Mock).toHaveBeenCalledWith('review-lead-uuid')
+      expect(sendCustomerEstimateEmailMock).toHaveBeenCalledWith(expect.objectContaining({
+        leadId: 'review-lead-uuid',
+      }))
+      expect(saveLeadSubmitFailureMock).not.toHaveBeenCalled()
+      const messages = log.mock.calls.map(([message]) => String(message)).join('\n')
+      expect(messages).toContain('clients_phone_normalized_provisional_uq')
+      expect(messages).toContain('23505')
+      expect(messages).not.toContain('private contact values')
+      expect(messages).not.toContain('sarah@example.com')
+      expect(messages).not.toContain('021 123 4567')
+    } finally {
+      log.mockRestore()
+    }
+  })
+
+  it('records a failed contact-review retry so WordPress can retain the submission for recovery', async () => {
+    const databaseError = Object.assign(new Error('duplicate key'), {
+      code: '23505',
+      constraint: 'clients_phone_normalized_provisional_uq',
+    })
+    submitLeadIntakeForUserMock
+      .mockRejectedValueOnce(new Error('Failed query', { cause: databaseError }))
+      .mockRejectedValueOnce(new Error('Review save unavailable'))
+
+    const response = await POST(serverRequest())
+
+    expect(response.status).toBe(500)
+    expect(saveLeadSubmitFailureMock).toHaveBeenCalledWith(expect.objectContaining({
+      stage: 'save',
+      error: 'unexpected_save_failure',
+      submissionRef: 'rgcalc_test_ref123',
+    }))
+    expect(sendCustomerEstimateEmailMock).not.toHaveBeenCalled()
+    expect(syncLeadToServiceM8Mock).not.toHaveBeenCalled()
+  })
+
+  it('keeps unexpected save failures diagnosable without logging their raw message', async () => {
+    submitLeadIntakeForUserMock.mockRejectedValue(new TypeError('private contact values in failure'))
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    try {
+      const response = await POST(serverRequest())
+      expect(response.status).toBe(500)
+      const messages = log.mock.calls.map(([message]) => String(message)).join('\n')
+      expect(messages).toContain('unexpected_save_failure')
+      expect(messages).toContain('"errorType":"TypeError"')
+      expect(messages).not.toContain('private contact values')
+    } finally {
+      log.mockRestore()
+    }
+  })
+
   it('creates a stable fallback submission reference for older calculator payloads', async () => {
-    const { submissionRef: _submissionRef, ...legacyPayload } = validPayload
+    const legacyPayload: Record<string, unknown> = { ...validPayload }
+    delete legacyPayload.submissionRef
 
     const response = await POST(request(legacyPayload))
     const json = await response.json()
@@ -319,7 +438,7 @@ describe('POST /api/lead-intake/calculator-submit', () => {
     )
   })
 
-  it('returns an existing calculator lead for duplicate trusted submission references without downstream side effects', async () => {
+  it('resumes customer email and ServiceM8 for an existing lead after a trusted retry', async () => {
     findCalculatorLeadBySubmissionRefMock.mockResolvedValue({ leadId: 'existing-lead-uuid' })
 
     const response = await POST(serverRequest({
@@ -340,8 +459,31 @@ describe('POST /api/lead-intake/calculator-submit', () => {
     })
     expect(findCalculatorLeadBySubmissionRefMock).toHaveBeenCalledWith('rgcalc_test_ref123')
     expect(submitLeadIntakeForUserMock).not.toHaveBeenCalled()
-    expect(sendCustomerEstimateEmailMock).not.toHaveBeenCalled()
-    expect(syncLeadToServiceM8Mock).not.toHaveBeenCalled()
+    await vi.waitFor(() => {
+      expect(sendCustomerEstimateEmailMock).toHaveBeenCalledWith(expect.objectContaining({
+        leadId: 'existing-lead-uuid',
+        to: 'same-customer@example.com',
+      }))
+      expect(syncLeadToServiceM8Mock).toHaveBeenCalledWith('existing-lead-uuid')
+    })
     expect(saveLeadSubmitFailureMock).not.toHaveBeenCalled()
+  })
+
+  it('does not resend a completed customer email when resuming ServiceM8 for an existing lead', async () => {
+    findCalculatorLeadBySubmissionRefMock.mockResolvedValue({ leadId: 'existing-lead-uuid' })
+    hasCompletedCustomerEstimateEmailMock.mockResolvedValue(true)
+
+    const response = await POST(serverRequest())
+
+    expect(response.status).toBe(200)
+    await vi.waitFor(() => {
+      expect(syncLeadToServiceM8Mock).toHaveBeenCalledWith('existing-lead-uuid')
+    })
+    expect(hasCompletedCustomerEstimateEmailMock).toHaveBeenCalledWith(
+      'existing-lead-uuid',
+      'sarah@example.com',
+    )
+    expect(sendCustomerEstimateEmailMock).not.toHaveBeenCalled()
+    expect(submitLeadIntakeForUserMock).not.toHaveBeenCalled()
   })
 })

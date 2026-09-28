@@ -2,6 +2,8 @@ import { and, asc, count, desc, eq, gte, ilike, isNotNull, isNull, lte, ne, or, 
 import { db } from '@/lib/db'
 import { clients, leads } from '@rgtools/db/schema-leads'
 import { getActiveScoringOptionLists } from '@/modules/lead-intake/scoring/config-options'
+import { getContactIdentityMatches } from '@/modules/clients/client-resolver'
+import { normalizeNzPhone } from '@/modules/lead-intake/intake-utils'
 import { optionPoints, type MatrixFieldKey } from '@/modules/lead-intake/scoring/score-lead'
 import { DEFAULT_LEADS_PREFS, LEADS_SORT_COLUMNS } from './table-prefs-shared'
 
@@ -84,6 +86,7 @@ export async function getLeadsList(filters: LeadsListFilters, sort: LeadsListSor
   const rows = await db
     .select({
       id: leads.id,
+      clientId: clients.id,
       createdAt: leads.createdAt,
       clientName: clients.name,
       companyName: clients.companyName,
@@ -125,6 +128,7 @@ export async function getLeadDetail(leadId: string) {
   const [lead] = await db
     .select({
       id: leads.id,
+      clientId: leads.clientId,
       createdAt: leads.createdAt,
       clientName: clients.name,
       companyName: clients.companyName,
@@ -160,6 +164,7 @@ export async function getLeadDetail(leadId: string) {
       updatedAt: leads.updatedAt,
       aiSuggestion: leads.aiSuggestion,
       aiSuggestionAt: leads.aiSuggestionAt,
+      clientReviewNote: clients.reviewNote,
     })
     .from(leads)
     .innerJoin(clients, eq(leads.clientId, clients.id))
@@ -167,6 +172,17 @@ export async function getLeadDetail(leadId: string) {
     .limit(1)
 
   if (!lead) return null
+
+  const contactReview = lead.clientReviewNote
+    ? {
+        message: lead.clientReviewNote,
+        matches: await getContactIdentityMatches({
+          email: lead.email,
+          phoneNormalized: normalizeNzPhone(lead.phone ?? ''),
+          excludeClientId: lead.clientId,
+        }),
+      }
+    : null
 
   const optionLists = await getActiveScoringOptionLists()
   const scoredFieldValues: Record<number, string | null> = {
@@ -202,6 +218,7 @@ export async function getLeadDetail(leadId: string) {
 
   return {
     ...lead,
+    contactReview,
     scoredFields,
     projectType: lead.product ?? lead.projectType,
     distanceBand: scoredFields.find((field) => field.category === 7)?.answer ?? 'Not selected',

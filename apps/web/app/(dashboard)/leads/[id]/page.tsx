@@ -50,6 +50,7 @@ export default async function LeadDetailPage({
     product: productLabel,
     address: lead.location,
   })
+  const contactReview = lead.contactReview
 
   return (
     <div className="mx-auto max-w-6xl space-y-5">
@@ -88,6 +89,25 @@ export default async function LeadDetailPage({
       {isReadOnly && (
         <div className="rounded border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           This lead is read-only because ServiceM8 status is {lead.servicem8Status ?? 'not Quote'}. Lead-intake edits are paused, but you can still fetch from ServiceM8 to refresh the status.
+        </div>
+      )}
+
+      {contactReview && (
+        <div className="rounded border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950" role="note">
+          <strong>Client review note:</strong> {contactReview.message}
+          {contactReview.matches.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-3">
+              {contactReview.matches.map(({ kind, clientId }, index) => {
+                const sameKindCount = contactReview.matches.filter((match) => match.kind === kind).length
+                const position = contactReview.matches.slice(0, index + 1).filter((match) => match.kind === kind).length
+                return (
+                  <Link key={`${kind}-${clientId}`} href={`/clients/${clientId}`} className="font-medium underline">
+                    View client matching {kind}{sameKindCount > 1 ? ` ${position}` : ''}
+                  </Link>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
 

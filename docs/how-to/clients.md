@@ -24,6 +24,8 @@ Use **Search** to find a client by canonical name or alias. Use **Cleanup filter
 
 Client matching is based on normalised phone and email values. When a new lead or tracked quote arrives, rgtools tries to connect it to the existing client record rather than creating a duplicate.
 
+If the submitted email and phone match different client records, rgtools creates a separate client record marked for review. The lead's review note explains why the details need checking and links to the matching client records. Open both matches and verify ownership before merging or editing existing clients. Calculator enquiries still continue through customer email and ServiceM8 handling.
+
 ## Client detail
 
 Open a client row to see the detail page at `/clients/[id]`.

@@ -35,6 +35,8 @@ flow.
 | **PS Generator** | Generates PS1 and PS3 Producer Statement packages from published configuration and templates. |
 | **Admin** | Manages users, module grants, pricing, tracking, dashboard tables, Work Order configuration, and audit/error exports. |
 
+Calculator enquiries with email and phone matches on different provisional clients are retained as separate leads with a visible contact-review reason. Customer estimate email and ServiceM8 handling continue after the lead is saved.
+
 ### Workflow boundaries
 
 ServiceM8 remains the source of truth for ServiceM8 job identity, status, and source fields. RG Tools

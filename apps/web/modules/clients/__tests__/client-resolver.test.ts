@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { clientAliases, clientContacts, clientMergedReferences, clients, leads } from '@rgtools/db/schema-leads'
-import { resolveClient, mergeClients } from '../client-resolver'
+import { getContactIdentityMatches, resolveClient, mergeClients } from '../client-resolver'
 
 const createdClientIds = new Set<string>()
 const createdLeadIds = new Set<string>()
@@ -103,6 +103,131 @@ describe.skipIf(!process.env.RUN_DB_TESTS)('resolveClient', () => {
 
     expect(second.clientId).toBe(first.clientId)
     expect(second.matchedExistingClient).toBe(true)
+  })
+
+  it('keeps a split email and phone match as a separate client with a review reason', async () => {
+    const suffix = crypto.randomUUID()
+    const email = `email-${suffix}@example.test`
+    const otherEmail = `phone-${suffix}@example.test`
+    const firstPhone = `+6421${Math.floor(Math.random() * 1_000_000_000).toString().padStart(9, '0')}`
+    const secondPhone = `+6422${Math.floor(Math.random() * 1_000_000_000).toString().padStart(9, '0')}`
+    const emailClient = await db.transaction((tx) => resolveClient(tx, {
+      clientName: 'TEST ONLY Email Client', email, phone: firstPhone, phoneNormalized: firstPhone,
+    }))
+    const phoneClient = await db.transaction((tx) => resolveClient(tx, {
+      clientName: 'TEST ONLY Phone Client', email: otherEmail, phone: secondPhone, phoneNormalized: secondPhone,
+    }))
+    track(emailClient.clientId)
+    track(phoneClient.clientId)
+
+    const reviewed = await db.transaction((tx) => resolveClient(tx, {
+      clientName: 'TEST ONLY Calculator Lead', email, phone: secondPhone, phoneNormalized: secondPhone,
+    }))
+    track(reviewed.clientId)
+
+    expect(reviewed.clientId).not.toBe(emailClient.clientId)
+    expect(reviewed.clientId).not.toBe(phoneClient.clientId)
+    expect(reviewed.contactReviewReason).not.toContain(emailClient.clientId)
+    expect(reviewed.contactReviewReason).not.toContain(phoneClient.clientId)
+    const matches = await getContactIdentityMatches({
+      email,
+      phoneNormalized: secondPhone,
+      excludeClientId: reviewed.clientId,
+    })
+    expect(matches).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'email', clientId: emailClient.clientId }),
+      expect.objectContaining({ kind: 'phone', clientId: phoneClient.clientId }),
+    ]))
+
+    const [reviewClient] = await db.select().from(clients).where(eq(clients.id, reviewed.clientId))
+    expect(reviewClient).toMatchObject({
+      email,
+      phone: secondPhone,
+      phoneNormalized: null,
+      reviewStatus: 'pending_review',
+      reviewNote: reviewed.contactReviewReason,
+    })
+    const [originalEmailClient] = await db.select().from(clients).where(eq(clients.id, emailClient.clientId))
+    const [originalPhoneClient] = await db.select().from(clients).where(eq(clients.id, phoneClient.clientId))
+    expect(originalEmailClient.phoneNormalized).toBe(firstPhone)
+    expect(originalPhoneClient.phoneNormalized).toBe(secondPhone)
+  })
+
+  it('keeps a split match when the email belongs to a contact on another client', async () => {
+    const suffix = crypto.randomUUID()
+    const contactEmail = `contact-${suffix}@example.test`
+    const emailOwner = await db.transaction((tx) => resolveClient(tx, {
+      servicem8CompanyUuid: `email-owner-${suffix}`,
+      clientName: 'TEST ONLY Contact Email Owner',
+      email: contactEmail,
+    }))
+    await db
+      .update(clients)
+      .set({ email: `company-${suffix}@example.test` })
+      .where(eq(clients.id, emailOwner.clientId))
+    const phone = `+6421${Math.floor(Math.random() * 1_000_000_000).toString().padStart(9, '0')}`
+    const phoneOwner = await db.transaction((tx) => resolveClient(tx, {
+      clientName: 'TEST ONLY Phone Owner',
+      phone,
+      phoneNormalized: phone,
+    }))
+    track(emailOwner.clientId)
+    track(phoneOwner.clientId)
+
+    const reviewed = await db.transaction((tx) => resolveClient(tx, {
+      clientName: 'TEST ONLY Calculator Lead',
+      email: contactEmail,
+      phone,
+      phoneNormalized: phone,
+    }))
+    track(reviewed.clientId)
+
+    expect(reviewed.clientId).not.toBe(emailOwner.clientId)
+    expect(reviewed.clientId).not.toBe(phoneOwner.clientId)
+    expect(reviewed.contactReviewReason).toContain('Contact details need checking')
+  })
+
+  it('keeps a split match when the email belongs to a merged client reference', async () => {
+    const suffix = crypto.randomUUID()
+    const mergedEmail = `merged-${suffix}@example.test`
+    const survivor = await db.transaction((tx) => resolveClient(tx, {
+      clientName: 'TEST ONLY Survivor',
+      email: `survivor-${suffix}@example.test`,
+    }))
+    const loser = await db.transaction((tx) => resolveClient(tx, {
+      clientName: 'TEST ONLY Merged Email Owner',
+      email: mergedEmail,
+    }))
+    const phone = `+6422${Math.floor(Math.random() * 1_000_000_000).toString().padStart(9, '0')}`
+    const phoneOwner = await db.transaction((tx) => resolveClient(tx, {
+      clientName: 'TEST ONLY Other Phone Owner',
+      phone,
+      phoneNormalized: phone,
+    }))
+    track(survivor.clientId)
+    track(loser.clientId)
+    track(phoneOwner.clientId)
+    await db.transaction((tx) => mergeClients(tx, survivor.clientId, [loser.clientId]))
+
+    const reviewed = await db.transaction((tx) => resolveClient(tx, {
+      clientName: 'TEST ONLY Calculator Lead',
+      email: mergedEmail,
+      phone,
+      phoneNormalized: phone,
+    }))
+    track(reviewed.clientId)
+
+    expect(reviewed.clientId).not.toBe(survivor.clientId)
+    expect(reviewed.clientId).not.toBe(phoneOwner.clientId)
+    const matches = await getContactIdentityMatches({
+      email: mergedEmail,
+      phoneNormalized: phone,
+      excludeClientId: reviewed.clientId,
+    })
+    expect(matches).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'email', clientId: survivor.clientId }),
+      expect.objectContaining({ kind: 'phone', clientId: phoneOwner.clientId }),
+    ]))
   })
 
   it('creates separate provisional clients when there is no phone/email to match on', async () => {
