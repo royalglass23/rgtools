@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
-import { leads } from '@rgtools/db/schema-leads'
+import { leadEmailLog, leads } from '@rgtools/db/schema-leads'
 
 export type CalculatorLeadIdempotencyResult = {
   leadId: string
@@ -21,4 +21,21 @@ export async function findCalculatorLeadBySubmissionRef(
     .limit(1)
 
   return row ?? null
+}
+
+export async function hasCompletedCustomerEstimateEmail(
+  leadId: string,
+  recipient: string,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: leadEmailLog.id })
+    .from(leadEmailLog)
+    .where(and(
+      eq(leadEmailLog.leadId, leadId),
+      eq(leadEmailLog.recipient, recipient),
+      eq(leadEmailLog.status, 'sent'),
+    ))
+    .limit(1)
+
+  return Boolean(row)
 }

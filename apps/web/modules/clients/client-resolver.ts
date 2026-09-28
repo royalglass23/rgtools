@@ -18,6 +18,8 @@ export type ResolveClientInput = {
   email?: string | null
   servicem8SourceSnapshot?: unknown
   servicem8SyncedAt?: Date
+  /** Force a separate review record after a concurrent identity collision. */
+  forceContactReview?: boolean
 }
 
 export type ResolveClientResult = {
@@ -25,6 +27,13 @@ export type ResolveClientResult = {
   contactId: string | null
   matchedExistingClient: boolean
   linked: boolean
+  contactReviewReason?: string
+}
+
+export type ContactIdentityMatch = {
+  kind: 'email' | 'phone'
+  clientId: string
+  clientName: string
 }
 
 export async function resolveClient(tx: Tx, input: ResolveClientInput): Promise<ResolveClientResult> {
@@ -83,9 +92,21 @@ export async function resolveClient(tx: Tx, input: ResolveClientInput): Promise<
     return { clientId: row.id, contactId, matchedExistingClient: true, linked: true }
   }
 
-  // Provisional path: no canonical identity yet. Match against other
-  // provisional clients by normalized phone or email so we don't fragment a
-  // company before ServiceM8 sync assigns it a company UUID.
+  // Without a canonical ServiceM8 identity, check whether the supplied email
+  // and phone point to different active clients before reusing a provisional
+  // record. A linked client can still own one of the supplied details.
+  if (input.phoneNormalized && input.email) {
+    const matches = await findContactIdentityMatches(tx, {
+      email: input.email,
+      phoneNormalized: input.phoneNormalized,
+    })
+    const distinctClientIds = new Set(matches.map((match) => match.clientId))
+    if (distinctClientIds.size > 1 || input.forceContactReview) {
+      if (matches.length === 0) throw new Error('Contact conflict owner could not be resolved.')
+      return createContactReviewClient(tx, input, buildContactReviewReason(matches))
+    }
+  }
+
   const matched = await findProvisionalMatch(tx, input.phoneNormalized || null, input.email || null)
   if (matched) {
     await tx
@@ -121,6 +142,116 @@ export async function resolveClient(tx: Tx, input: ResolveClientInput): Promise<
 
   const contactId = await resolveContact(tx, created.id, input)
   return { clientId: created.id, contactId, matchedExistingClient: false, linked: false }
+}
+
+export async function getContactIdentityMatches({
+  email,
+  phoneNormalized,
+  excludeClientId,
+}: {
+  email: string | null
+  phoneNormalized: string | null
+  excludeClientId?: string
+}): Promise<ContactIdentityMatch[]> {
+  return db.transaction((tx) => findContactIdentityMatches(tx, { email, phoneNormalized, excludeClientId }))
+}
+
+async function findContactIdentityMatches(
+  tx: Tx,
+  {
+    email,
+    phoneNormalized,
+    excludeClientId,
+  }: { email: string | null; phoneNormalized: string | null; excludeClientId?: string },
+): Promise<ContactIdentityMatch[]> {
+  const matches: ContactIdentityMatch[] = []
+
+  if (email) {
+    matches.push(...await findIdentityOwners(tx, 'email', email))
+  }
+  if (phoneNormalized) {
+    matches.push(...await findIdentityOwners(tx, 'phone', phoneNormalized))
+  }
+
+  const unique = new Map<string, ContactIdentityMatch>()
+  for (const match of matches) {
+    if (match.clientId !== excludeClientId) unique.set(`${match.kind}:${match.clientId}`, match)
+  }
+  return [...unique.values()]
+}
+
+async function findIdentityOwners(
+  tx: Tx,
+  kind: 'email' | 'phone',
+  value: string,
+): Promise<ContactIdentityMatch[]> {
+  const clientColumn = kind === 'email' ? clients.email : clients.phoneNormalized
+  const contactColumn = kind === 'email' ? clientContacts.email : clientContacts.phoneNormalized
+  const mergedColumn = kind === 'email' ? clientMergedReferences.email : clientMergedReferences.phoneNormalized
+
+  const direct = await tx
+    .select({ clientId: clients.id, clientName: clients.name })
+    .from(clients)
+    .where(and(eq(clients.isMerged, false), eq(clientColumn, value)))
+
+  const contacts = await tx
+    .select({ clientId: clients.id, clientName: clients.name })
+    .from(clientContacts)
+    .innerJoin(clients, eq(clientContacts.clientId, clients.id))
+    .where(and(eq(clients.isMerged, false), eq(contactColumn, value)))
+
+  const merged = await tx
+    .select({ clientId: clients.id, clientName: clients.name })
+    .from(clientMergedReferences)
+    .innerJoin(clients, eq(clientMergedReferences.survivorClientId, clients.id))
+    .where(and(eq(clients.isMerged, false), eq(mergedColumn, value)))
+
+  return [...direct, ...contacts, ...merged].map((row) => ({ kind, ...row }))
+}
+
+function buildContactReviewReason(matches: ContactIdentityMatch[]): string {
+  const emailNames = uniqueNames(matches, 'email')
+  const phoneNames = uniqueNames(matches, 'phone')
+  const ownership = [
+    emailNames.length ? `the email matches ${emailNames.join(', ')}` : null,
+    phoneNames.length ? `the phone matches ${phoneNames.join(', ')}` : null,
+  ].filter((part): part is string => Boolean(part)).join(', while ')
+
+  return `Contact details need checking: ${ownership}. Verify the submitted details before linking or merging.`
+}
+
+function uniqueNames(matches: ContactIdentityMatch[], kind: ContactIdentityMatch['kind']): string[] {
+  return [...new Set(matches.filter((match) => match.kind === kind).map((match) => match.clientName))]
+}
+
+async function createContactReviewClient(
+  tx: Tx,
+  input: ResolveClientInput,
+  reason: string,
+): Promise<ResolveClientResult> {
+  const [created] = await tx
+    .insert(clients)
+    .values({
+      name: input.clientName,
+      companyName: input.companyName || null,
+      phone: input.phone || null,
+      // Keep the supplied number for staff and ServiceM8 without claiming the
+      // phone identity already owned by another provisional client.
+      phoneNormalized: null,
+      email: input.email || null,
+      reviewStatus: 'pending_review',
+      reviewNote: reason,
+    })
+    .returning({ id: clients.id })
+
+  const contactId = await resolveContact(tx, created.id, input)
+  return {
+    clientId: created.id,
+    contactId,
+    matchedExistingClient: false,
+    linked: false,
+    contactReviewReason: reason,
+  }
 }
 
 /**

@@ -4,6 +4,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const linkedLeadRow = vi.hoisted(() => ({
   id: 'lead-1',
+  clientName: 'Linked Client',
+  companyName: 'Linked Company',
+  phone: '021 111 111',
+  email: 'linked@example.com',
+  channel: 'calculator',
+  source: 'calculator',
   tier: 'B',
   seedScore: 70,
   scoreReason: 'Tier B (70): good fit',
@@ -12,7 +18,17 @@ const linkedLeadRow = vi.hoisted(() => ({
   clientProfileKey: 'builder_developer_pool_builder_landscaper',
   projectType: 'pool_fence',
   complexity: 'new_build_commercial_fit_out',
+  budgetBand: '10k_to_50k',
+  consentStatus: 'consent_confirmed',
+  priceSensitivityRead: 'average_negotiation',
+  decisionMakers: 'sole_decision_maker',
+  distanceBand: 'within_30km',
+  paymentHistory: 'new_client',
+  siteAccess: 'easy',
+  installationHeight: 'ground_floor_ladder',
   freeText: null,
+  location: '1 Linked Street, Auckland',
+  suburb: 'Auckland Central',
   servicem8JobUuid: 'job-uuid-1',
   servicem8JobNumber: null,
   createdAt: new Date('2026-06-08T10:00:00Z'),
@@ -21,6 +37,12 @@ const linkedLeadRow = vi.hoisted(() => ({
 
 const unlinkedLeadRow = vi.hoisted(() => ({
   id: 'lead-2',
+  clientName: 'Unlinked Client',
+  companyName: null,
+  phone: '021 222 222',
+  email: 'unlinked@example.com',
+  channel: 'calculator',
+  source: 'calculator',
   tier: 'A',
   seedScore: 82,
   scoreReason: 'Tier A (82): strong fit',
@@ -29,7 +51,17 @@ const unlinkedLeadRow = vi.hoisted(() => ({
   clientProfileKey: 'builder_developer_pool_builder_landscaper',
   projectType: 'pool_fence',
   complexity: 'standard_non_custom',
+  budgetBand: '10k_to_50k',
+  consentStatus: 'consent_confirmed',
+  priceSensitivityRead: 'average_negotiation',
+  decisionMakers: 'sole_decision_maker',
+  distanceBand: 'within_30km',
+  paymentHistory: 'new_client',
+  siteAccess: 'easy',
+  installationHeight: 'ground_floor_ladder',
   freeText: null,
+  location: '2 Unlinked Street, Auckland',
+  suburb: 'Auckland Central',
   servicem8JobUuid: null,
   servicem8JobNumber: null,
   createdAt: new Date('2026-06-08T10:00:00Z'),
@@ -38,6 +70,12 @@ const unlinkedLeadRow = vi.hoisted(() => ({
 
 const unscoredLeadRow = vi.hoisted(() => ({
   id: 'lead-3',
+  clientName: 'Unscored Client',
+  companyName: null,
+  phone: null,
+  email: null,
+  channel: 'manual',
+  source: null,
   tier: null,
   seedScore: null,
   scoreReason: null,
@@ -46,7 +84,17 @@ const unscoredLeadRow = vi.hoisted(() => ({
   clientProfileKey: null,
   projectType: null,
   complexity: null,
+  budgetBand: null,
+  consentStatus: null,
+  priceSensitivityRead: null,
+  decisionMakers: null,
+  distanceBand: null,
+  paymentHistory: null,
+  siteAccess: null,
+  installationHeight: null,
   freeText: null,
+  location: null,
+  suburb: null,
   servicem8JobUuid: null,
   servicem8JobNumber: null,
   createdAt: new Date('2026-06-08T10:00:00Z'),
@@ -101,6 +149,11 @@ vi.mock('@/lib/db', () => ({
   db: {
     select: vi.fn(() => ({
       from: vi.fn(() => ({
+        innerJoin: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: selectLimit,
+          })),
+        })),
         where: vi.fn(() => ({
           limit: selectLimit,
         })),
@@ -220,7 +273,7 @@ describe('fetchLeadFromServiceM8', () => {
     expect(capturedSetValues[0]).toMatchObject({ servicem8JobNumber: 'R260210' })
   })
 
-  it('does not push Leads Quality when a fetched unlinked lead has no real tier yet', async () => {
+  it('writes contact details without inventing Leads Quality when an unlinked lead has no tier yet', async () => {
     activeLeadRow.current = unscoredLeadRow
     const request = vi.fn<ServiceM8FetchRequest>(async (path, init) => {
       if (path.startsWith('/job.json')) {
@@ -245,9 +298,15 @@ describe('fetchLeadFromServiceM8', () => {
     expect(result).toMatchObject({
       ok: true,
       leadsQuality: 'Not set',
-      customFieldUpdated: false,
+      customFieldUpdated: true,
     })
-    expect(setJobLeadCardFieldsMock).not.toHaveBeenCalled()
+    expect(setJobLeadCardFieldsMock).toHaveBeenCalledWith('job-uuid-3', expect.objectContaining({
+      jobDescription: expect.stringContaining('--- Contact ---\nName: Unscored Client'),
+      leadsQuality: null,
+    }), writeRequestMock)
+    const jobDescription = setJobLeadCardFieldsMock.mock.calls[0][1].jobDescription
+    expect(jobDescription).not.toContain('Quality:')
+    expect(jobDescription).not.toContain('Score:')
   })
 
   it('does not block the RG Tools link when ServiceM8 rejects a job card write', async () => {

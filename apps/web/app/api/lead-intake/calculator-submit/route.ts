@@ -8,7 +8,14 @@ import {
   type CalculatorSubmission,
 } from '@/modules/lead-intake/calculator/map-calculator-submission'
 import { saveLeadSubmitFailure } from '@/modules/lead-intake/calculator/submit-failures'
-import { findCalculatorLeadBySubmissionRef } from '@/modules/lead-intake/calculator/idempotency'
+import {
+  databaseDiagnostic,
+  isProvisionalPhoneConflict,
+} from '@/modules/lead-intake/calculator/contact-review'
+import {
+  findCalculatorLeadBySubmissionRef,
+  hasCompletedCustomerEstimateEmail,
+} from '@/modules/lead-intake/calculator/idempotency'
 import { numberValue, stringValue } from '@/modules/lead-intake/calculator/parse'
 import { errorMessage } from '@/lib/error-message'
 import { sendCustomerEstimateEmail } from '@/modules/lead-intake/email/customer-estimate'
@@ -92,17 +99,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const existingLead = await findCalculatorLeadBySubmissionRef(submissionRef)
-    if (existingLead) {
-      logSubmit({ correlationId, ip, stage: 'idempotency', outcome: 'accepted', reason: existingLead.leadId })
-      return json({
-        ok: true,
-        leadId: existingLead.leadId,
-        submissionRef,
-        idempotent: true,
-      }, 200, request)
-    }
-
     let input
     try {
       input = mapCalculatorSubmissionToIntakeInput(submission, {
@@ -115,79 +111,172 @@ export async function POST(request: NextRequest) {
       return json({ error: 'Unable to submit lead' }, 500, request)
     }
 
-    const result = await submitLeadIntakeForUser(input, null, { syncServiceM8: false })
+    const existingLead = await findCalculatorLeadBySubmissionRef(submissionRef)
+    if (existingLead) {
+      const emailInput = buildCustomerEmailInput(existingLead.leadId, submission, input, correlationId)
+      const emailAlreadySent = await hasCompletedCustomerEstimateEmail(existingLead.leadId, emailInput.to)
+      scheduleLeadDelivery({
+        leadId: existingLead.leadId,
+        emailInput,
+        correlationId,
+        ip,
+        sendEmail: !emailAlreadySent,
+      })
+      logSubmit({ correlationId, ip, stage: 'idempotency', outcome: 'accepted', reason: existingLead.leadId })
+      return json({
+        ok: true,
+        leadId: existingLead.leadId,
+        submissionRef,
+        idempotent: true,
+      }, 200, request)
+    }
+
+    let result
+    try {
+      result = await submitLeadIntakeForUser(input, null, { syncServiceM8: false })
+    } catch (error) {
+      const diagnostic = databaseDiagnostic(error)
+      if (!isProvisionalPhoneConflict(diagnostic)) throw error
+
+      logSubmit({
+        correlationId,
+        ip,
+        stage: 'identity_conflict',
+        outcome: 'error',
+        reason: 'retry_as_contact_review',
+        submissionRef,
+        ...diagnostic,
+      })
+      result = await submitLeadIntakeForUser(input, null, {
+        syncServiceM8: false,
+        forceContactReview: true,
+      })
+    }
     if (!('success' in result)) {
       await deadLetter({ correlationId, ip, stage: 'save', error: result.error, payload, submissionRef })
       return json({ error: 'Unable to submit lead' }, 500, request)
     }
 
     logSubmit({ correlationId, ip, stage: 'save', outcome: 'accepted', reason: result.leadId })
-
-    const emailInput = {
-      leadId: result.leadId,
-      to: stringValue(submission.lead?.email),
-      customerName: input.clientName,
-      estimate: normalizeEstimate(submission.estimate),
-      projectType: input.projectType,
-      answers: submission.answers,
-      correlationId,
-    }
-
-    // Run the email after the response is sent so the customer never waits on it.
-    // after() keeps the serverless function alive until this completes — a plain
-    // fire-and-forget promise would be frozen/killed once the response returns.
-    // The lead is already saved, so a scheduling failure here must never turn the
-    // request into a 500: wrap it and still return success.
-    try {
-      after(async () => {
-        // ServiceM8 sync runs here (not inline) so the customer never waits on it,
-        // but it still happens automatically — no cron/retry batch required. The lead
-        // is left as pending_sync by submitLeadIntakeForUser until this completes.
-        try {
-          const sm8 = await syncLeadToServiceM8(result.leadId)
-          logSubmit({
-            correlationId,
-            ip,
-            stage: 'sm8',
-            outcome: sm8.ok ? 'accepted' : 'error',
-            reason: sm8.ok ? sm8.reference : sm8.error,
-          })
-        } catch (error) {
-          logSubmit({ correlationId, ip, stage: 'sm8', outcome: 'error', reason: errorMessage(error) })
-        }
-
-        try {
-          const emailResult = await sendCustomerEstimateEmail(emailInput)
-          logSubmit({
-            correlationId,
-            ip,
-            stage: 'email',
-            outcome: emailResult.ok ? 'accepted' : 'error',
-            reason: emailResult.ok ? 'queued' : emailResult.error,
-          })
-        } catch (error) {
-          logSubmit({ correlationId, ip, stage: 'email', outcome: 'error', reason: errorMessage(error) })
-        }
+    if (result.contactReviewReason) {
+      logSubmit({
+        correlationId,
+        ip,
+        stage: 'identity_review',
+        outcome: 'accepted',
+        reason: 'contact_details_need_checking',
+        submissionRef,
       })
-    } catch (schedulingError) {
-      logSubmit({ correlationId, ip, stage: 'email', outcome: 'error', reason: errorMessage(schedulingError) })
     }
+
+    scheduleLeadDelivery({
+      leadId: result.leadId,
+      emailInput: buildCustomerEmailInput(result.leadId, submission, input, correlationId),
+      correlationId,
+      ip,
+      sendEmail: true,
+    })
 
     return json({ ok: true, leadId: result.leadId, submissionRef }, 200, request)
   } catch (error) {
-    const message = errorMessage(error)
-    logSubmit({ correlationId, ip, stage: 'save', outcome: 'error', reason: message })
+    const diagnostic = databaseDiagnostic(error)
+    const contactConflict = isProvisionalPhoneConflict(diagnostic)
+    const reason = contactConflict ? 'contact_details_conflict' : 'unexpected_save_failure'
+    logSubmit({
+      correlationId,
+      ip,
+      stage: contactConflict ? 'identity_conflict' : 'save',
+      outcome: 'error',
+      reason,
+      submissionRef: payload !== null
+        ? normalizeSubmissionRef((payload as CalculatorSubmission).submissionRef)
+        : undefined,
+      ...diagnostic,
+    })
     if (payload !== null) {
       await deadLetter({
         correlationId,
         ip,
-        stage: 'save',
-        error: message,
+        stage: contactConflict ? 'identity_conflict' : 'save',
+        error: reason,
         payload,
         submissionRef: normalizeSubmissionRef((payload as CalculatorSubmission).submissionRef),
       })
     }
     return json({ error: 'Unable to submit lead' }, 500, request)
+  }
+}
+
+function buildCustomerEmailInput(
+  leadId: string,
+  submission: CalculatorSubmission,
+  input: ReturnType<typeof mapCalculatorSubmissionToIntakeInput>,
+  correlationId: string,
+) {
+  return {
+    leadId,
+    to: stringValue(submission.lead?.email),
+    customerName: input.clientName,
+    estimate: normalizeEstimate(submission.estimate),
+    projectType: input.projectType,
+    answers: submission.answers,
+    correlationId,
+  }
+}
+
+function scheduleLeadDelivery({
+  leadId,
+  emailInput,
+  correlationId,
+  ip,
+  sendEmail,
+}: {
+  leadId: string
+  emailInput: ReturnType<typeof buildCustomerEmailInput>
+  correlationId: string
+  ip: string
+  sendEmail: boolean
+}) {
+  try {
+    after(async () => {
+      const tasks: Promise<void>[] = [
+        (async () => {
+          try {
+            const sm8 = await syncLeadToServiceM8(leadId)
+            logSubmit({
+              correlationId,
+              ip,
+              stage: 'sm8',
+              outcome: sm8.ok ? 'accepted' : 'error',
+              reason: sm8.ok ? sm8.reference : sm8.error,
+            })
+          } catch (error) {
+            logSubmit({ correlationId, ip, stage: 'sm8', outcome: 'error', reason: errorMessage(error) })
+          }
+        })(),
+      ]
+
+      if (sendEmail) {
+        tasks.push((async () => {
+          try {
+            const emailResult = await sendCustomerEstimateEmail(emailInput)
+            logSubmit({
+              correlationId,
+              ip,
+              stage: 'email',
+              outcome: emailResult.ok ? 'accepted' : 'error',
+              reason: emailResult.ok ? 'queued' : emailResult.error,
+            })
+          } catch (error) {
+            logSubmit({ correlationId, ip, stage: 'email', outcome: 'error', reason: errorMessage(error) })
+          }
+        })())
+      }
+
+      await Promise.all(tasks)
+    })
+  } catch (schedulingError) {
+    logSubmit({ correlationId, ip, stage: 'delivery', outcome: 'error', reason: errorMessage(schedulingError) })
   }
 }
 
@@ -265,6 +354,10 @@ function logSubmit(entry: {
   stage: string
   outcome: 'accepted' | 'rejected' | 'error'
   reason: string
+  submissionRef?: string
+  errorType?: string
+  databaseCode?: string
+  databaseConstraint?: string
 }) {
   const logEntry = {
     timestamp: new Date().toISOString(),
@@ -274,6 +367,10 @@ function logSubmit(entry: {
     stage: entry.stage,
     outcome: entry.outcome,
     reason: entry.reason,
+    ...(entry.submissionRef ? { submissionRef: entry.submissionRef } : {}),
+    ...(entry.errorType ? { errorType: entry.errorType } : {}),
+    ...(entry.databaseCode ? { databaseCode: entry.databaseCode } : {}),
+    ...(entry.databaseConstraint ? { databaseConstraint: entry.databaseConstraint } : {}),
   }
 
   if (entry.outcome === 'error') console.error(JSON.stringify(logEntry))

@@ -75,6 +75,7 @@ export type LeadIntakeResult =
       distanceBand: string | null
       flagNote: string | null
       servicem8Sync: ServiceM8LeadSyncOutcome
+      contactReviewReason?: string | null
     }
   | { error: string }
 
@@ -172,7 +173,8 @@ export async function submitLeadIntakeForUser(
   {
     syncServiceM8 = true,
     allowMissingContact = false,
-  }: { syncServiceM8?: boolean; allowMissingContact?: boolean } = {},
+    forceContactReview = false,
+  }: { syncServiceM8?: boolean; allowMissingContact?: boolean; forceContactReview?: boolean } = {},
 ): Promise<LeadIntakeResult> {
   const normalized = repairMatrixFieldAliases(normalizeInput(input))
   const validationError = allowMissingContact
@@ -195,6 +197,7 @@ export async function submitLeadIntakeForUser(
   let clientId = ''
   let contactId: string | null = null
   let matchedExistingClient = Boolean(normalized.leadId)
+  let contactReviewReason: string | null = null
 
   await db.transaction(async (tx) => {
     if (normalized.leadId) {
@@ -258,10 +261,12 @@ export async function submitLeadIntakeForUser(
         phone: normalized.phone,
         phoneNormalized: normalized.phoneNormalized,
         email: normalized.email,
+        forceContactReview,
       })
       clientId = resolved.clientId
       contactId = resolved.contactId
       matchedExistingClient = resolved.matchedExistingClient
+      contactReviewReason = resolved.contactReviewReason ?? null
 
       const [createdLead] = await tx
         .insert(leads)
@@ -340,6 +345,7 @@ export async function submitLeadIntakeForUser(
     distanceBand,
     flagNote: score.flagNote,
     servicem8Sync,
+    contactReviewReason,
   }
 }
 

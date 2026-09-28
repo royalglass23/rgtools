@@ -25,7 +25,7 @@ The minimum save is:
 - Email
 - Job Address
 
-If a client with the same phone number or email already exists, their record is reused and updated.
+If a client with the same phone number or email already exists, their record is usually reused and updated. When the email and phone point to different client records, rgtools keeps the new enquiry on a separate client record and adds a contact-review note. Check both matches before linking or merging records.
 
 ## First-Call Fields
 
