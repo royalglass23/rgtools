@@ -2,6 +2,7 @@ import { config } from 'dotenv'
 config({ path: '.env.local' })
 
 import { getServiceM8ApiKey } from '../lib/servicem8/client'
+import { registerServiceM8Webhook } from '../lib/servicem8/webhook-registration'
 
 const WEBHOOK_SUBSCRIPTION_URL = 'https://api.servicem8.com/webhook_subscriptions/object'
 const UNIQUE_ID = 'rgtools-quote-attachment-webhook'
@@ -37,21 +38,13 @@ async function main() {
     unique_id: UNIQUE_ID,
   })
 
-  const response = await fetch(WEBHOOK_SUBSCRIPTION_URL, {
-    method: 'POST',
-    headers: {
-      'X-API-Key': getServiceM8ApiKey(),
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
+  await registerServiceM8Webhook({
+    endpoint: WEBHOOK_SUBSCRIPTION_URL,
+    apiKey: getServiceM8ApiKey(),
     body,
+    failureLabel: 'ServiceM8 webhook registration failed',
+    successLabel: `Registered ServiceM8 attachment webhook (${UNIQUE_ID})`,
   })
-
-  const text = await response.text()
-  if (!response.ok) {
-    throw new Error(`ServiceM8 webhook registration failed with HTTP ${response.status}: ${text}`)
-  }
-
-  console.log(`Registered ServiceM8 attachment webhook (${UNIQUE_ID}): ${text}`)
 }
 
 main().catch((error) => {

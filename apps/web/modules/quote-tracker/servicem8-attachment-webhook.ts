@@ -1,4 +1,5 @@
 import { createServiceM8RequestFromEnv, getAttachmentRecord, type ServiceM8FetchRequest } from '@/lib/servicem8/client'
+import { isServiceM8WebhookAuthorized } from '@/lib/servicem8/webhook-security'
 
 import { createTrackedQuote, type CreateTrackedQuoteResult } from './create-tracked-quote'
 import { resolveOwnerUserIdFromServiceM8Staff } from './owner-attribution'
@@ -47,7 +48,7 @@ export async function handleServiceM8AttachmentWebhook(input: {
 }): Promise<AttachmentWebhookResult> {
   const deps = resolveDeps(input.deps)
   const url = new URL(input.url)
-  if (!isAuthorized(url, input.headers, deps.secret)) {
+  if (!isServiceM8WebhookAuthorized({ url, headers: input.headers, secret: deps.secret })) {
     return { status: 401, body: { error: 'Unauthorized' } }
   }
 
@@ -120,15 +121,6 @@ function resolveDeps(
     getNotificationSettings: overrides?.getNotificationSettings ?? getNotificationSettings,
     sendReadyLinkEmail: overrides?.sendReadyLinkEmail ?? sendReadyLinkEmail,
   }
-}
-
-function isAuthorized(url: URL, headers: Headers, secret: string | undefined): boolean {
-  if (!secret) return false
-  return (
-    // url.searchParams.get('token') === secret ||  // TODO: token-in-URL leaks to logs — use header auth instead
-    headers.get('x-servicem8-webhook-secret') === secret ||
-    headers.get('authorization') === `Bearer ${secret}`
-  )
 }
 
 function readEntries(body: WebhookBody): WebhookEntry[] {

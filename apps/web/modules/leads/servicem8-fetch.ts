@@ -156,7 +156,6 @@ export async function fetchLeadFromServiceM8(
     }
   }
 
-  const wasAlreadyLinked = Boolean(lead.servicem8JobUuid)
   const leadsQuality = lead.tier ? `Leads Quality ${lead.tier}` : 'Not set'
   const jobNumber = matchingJob.generated_job_id ?? null
   const jobStatus = matchingJob.status ?? null
@@ -193,7 +192,7 @@ export async function fetchLeadFromServiceM8(
   let customFieldUpdated = false
   let customFieldError: string | undefined
 
-  if (!wasAlreadyLinked && hasLeadJobCardContent(jobCardFields)) {
+  if (hasLeadJobCardContent(jobCardFields)) {
     try {
       const writeResult = await setJobLeadCardFields(
         matchingJob.uuid,
@@ -666,9 +665,9 @@ async function findMatchingInboxJob(
     return Boolean(
       candidate.converted_to_job_uuid &&
       (
-        candidate.message_text?.includes(reference) ||
-        candidate.message_html?.includes(reference) ||
-        candidate.subject?.includes(reference)
+        includesLeadReference(candidate.message_text, reference) ||
+        includesLeadReference(candidate.message_html, reference) ||
+        includesLeadReference(candidate.subject, reference)
       ),
     )
   })
@@ -683,4 +682,10 @@ async function findMatchingInboxJob(
   const job = await jobResponse.json()
   if (!job || typeof job !== 'object') return undefined
   return job as ServiceM8Job
+}
+
+function includesLeadReference(value: string | null | undefined, reference: string): boolean {
+  if (!value) return false
+  const legacyReference = reference.replace(/^RGTools Lead\s+/, 'RGTools Lead: ')
+  return value.includes(reference) || value.includes(legacyReference)
 }

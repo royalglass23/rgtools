@@ -6,6 +6,10 @@ All notable changes to rgtools are recorded here, grouped by release.
 
 ## [Unreleased]
 
+### Fixed
+
+- Calculator jobs created from ServiceM8 inbox email now reconcile through a retryable `job.created` webhook, including legacy `RGTools Lead:` references. The callback authenticates before reading a bounded payload, deduplicates job IDs, waits for the job-card write before acknowledging delivery, retries writes for already-linked leads, and redacts its dedicated callback credential from registration errors.
+
 ### Removed
 
 - Removed the legacy editable scoring admin UI, obsolete scoring seed scripts, and retired spreadsheet intake surface. Lead intake now uses the hardcoded Decision Matrix as the single scoring source of truth.

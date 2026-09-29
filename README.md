@@ -182,9 +182,12 @@ pnpm quote:share --latest       # temporary trycloudflare.com share link
 pnpm quote:create --job R260210 # create a tracked quote in the database
 pnpm quotes:client-backfill     # link historical quotes to client records
 pnpm clients:merge-cleanup      # apply reviewed client merge cleanup
+pnpm --dir apps/web servicem8:job-webhook:register # subscribe to ServiceM8 job.created
 ```
 
 The quote share tunnel is temporary and is not suitable for sending to real customers.
+Register the job-created webhook only after its production callback URL and dedicated random
+callback credential are configured. See [Developer setup](docs/dev/setup.md#servicem8-job-created-webhook).
 
 ### Workers
 

@@ -26,7 +26,7 @@ const linkedLeadRow = vi.hoisted(() => ({
   paymentHistory: 'new_client',
   siteAccess: 'easy',
   installationHeight: 'ground_floor_ladder',
-  freeText: null,
+  freeText: null as string | null,
   location: '1 Linked Street, Auckland',
   suburb: 'Auckland Central',
   servicem8JobUuid: 'job-uuid-1',
@@ -59,7 +59,7 @@ const unlinkedLeadRow = vi.hoisted(() => ({
   paymentHistory: 'new_client',
   siteAccess: 'easy',
   installationHeight: 'ground_floor_ladder',
-  freeText: null,
+  freeText: null as string | null,
   location: '2 Unlinked Street, Auckland',
   suburb: 'Auckland Central',
   servicem8JobUuid: null,
@@ -226,6 +226,32 @@ describe('fetchLeadFromServiceM8', () => {
     expect(request.mock.calls[0][0]).toBe('/job/job-uuid-1.json')
   })
 
+  it('retries the job-card write when the lead is already linked', async () => {
+    const request = vi.fn<ServiceM8FetchRequest>(async (path) => {
+      if (path === '/job/job-uuid-1.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            uuid: 'job-uuid-1',
+            status: 'Quote',
+            generated_job_id: 'R260210',
+          }),
+        }
+      }
+      throw new Error(`Unexpected request path: ${path}`)
+    })
+
+    const result = await fetchLeadFromServiceM8('lead-1', 'actor-1', { request })
+
+    expect(result).toMatchObject({ ok: true, customFieldUpdated: true })
+    expect(setJobLeadCardFieldsMock).toHaveBeenCalledWith(
+      'job-uuid-1',
+      expect.objectContaining({ jobDescription: expect.stringContaining('--- Contact ---') }),
+      writeRequestMock,
+    )
+  })
+
   it('filters the job search by the lead created date when not yet linked', async () => {
     activeLeadRow.current = unlinkedLeadRow
 
@@ -250,6 +276,66 @@ describe('fetchLeadFromServiceM8', () => {
 
     const jobSearchPath = request.mock.calls.map((c) => c[0]).find((p) => p.startsWith('/job.json'))
     expect(jobSearchPath).toBe(`/job.json?%24filter=${encodeURIComponent("date gt '2026-06-07'")}`)
+  })
+
+  it('reconciles a converted calculator email that uses the legacy colon reference', async () => {
+    activeLeadRow.current = {
+      ...unlinkedLeadRow,
+      freeText: [
+        '[Calculator] submitted 2026-09-28T19:23:23.371Z',
+        'Estimate: $7700 - $10250 (subtotal $8550)',
+        'Project: Stair Balustrade, 8m, 0 corner(s), 0 gate(s), landing 1m',
+        'Fixing: Round Spigots | Substrate: Timber | Hardware: Standard Chrome',
+        'Glass: 12mm Toughened / Clear',
+        'Customer type: Homeowner | Call preference: anytime',
+        'Consultation needed: no',
+        'Contact consent: yes',
+      ].join('\n'),
+    }
+    const request = vi.fn<ServiceM8FetchRequest>(async (path) => {
+      if (path.startsWith('/job.json')) {
+        return { ok: true, status: 200, json: async () => [] }
+      }
+      if (path.startsWith('/inboxmessage.json')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            messages: [{
+              converted_to_job_uuid: 'job-uuid-2',
+              message_text: '--- Reference ---\nRGTools Lead: lead-2',
+            }],
+          }),
+        }
+      }
+      if (path === '/job/job-uuid-2.json') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            uuid: 'job-uuid-2',
+            status: 'Quote',
+            generated_job_id: 'R260675',
+          }),
+        }
+      }
+      throw new Error(`Unexpected request path: ${path}`)
+    })
+
+    const result = await fetchLeadFromServiceM8('lead-2', 'actor-1', { request })
+
+    expect(result).toMatchObject({ ok: true, jobUuid: 'job-uuid-2', jobNumber: 'R260675' })
+    expect(setJobLeadCardFieldsMock).toHaveBeenCalledWith(
+      'job-uuid-2',
+      expect.objectContaining({ jobDescription: expect.any(String) }),
+      writeRequestMock,
+    )
+    const jobDescription = setJobLeadCardFieldsMock.mock.calls[0][1].jobDescription
+    expect(jobDescription).toContain('--- Installation Details ---')
+    expect(jobDescription).toContain('Length: 8 m')
+    expect(jobDescription).toContain('Landing: 1 m')
+    expect(jobDescription).toContain('Fixing: Round Spigots')
+    expect(jobDescription).toContain('Contact consent: Yes')
   })
 
   it('stores the generated_job_id from the matched job', async () => {

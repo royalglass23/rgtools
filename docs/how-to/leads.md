@@ -75,14 +75,14 @@ The **Fetch from ServiceM8** button remains available on read-only leads. Use it
 
 ## Fetching From ServiceM8
 
-When a lead is submitted through Lead Intake, RG Tools sends an email to the ServiceM8 inbox with an `RGTools Lead {id}` reference. ServiceM8 creates a job from that email.
+When a lead is submitted through Lead Intake, RG Tools sends an email to the ServiceM8 inbox with an `RGTools Lead {id}` reference. ServiceM8 creates a job from that email. When the job-created webhook is configured, RG Tools automatically links the converted calculator job and writes the full internal job-card details before acknowledging the callback. Temporary ServiceM8 lookup or write failures are returned for retry.
 
 Click **Fetch from ServiceM8** on the detail page. The button:
 
 1. Searches ServiceM8 jobs for `RGTools Lead {leadId}` when the lead is not yet linked, or refreshes the known job UUID when the lead is already linked.
 2. Stores the ServiceM8 job UUID, job number, and current status.
-3. On the first successful fetch for a scored lead, writes the human-readable lead values into the ServiceM8 job card: Job Description, Client Type, Leads Quality, and Note.
-4. On later fetches, refreshes status without overwriting the initial job-card import.
+3. Writes the human-readable lead values into the ServiceM8 job card: Job Description, Client Type, Leads Quality, and Note.
+4. On later fetches, refreshes status and retries the same job-card write so a temporary first-write failure can recover.
 
 The button shows a status message after each fetch:
 
