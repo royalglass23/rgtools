@@ -85,6 +85,34 @@ Do not copy production credentials into a collaborator's local environment. Keep
 Preview on the Neon `dev` branch, and use the pooled connection string (`-pooler` in the host)
 where Neon provides one.
 
+### ServiceM8 job-created webhook
+
+Automatic calculator-job reconciliation uses ServiceM8's `job.created` event. Configure the
+deployed environment with:
+
+```dotenv
+SERVICEM8_JOB_WEBHOOK_URL=https://your-app.example.com/api/servicem8/job
+SERVICEM8_JOB_WEBHOOK_SECRET=<at-least-32-random-bytes>
+```
+
+Generate a credential with `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`.
+This credential is dedicated to the callback; do not reuse a ServiceM8 API key. ServiceM8's
+Webhooks API does not sign these callback requests, so the registration command adds the credential
+to the callback query string. Do not log the full callback URL, and configure any proxy or log drain
+to redact the `token` query parameter. Rotate the credential by updating the deployed secret and
+registering the subscription again.
+
+After the route is deployed, register or update the subscription from the repository root:
+
+```text
+pnpm --dir apps/web servicem8:job-webhook:register
+```
+
+The callback accepts at most 64 KiB and 10 unique job entries, ignores unrelated jobs, and returns a
+non-2xx response when ServiceM8 lookup or calculator reconciliation fails so ServiceM8 can retry.
+Registration, deployment, and credential rotation are operational actions; running tests or builds
+does not perform them.
+
 ## Prepare the database
 
 Run migrations from the repository root:
