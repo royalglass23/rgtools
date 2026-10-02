@@ -33,6 +33,11 @@ export type ServiceM8LeadJobCardWriteResult = {
   skipped: string[]
 }
 
+export type ServiceM8JobDiaryNoteWriteResult = {
+  action: 'created' | 'updated'
+  noteUuid: string | null
+}
+
 type ServiceM8RetryOptions = {
   sleep?: (ms: number) => Promise<void>
   random?: () => number
@@ -306,6 +311,66 @@ export async function setJobLeadCardFields(
   }
 
   return { updated, skipped }
+}
+
+/**
+ * Keep one RGTools-owned diary note on the ServiceM8 job. The stable marker
+ * makes webhook retries idempotent while leaving staff-authored notes alone.
+ */
+export async function upsertJobDiaryNote(
+  jobUuid: string,
+  note: string,
+  marker: string,
+  request: ServiceM8FetchRequest = createServiceM8WriteRequestFromEnv(),
+): Promise<ServiceM8JobDiaryNoteWriteResult> {
+  const listResponse = await request(
+    `/note.json${odataFilter(`related_object_uuid eq '${escapeOdataString(jobUuid)}'`)}`,
+  )
+  if (!listResponse.ok) {
+    throw new Error(`ServiceM8 job diary lookup failed with HTTP ${listResponse.status}`)
+  }
+
+  const payload = await listResponse.json()
+  if (!Array.isArray(payload)) {
+    throw new Error('ServiceM8 job diary lookup returned an invalid response')
+  }
+
+  const existing = payload.find((candidate) => {
+    if (!candidate || typeof candidate !== 'object') return false
+    const row = candidate as { active?: unknown; note?: unknown; uuid?: unknown }
+    return row.active !== 0 && row.active !== '0' &&
+      typeof row.uuid === 'string' &&
+      typeof row.note === 'string' &&
+      row.note.includes(marker)
+  }) as { uuid: string } | undefined
+
+  if (existing) {
+    const updateResponse = await request(`/dbonote/${encodeURIComponent(existing.uuid)}.json`, {
+      method: 'POST',
+      body: JSON.stringify({ note }),
+    })
+    if (!updateResponse.ok) {
+      throw new Error(`ServiceM8 job diary update failed with HTTP ${updateResponse.status}`)
+    }
+    return { action: 'updated', noteUuid: existing.uuid }
+  }
+
+  const createResponse = await request('/note.json', {
+    method: 'POST',
+    body: JSON.stringify({
+      related_object: 'job',
+      related_object_uuid: jobUuid,
+      note,
+    }),
+  })
+  if (!createResponse.ok) {
+    throw new Error(`ServiceM8 job diary creation failed with HTTP ${createResponse.status}`)
+  }
+
+  return {
+    action: 'created',
+    noteUuid: createResponse.headers?.get('x-record-uuid') ?? null,
+  }
 }
 
 function addStandardField(

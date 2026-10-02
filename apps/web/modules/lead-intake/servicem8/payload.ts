@@ -42,9 +42,9 @@ export type ServiceM8LeadPayload = {
 
 export type ServiceM8LeadJobCardFields = {
   jobDescription: string | null
+  diaryNote: string | null
   clientType: string | null
   leadsQuality: ServiceM8LeadTier | null
-  note: string | null
 }
 
 type ReadableProjectDetails = {
@@ -165,7 +165,9 @@ export function buildServiceM8LeadJobCardFields(
     readableLine('Channel', humanizeValue(record.channel)),
     readableLine('Suburb', record.suburb),
   ].filter((line): line is string => Boolean(line))
-  const jobDescription = [
+  const diaryNote = [
+    'RGTools calculator submission',
+    '',
     ...buildContactLines(record),
     ...(leadScoreLines.length > 0 ? ['', '--- Lead Score ---', ...leadScoreLines] : []),
     '',
@@ -178,21 +180,44 @@ export function buildServiceM8LeadJobCardFields(
     '--- Reference ---',
     `RGTools Lead: ${record.leadId}`,
   ].join('\n')
-  const noteLines = [
-    leadQuality ? `Leads Quality ${leadQuality}` : null,
-    record.seedScore === null || record.seedScore === undefined ? null : `Score ${record.seedScore}`,
-    record.completeness === null || record.completeness === undefined ? null : `${record.completeness}% complete`,
-    humanizeStoredText(record.scoreReason),
-    cleanOneLine(record.strikeFlag),
-    `RGTools Lead ${record.leadId}`,
-  ].filter((line): line is string => Boolean(line))
 
   return {
-    jobDescription,
+    jobDescription: buildShortJobDescription(record, projectDetails),
+    diaryNote,
     clientType: optionLabel('clientType', record.clientProfileKey),
     leadsQuality: leadQuality,
-    note: noteLines.length > 0 ? noteLines.join(' | ') : null,
   }
+}
+
+function buildShortJobDescription(
+  record: ServiceM8LeadSyncRecord,
+  projectDetails: ReadableProjectDetails,
+): string {
+  const project = projectDetails.project ?? humanizeValue(record.projectType) ?? 'Glass project'
+  const detailByLabel = new Map(projectDetails.installationLines.map((line): [string, string] => {
+    const separator = line.indexOf(':')
+    return separator === -1
+      ? [line, '']
+      : [line.slice(0, separator), line.slice(separator + 1).trim()]
+  }))
+  const corners = detailByLabel.get('Corners')
+  const gates = detailByLabel.get('Gates')
+  const fixing = detailByLabel.get('Fixing')
+  const substrate = detailByLabel.get('Substrate')
+  const details = [
+    detailByLabel.get('Length')?.replace(/\s+m$/, 'm'),
+    corners && corners !== '0' ? formatCount(corners, 'corner') : null,
+    gates && gates !== '0' ? formatCount(gates, 'gate') : null,
+    fixing && substrate ? `${fixing} on ${substrate}` : fixing ?? substrate,
+  ].filter((value): value is string => Boolean(value))
+
+  const fallbackLocation = record.suburb ?? record.location
+  const suffix = details.length > 0 ? details.join(', ') : fallbackLocation
+  return `RGTools Lead - ${project} quote${suffix ? ` - ${suffix}` : ''}`
+}
+
+function formatCount(value: string, label: string): string {
+  return `${value} ${label}${value === '1' ? '' : 's'}`
 }
 
 function optionLabel(fieldKey: MatrixFieldKey, value: string | null | undefined): string | null {

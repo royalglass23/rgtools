@@ -4,7 +4,7 @@ import { auditLog } from '@rgtools/db/schema'
 import { logAudit } from '@/lib/audit-db'
 import { clients, leads } from '@rgtools/db/schema-leads'
 import { errorMessage } from '@/lib/error-message'
-import { setJobLeadCardFields } from '@/lib/servicem8/client'
+import { setJobLeadCardFields, upsertJobDiaryNote } from '@/lib/servicem8/client'
 import { createServiceM8ClientFromEnv } from './client'
 import {
   buildServiceM8InboxEmail,
@@ -32,7 +32,15 @@ export async function syncLeadToServiceM8(leadId: string): Promise<ServiceM8Lead
       // Job Description and any available custom fields. Best-effort: a failed
       // write must not fail the sync because the lead is already linked.
       try {
-        await setJobLeadCardFields(record.servicem8JobUuid, buildServiceM8LeadJobCardFields(record))
+        const fields = buildServiceM8LeadJobCardFields(record)
+        await setJobLeadCardFields(record.servicem8JobUuid, fields)
+        if (fields.diaryNote) {
+          await upsertJobDiaryNote(
+            record.servicem8JobUuid,
+            fields.diaryNote,
+            `RGTools Lead: ${record.leadId}`,
+          )
+        }
       } catch {
         // swallow — job-card fields are best-effort; the sync still succeeds
       }

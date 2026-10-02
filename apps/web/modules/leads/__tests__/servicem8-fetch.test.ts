@@ -113,6 +113,7 @@ const getCompanyContactMock = vi.hoisted(() => vi.fn())
 const writeRequestMock = vi.hoisted(() => vi.fn())
 const createServiceM8WriteRequestFromEnvMock = vi.hoisted(() => vi.fn(() => writeRequestMock))
 const setJobLeadCardFieldsMock = vi.hoisted(() => vi.fn())
+const upsertJobDiaryNoteMock = vi.hoisted(() => vi.fn())
 const resolveClientMock = vi.hoisted(() => vi.fn())
 const persistLeadScoreMock = vi.hoisted(() => vi.fn())
 const selectLimit = vi.hoisted(() => vi.fn())
@@ -135,6 +136,7 @@ vi.mock('@/lib/servicem8/client', () => ({
   getJobContact: getJobContactMock,
   getCompanyContact: getCompanyContactMock,
   setJobLeadCardFields: setJobLeadCardFieldsMock,
+  upsertJobDiaryNote: upsertJobDiaryNoteMock,
 }))
 
 vi.mock('@/modules/clients/client-resolver', () => ({
@@ -195,6 +197,8 @@ describe('fetchLeadFromServiceM8', () => {
     writeRequestMock.mockReset()
     setJobLeadCardFieldsMock.mockReset()
     setJobLeadCardFieldsMock.mockResolvedValue({ updated: ['jobDescription', 'clientType', 'leadsQuality', 'note'], skipped: [] })
+    upsertJobDiaryNoteMock.mockReset()
+    upsertJobDiaryNoteMock.mockResolvedValue({ action: 'created', noteUuid: 'note-uuid-1' })
     resolveClientMock.mockReset()
     persistLeadScoreMock.mockReset()
     insertReturning.mockClear()
@@ -244,10 +248,16 @@ describe('fetchLeadFromServiceM8', () => {
 
     const result = await fetchLeadFromServiceM8('lead-1', 'actor-1', { request })
 
-    expect(result).toMatchObject({ ok: true, customFieldUpdated: true })
+    expect(result).toMatchObject({ ok: true, customFieldUpdated: true, jobDiaryUpdated: true })
     expect(setJobLeadCardFieldsMock).toHaveBeenCalledWith(
       'job-uuid-1',
-      expect.objectContaining({ jobDescription: expect.stringContaining('--- Contact ---') }),
+      expect.objectContaining({ jobDescription: 'RGTools Lead - Pool Fence quote - Auckland Central' }),
+      writeRequestMock,
+    )
+    expect(upsertJobDiaryNoteMock).toHaveBeenCalledWith(
+      'job-uuid-1',
+      expect.stringContaining('--- Contact ---'),
+      'RGTools Lead: lead-1',
       writeRequestMock,
     )
   })
@@ -330,12 +340,13 @@ describe('fetchLeadFromServiceM8', () => {
       expect.objectContaining({ jobDescription: expect.any(String) }),
       writeRequestMock,
     )
-    const jobDescription = setJobLeadCardFieldsMock.mock.calls[0][1].jobDescription
-    expect(jobDescription).toContain('--- Installation Details ---')
-    expect(jobDescription).toContain('Length: 8 m')
-    expect(jobDescription).toContain('Landing: 1 m')
-    expect(jobDescription).toContain('Fixing: Round Spigots')
-    expect(jobDescription).toContain('Contact consent: Yes')
+    const fields = setJobLeadCardFieldsMock.mock.calls[0][1]
+    expect(fields.jobDescription).toBe('RGTools Lead - Stair Balustrade quote - 8m, Round Spigots on Timber')
+    expect(fields.diaryNote).toContain('--- Installation Details ---')
+    expect(fields.diaryNote).toContain('Length: 8 m')
+    expect(fields.diaryNote).toContain('Landing: 1 m')
+    expect(fields.diaryNote).toContain('Fixing: Round Spigots')
+    expect(fields.diaryNote).toContain('Contact consent: Yes')
   })
 
   it('stores the generated_job_id from the matched job', async () => {
@@ -387,12 +398,12 @@ describe('fetchLeadFromServiceM8', () => {
       customFieldUpdated: true,
     })
     expect(setJobLeadCardFieldsMock).toHaveBeenCalledWith('job-uuid-3', expect.objectContaining({
-      jobDescription: expect.stringContaining('--- Contact ---\nName: Unscored Client'),
+      diaryNote: expect.stringContaining('--- Contact ---\nName: Unscored Client'),
       leadsQuality: null,
     }), writeRequestMock)
-    const jobDescription = setJobLeadCardFieldsMock.mock.calls[0][1].jobDescription
-    expect(jobDescription).not.toContain('Quality:')
-    expect(jobDescription).not.toContain('Score:')
+    const diaryNote = setJobLeadCardFieldsMock.mock.calls[0][1].diaryNote
+    expect(diaryNote).not.toContain('Quality:')
+    expect(diaryNote).not.toContain('Score:')
   })
 
   it('does not block the RG Tools link when ServiceM8 rejects a job card write', async () => {

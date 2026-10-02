@@ -16,6 +16,7 @@ import {
   setJobLeadCardFields,
   setJobLeadsQuality,
   stripEmailNoise,
+  upsertJobDiaryNote,
   withServiceM8Retry,
   type ServiceM8FetchRequest,
 } from '../client'
@@ -705,6 +706,68 @@ describe('setJobLeadCardFields', () => {
     expect(JSON.parse(String(calls[0].init?.body))).toEqual({
       job_description: 'Glass balustrade',
     })
+  })
+})
+
+describe('upsertJobDiaryNote', () => {
+  it('creates one job diary note when no RGTools note exists', async () => {
+    const request = vi.fn<ServiceM8FetchRequest>(async (path) => {
+      if (path.startsWith('/note.json?')) {
+        return { ok: true, status: 200, json: async () => [] }
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'x-record-uuid': 'note-uuid-1' }),
+        json: async () => ({}),
+      }
+    })
+
+    await expect(upsertJobDiaryNote(
+      'job-uuid-1',
+      'Full calculator answers\nRGTools Lead: lead-1',
+      'RGTools Lead: lead-1',
+      request,
+    )).resolves.toEqual({ action: 'created', noteUuid: 'note-uuid-1' })
+
+    expect(request).toHaveBeenLastCalledWith('/note.json', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        related_object: 'job',
+        related_object_uuid: 'job-uuid-1',
+        note: 'Full calculator answers\nRGTools Lead: lead-1',
+      }),
+    }))
+  })
+
+  it('updates the matching RGTools note instead of creating a duplicate', async () => {
+    const request = vi.fn<ServiceM8FetchRequest>(async (path) => {
+      if (path.startsWith('/note.json?')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => [{
+            uuid: 'note-uuid-1',
+            active: 1,
+            note: 'Old answers\nRGTools Lead: lead-1',
+          }],
+        }
+      }
+      return { ok: true, status: 200, json: async () => ({}) }
+    })
+
+    await expect(upsertJobDiaryNote(
+      'job-uuid-1',
+      'Updated answers\nRGTools Lead: lead-1',
+      'RGTools Lead: lead-1',
+      request,
+    )).resolves.toEqual({ action: 'updated', noteUuid: 'note-uuid-1' })
+
+    expect(request).toHaveBeenLastCalledWith('/dbonote/note-uuid-1.json', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ note: 'Updated answers\nRGTools Lead: lead-1' }),
+    }))
+    expect(request).toHaveBeenCalledTimes(2)
   })
 })
 
