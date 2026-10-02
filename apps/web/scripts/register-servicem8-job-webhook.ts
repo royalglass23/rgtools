@@ -2,7 +2,7 @@ import { config } from 'dotenv'
 import { fileURLToPath } from 'node:url'
 config({ path: fileURLToPath(new URL('../../../.env.local', import.meta.url)) })
 
-import { getServiceM8ApiKey } from '../lib/servicem8/client'
+import { getServiceM8FullApiKey } from '../lib/servicem8/client'
 import { registerServiceM8Webhook } from '../lib/servicem8/webhook-registration'
 
 const WEBHOOK_SUBSCRIPTION_URL = 'https://api.servicem8.com/webhook_subscriptions/event'
@@ -29,7 +29,7 @@ async function main() {
   })
   await registerServiceM8Webhook({
     endpoint: WEBHOOK_SUBSCRIPTION_URL,
-    apiKey: getServiceM8ApiKey(),
+    apiKey: getServiceM8FullApiKey(),
     body,
     failureLabel: 'ServiceM8 job webhook registration failed',
     successLabel: `Registered ServiceM8 job webhook (${UNIQUE_ID})`,
