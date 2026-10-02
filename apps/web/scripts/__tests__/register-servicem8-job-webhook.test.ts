@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../lib/servicem8/client', () => ({
   getServiceM8ApiKey: () => 'service-m8-api-key',
+  getServiceM8FullApiKey: () => 'service-m8-full-api-key',
 }))
 
 describe('register ServiceM8 job-created webhook', () => {
@@ -33,6 +34,7 @@ describe('register ServiceM8 job-created webhook', () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
     const body = init.body as URLSearchParams
     expect(url).toBe('https://api.servicem8.com/webhook_subscriptions/event')
+    expect(new Headers(init.headers).get('X-API-Key')).toBe('service-m8-full-api-key')
     expect(body.get('event')).toBe('job.created')
     expect(body.has('object')).toBe(false)
     expect(body.has('fields')).toBe(false)
