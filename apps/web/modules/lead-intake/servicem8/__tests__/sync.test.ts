@@ -21,6 +21,7 @@ const dbMock = vi.hoisted(() => ({
 
 const sendLeadToServiceM8InboxMock = vi.hoisted(() => vi.fn())
 const setJobLeadCardFieldsMock = vi.hoisted(() => vi.fn())
+const upsertJobDiaryNoteMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/lib/db', () => ({ db: dbMock }))
 vi.mock('../client', () => ({
@@ -28,6 +29,7 @@ vi.mock('../client', () => ({
 }))
 vi.mock('@/lib/servicem8/client', () => ({
   setJobLeadCardFields: setJobLeadCardFieldsMock,
+  upsertJobDiaryNote: upsertJobDiaryNoteMock,
 }))
 
 import { syncLeadToServiceM8, retryServiceM8LeadSyncBatch } from '../sync'
@@ -77,6 +79,8 @@ beforeEach(() => {
   insertValues.mockResolvedValue([])
   setJobLeadCardFieldsMock.mockReset()
   setJobLeadCardFieldsMock.mockResolvedValue({ updated: ['jobDescription', 'clientType', 'leadsQuality', 'note'], skipped: [] })
+  upsertJobDiaryNoteMock.mockReset()
+  upsertJobDiaryNoteMock.mockResolvedValue({ action: 'created', noteUuid: 'note-uuid-1' })
 })
 
 describe('syncLeadToServiceM8', () => {
@@ -138,7 +142,8 @@ describe('syncLeadToServiceM8', () => {
     await syncLeadToServiceM8('lead-1')
 
     expect(setJobLeadCardFieldsMock).toHaveBeenCalledWith('job-uuid-1', {
-      jobDescription: expect.stringContaining([
+      jobDescription: 'RGTools Lead - Pool Fence quote - Albany',
+      diaryNote: expect.stringContaining([
         '--- Contact ---',
         'Name: Aroha Smith',
         'Mobile: 021 123 456',
@@ -147,8 +152,12 @@ describe('syncLeadToServiceM8', () => {
       ].join('\n')),
       clientType: 'Builder / Developer / Pool Builder / Landscaper',
       leadsQuality: 'B',
-      note: 'Leads Quality B | Score 70 | 86% complete | Tier B (70): good fit | RGTools Lead lead-1',
     })
+    expect(upsertJobDiaryNoteMock).toHaveBeenCalledWith(
+      'job-uuid-1',
+      expect.stringContaining('RGTools Lead: lead-1'),
+      'RGTools Lead: lead-1',
+    )
     expect(sendLeadToServiceM8InboxMock).not.toHaveBeenCalled()
   })
 
@@ -167,13 +176,13 @@ describe('syncLeadToServiceM8', () => {
     expect(setJobLeadCardFieldsMock).toHaveBeenCalledWith(
       'job-uuid-unscored',
       expect.objectContaining({
-        jobDescription: expect.stringContaining('--- Contact ---\nName: Aroha Smith'),
+        diaryNote: expect.stringContaining('--- Contact ---\nName: Aroha Smith'),
         leadsQuality: null,
       }),
     )
-    const jobDescription = setJobLeadCardFieldsMock.mock.calls[0][1].jobDescription
-    expect(jobDescription).not.toContain('Quality:')
-    expect(jobDescription).not.toContain('Score:')
+    const diaryNote = setJobLeadCardFieldsMock.mock.calls[0][1].diaryNote
+    expect(diaryNote).not.toContain('Quality:')
+    expect(diaryNote).not.toContain('Score:')
   })
 
   it('does not write job card fields when the lead is not linked to a job', async () => {

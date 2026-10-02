@@ -12,6 +12,7 @@ import {
   getJobQuoteMeta,
   resolveJobUuid,
   setJobLeadCardFields,
+  upsertJobDiaryNote,
 } from '@/lib/servicem8/client'
 import type { ServiceM8FetchRequest, ServiceM8LeadJobCardFields } from '@/lib/servicem8/client'
 import { resolveClient } from '@/modules/clients/client-resolver'
@@ -56,6 +57,7 @@ export type LeadServiceM8FetchResult =
       jobStatus: string | null
       leadsQuality: string
       customFieldUpdated: boolean
+      jobDiaryUpdated: boolean
       customFieldError?: string
     }
   | {
@@ -190,19 +192,29 @@ export async function fetchLeadFromServiceM8(
     updatedAt: lead.updatedAt,
   })
   let customFieldUpdated = false
+  let jobDiaryUpdated = false
   let customFieldError: string | undefined
+  let customFieldsSkipped: string[] = []
 
   if (hasLeadJobCardContent(jobCardFields)) {
     try {
+      const writeRequest = createServiceM8WriteRequestFromEnv()
       const writeResult = await setJobLeadCardFields(
         matchingJob.uuid,
         jobCardFields,
-        createServiceM8WriteRequestFromEnv(),
+        writeRequest,
       )
       customFieldUpdated = writeResult.updated.length > 0
-      customFieldError = writeResult.skipped.length > 0
-        ? `Missing ServiceM8 field config for ${writeResult.skipped.join(', ')}`
-        : undefined
+      customFieldsSkipped = writeResult.skipped
+      if (jobCardFields.diaryNote) {
+        await upsertJobDiaryNote(
+          matchingJob.uuid,
+          jobCardFields.diaryNote,
+          `RGTools Lead: ${lead.id}`,
+          writeRequest,
+        )
+        jobDiaryUpdated = true
+      }
     } catch (error) {
       customFieldError = error instanceof Error ? error.message : String(error)
     }
@@ -231,6 +243,8 @@ export async function fetchLeadFromServiceM8(
       jobStatus,
       leadsQuality,
       customFieldUpdated,
+      jobDiaryUpdated,
+      customFieldsSkipped,
       customFieldError,
       jobCardFields,
     },
@@ -243,6 +257,7 @@ export async function fetchLeadFromServiceM8(
     jobStatus,
     leadsQuality,
     customFieldUpdated,
+    jobDiaryUpdated,
     customFieldError,
   }
 }
@@ -612,7 +627,7 @@ async function fetchJobByUuid(
 }
 
 function hasLeadJobCardContent(fields: ReturnType<typeof buildServiceM8LeadJobCardFields>): boolean {
-  return Boolean(fields.jobDescription || fields.clientType || fields.leadsQuality)
+  return Boolean(fields.jobDescription || fields.diaryNote || fields.clientType || fields.leadsQuality)
 }
 
 async function findMatchingJob(
