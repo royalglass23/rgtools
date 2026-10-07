@@ -4,6 +4,57 @@ import { describe, expect, it, vi } from 'vitest'
 import { handleServiceM8JobWebhook } from '../servicem8-job-webhook'
 
 describe('handleServiceM8JobWebhook', () => {
+  it('reconciles a job from the event webhook payload before acknowledging it', async () => {
+    const jobUuid = '01a11890-73f9-7dbb-a2ab-35ed36ed866b'
+    const reconcileLead = vi.fn().mockResolvedValue({ ok: true, customFieldUpdated: true })
+    const request = vi.fn(async (path: string) => ({
+      ok: true,
+      status: 200,
+      json: async () => path.startsWith('/job/')
+        ? { job_description: 'RGTools Lead - Ground Level Balustrade' }
+        : {
+            messages: [{
+              converted_to_job_uuid: jobUuid,
+              message_text: 'RGTools Lead: 61d9c8c4-7c36-4140-b3aa-0d872df06ee8',
+            }],
+          },
+    }))
+
+    const result = await handleServiceM8JobWebhook({
+      url: 'https://rgtools.example/api/servicem8/job?token=webhook-secret',
+      headers: new Headers(),
+      body: {
+        type: 'job.created',
+        createdAt: '2026-10-08T11:51:26+13:00',
+        data: { uuid: jobUuid },
+      },
+      deps: { secret: 'webhook-secret', request, reconcileLead },
+    })
+
+    expect(result).toEqual({ status: 200, body: { ok: true, processed: 1 } })
+    expect(request).toHaveBeenCalledWith(`/job/${jobUuid}.json`)
+    expect(reconcileLead).toHaveBeenCalledWith('61d9c8c4-7c36-4140-b3aa-0d872df06ee8')
+  })
+
+  it('asks ServiceM8 to retry a job.created event whose job UUID cannot be read', async () => {
+    const request = vi.fn()
+    const result = await handleServiceM8JobWebhook({
+      url: 'https://rgtools.example/api/servicem8/job?token=webhook-secret',
+      headers: new Headers(),
+      body: {
+        type: 'job.created',
+        createdAt: '2026-10-08T11:51:26+13:00',
+      },
+      deps: { secret: 'webhook-secret', request },
+    })
+
+    expect(result).toEqual({
+      status: 422,
+      body: { error: 'ServiceM8 job UUID is missing' },
+    })
+    expect(request).not.toHaveBeenCalled()
+  })
+
   it('reconciles a converted calculator job with a legacy colon reference before acknowledging it', async () => {
     const reconcileLead = vi.fn().mockResolvedValue({ ok: true, customFieldUpdated: true })
     const request = vi.fn(async (path: string) => {
