@@ -41,6 +41,13 @@ export async function syncLeadToServiceM8(leadId: string): Promise<ServiceM8Lead
             `RGTools Lead: ${record.leadId}`,
           )
         }
+        if (fields.summaryNote) {
+          await upsertJobDiaryNote(
+            record.servicem8JobUuid,
+            fields.summaryNote,
+            `Reference: RGTools Lead ${record.leadId}`,
+          )
+        }
       } catch {
         // swallow — job-card fields are best-effort; the sync still succeeds
       }

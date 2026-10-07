@@ -150,13 +150,25 @@ describe('syncLeadToServiceM8', () => {
         'Email: aroha@example.com',
         'Address: Albany',
       ].join('\n')),
+      summaryNote: expect.any(String),
       clientType: 'Builder / Developer / Pool Builder / Landscaper',
       leadsQuality: 'B',
     })
-    expect(upsertJobDiaryNoteMock).toHaveBeenCalledWith(
+    const summaryNote = setJobLeadCardFieldsMock.mock.calls[0][1].summaryNote
+    expect(summaryNote).toContain('--- Contact ---\nName: Aroha Smith')
+    expect(summaryNote).toContain('--- Project Summary ---')
+    expect(summaryNote).toContain('Reference: RGTools Lead lead-1')
+    expect(upsertJobDiaryNoteMock).toHaveBeenNthCalledWith(
+      1,
       'job-uuid-1',
       expect.stringContaining('RGTools Lead: lead-1'),
       'RGTools Lead: lead-1',
+    )
+    expect(upsertJobDiaryNoteMock).toHaveBeenNthCalledWith(
+      2,
+      'job-uuid-1',
+      expect.stringContaining('Reference: RGTools Lead lead-1'),
+      'Reference: RGTools Lead lead-1',
     )
     expect(sendLeadToServiceM8InboxMock).not.toHaveBeenCalled()
   })

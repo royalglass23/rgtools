@@ -64,7 +64,7 @@ describe('buildServiceM8LeadPayload', () => {
     expect(email.body).not.toContain('Email:')
   })
 
-  it('keeps the Job Description concise and puts complete lead details in a diary note', () => {
+  it('keeps the Job Description concise and builds complete and summary diary notes', () => {
     const jobCard = buildServiceM8LeadJobCardFields(leadRecord())
 
     expect(jobCard.jobDescription).toBe('RGTools Lead - Pool Fence quote - Auckland Central')
@@ -95,6 +95,60 @@ describe('buildServiceM8LeadPayload', () => {
     expect(jobCard.diaryNote).toContain('Reason: strong fit')
     expect(jobCard.diaryNote).toContain('Details: Customer wants a frameless option.')
     expect(jobCard.diaryNote).toContain('RGTools Lead: lead-1')
+    expect(jobCard.summaryNote).toBe([
+      '--- Contact ---',
+      'Name: Aroha Smith',
+      'Company: Smith Builds',
+      'Mobile: 021 123 456',
+      'Email: aroha@example.com',
+      'Address: 12 Queen Street, Auckland',
+      '',
+      '--- Project Summary ---',
+      'Product: Pool Fence',
+      'Budget: $10k to $50k',
+      'Driving distance: Within 30 km',
+      'Last updated: 6 Jul 2026',
+      'Reference: RGTools Lead lead-1',
+    ].join('\n'))
+  })
+
+  it('builds the requested contact and project summary diary note', () => {
+    const jobCard = buildServiceM8LeadJobCardFields(leadRecord({
+      leadId: '06f5f61f-9fd4-4c84-891e-9baa2e030841',
+      clientName: 'Daniel Brown',
+      companyName: null,
+      phone: '0275221991',
+      email: 'dbz@hotmail.com',
+      location: '12 Albany Road, Ponsonby, Auckland',
+      suburb: 'Ponsonby',
+      projectType: 'balcony_balustrade',
+      budgetBand: '20k_50k',
+      distanceBand: 'lt_15km',
+      freeText: [
+        '[Calculator] submitted 2026-10-08T01:00:00.000Z',
+        'Estimate: $39550 - $52700 (subtotal $43930)',
+        'Project: balcony_balustrade, 25m, 2 corner(s), 0 gate(s)',
+      ].join('\n'),
+      updatedAt: new Date('2026-10-08T01:00:00.000Z'),
+    }))
+
+    expect(jobCard.summaryNote).toBe([
+      '--- Contact ---',
+      'Name: Daniel Brown',
+      'Mobile: 0275221991',
+      'Email: dbz@hotmail.com',
+      'Address: 12 Albany Road, Ponsonby, Auckland',
+      '',
+      '--- Project Summary ---',
+      'Product: Balcony Balustrade',
+      'Project: Balcony Balustrade',
+      'Budget: $20k-50k',
+      'Estimated price: $39,550-$52,700',
+      'Subtotal: $43,930',
+      'Driving distance: <15 km',
+      'Last updated: 8 Oct 2026',
+      'Reference: RGTools Lead 06f5f61f-9fd4-4c84-891e-9baa2e030841',
+    ].join('\n'))
   })
 
   it('humanizes legacy/raw option keys before writing the ServiceM8 Job Description', () => {
@@ -198,17 +252,18 @@ describe('buildServiceM8LeadPayload', () => {
         'Subtotal: $4,950',
         'Driving distance: Within 30 km',
         'Last updated: 14 Jul 2026',
-        'Reference: RGTools Lead lead-1',
       ].join('\n'),
     )
-    expect(email.body).not.toContain('--- Lead Score ---')
-    expect(email.body).not.toContain('--- Lead Details ---')
-    expect(email.body).not.toContain('--- Installation Details ---')
-    expect(email.body).not.toContain('--- Reference ---')
-    expect(email.body).not.toContain('Notes: Requires one self closing gate.')
-    expect(email.body).not.toContain('Job description: Score 10 |')
-    expect(email.body).not.toContain('Details: [Calculator] submitted')
-    expect(email.body).not.toContain('Note: Leads Quality E |')
+    expect(email.body).toContain('--- Lead Score ---')
+    expect(email.body).toContain('Quality: E')
+    expect(email.body).toContain('Score: 10')
+    expect(email.body).toContain('--- Lead Details ---')
+    expect(email.body).toContain('Client type: Homeowner')
+    expect(email.body).toContain('--- Installation Details ---')
+    expect(email.body).toContain('Length: 8 m')
+    expect(email.body).toContain('Notes: Requires one self closing gate.')
+    expect(email.body).toContain('--- Reference ---')
+    expect(email.body).toContain('RGTools Lead: lead-1')
   })
 
   it('humanizes stair calculator submissions in the ServiceM8 Job Description', () => {

@@ -213,8 +213,16 @@ export async function fetchLeadFromServiceM8(
           `RGTools Lead: ${lead.id}`,
           writeRequest,
         )
-        jobDiaryUpdated = true
       }
+      if (jobCardFields.summaryNote) {
+        await upsertJobDiaryNote(
+          matchingJob.uuid,
+          jobCardFields.summaryNote,
+          `Reference: RGTools Lead ${lead.id}`,
+          writeRequest,
+        )
+      }
+      jobDiaryUpdated = Boolean(jobCardFields.diaryNote || jobCardFields.summaryNote)
     } catch (error) {
       customFieldError = error instanceof Error ? error.message : String(error)
     }
@@ -627,7 +635,13 @@ async function fetchJobByUuid(
 }
 
 function hasLeadJobCardContent(fields: ReturnType<typeof buildServiceM8LeadJobCardFields>): boolean {
-  return Boolean(fields.jobDescription || fields.diaryNote || fields.clientType || fields.leadsQuality)
+  return Boolean(
+    fields.jobDescription ||
+    fields.diaryNote ||
+    fields.summaryNote ||
+    fields.clientType ||
+    fields.leadsQuality,
+  )
 }
 
 async function findMatchingJob(
