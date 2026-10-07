@@ -138,12 +138,11 @@ export function buildServiceM8LeadJobCardFields(
 ): ServiceM8LeadJobCardFields {
   const leadQuality = record.tier ?? null
   const projectDetails = buildReadableProjectDetails(record.freeText)
-  const completeDetails = buildCompleteLeadDetails(record, projectDetails)
   const summaryNote = buildContactAndProjectSummary(record, projectDetails)
 
   return {
     jobDescription: buildShortJobDescription(record, projectDetails),
-    diaryNote: `RGTools calculator submission\n\n${completeDetails}`,
+    diaryNote: null,
     summaryNote,
     clientType: optionLabel('clientType', record.clientProfileKey),
     leadsQuality: leadQuality,

@@ -143,13 +143,7 @@ describe('syncLeadToServiceM8', () => {
 
     expect(setJobLeadCardFieldsMock).toHaveBeenCalledWith('job-uuid-1', {
       jobDescription: 'RGTools Lead - Pool Fence quote - Albany',
-      diaryNote: expect.stringContaining([
-        '--- Contact ---',
-        'Name: Aroha Smith',
-        'Mobile: 021 123 456',
-        'Email: aroha@example.com',
-        'Address: Albany',
-      ].join('\n')),
+      diaryNote: null,
       summaryNote: expect.any(String),
       clientType: 'Builder / Developer / Pool Builder / Landscaper',
       leadsQuality: 'B',
@@ -158,14 +152,8 @@ describe('syncLeadToServiceM8', () => {
     expect(summaryNote).toContain('--- Contact ---\nName: Aroha Smith')
     expect(summaryNote).toContain('--- Project Summary ---')
     expect(summaryNote).toContain('Reference: RGTools Lead lead-1')
-    expect(upsertJobDiaryNoteMock).toHaveBeenNthCalledWith(
-      1,
-      'job-uuid-1',
-      expect.stringContaining('RGTools Lead: lead-1'),
-      'RGTools Lead: lead-1',
-    )
-    expect(upsertJobDiaryNoteMock).toHaveBeenNthCalledWith(
-      2,
+    expect(upsertJobDiaryNoteMock).toHaveBeenCalledOnce()
+    expect(upsertJobDiaryNoteMock).toHaveBeenCalledWith(
       'job-uuid-1',
       expect.stringContaining('Reference: RGTools Lead lead-1'),
       'Reference: RGTools Lead lead-1',
@@ -188,13 +176,14 @@ describe('syncLeadToServiceM8', () => {
     expect(setJobLeadCardFieldsMock).toHaveBeenCalledWith(
       'job-uuid-unscored',
       expect.objectContaining({
-        diaryNote: expect.stringContaining('--- Contact ---\nName: Aroha Smith'),
+        diaryNote: null,
+        summaryNote: expect.stringContaining('--- Contact ---\nName: Aroha Smith'),
         leadsQuality: null,
       }),
     )
-    const diaryNote = setJobLeadCardFieldsMock.mock.calls[0][1].diaryNote
-    expect(diaryNote).not.toContain('Quality:')
-    expect(diaryNote).not.toContain('Score:')
+    const summaryNote = setJobLeadCardFieldsMock.mock.calls[0][1].summaryNote
+    expect(summaryNote).not.toContain('Quality:')
+    expect(summaryNote).not.toContain('Score:')
   })
 
   it('does not write job card fields when the lead is not linked to a job', async () => {
