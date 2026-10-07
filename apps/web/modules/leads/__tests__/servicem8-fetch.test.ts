@@ -254,10 +254,18 @@ describe('fetchLeadFromServiceM8', () => {
       expect.objectContaining({ jobDescription: 'RGTools Lead - Pool Fence quote - Auckland Central' }),
       writeRequestMock,
     )
-    expect(upsertJobDiaryNoteMock).toHaveBeenCalledWith(
+    expect(upsertJobDiaryNoteMock).toHaveBeenNthCalledWith(
+      1,
       'job-uuid-1',
       expect.stringContaining('--- Contact ---'),
       'RGTools Lead: lead-1',
+      writeRequestMock,
+    )
+    expect(upsertJobDiaryNoteMock).toHaveBeenNthCalledWith(
+      2,
+      'job-uuid-1',
+      expect.stringContaining('Reference: RGTools Lead lead-1'),
+      'Reference: RGTools Lead lead-1',
       writeRequestMock,
     )
   })
@@ -347,6 +355,10 @@ describe('fetchLeadFromServiceM8', () => {
     expect(fields.diaryNote).toContain('Landing: 1 m')
     expect(fields.diaryNote).toContain('Fixing: Round Spigots')
     expect(fields.diaryNote).toContain('Contact consent: Yes')
+    expect(fields.summaryNote).toContain('--- Contact ---')
+    expect(fields.summaryNote).toContain('--- Project Summary ---')
+    expect(fields.summaryNote).not.toContain('--- Lead Score ---')
+    expect(fields.summaryNote).not.toContain('--- Installation Details ---')
   })
 
   it('stores the generated_job_id from the matched job', async () => {

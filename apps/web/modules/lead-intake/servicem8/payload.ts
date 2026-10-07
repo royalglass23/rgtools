@@ -43,6 +43,7 @@ export type ServiceM8LeadPayload = {
 export type ServiceM8LeadJobCardFields = {
   jobDescription: string | null
   diaryNote: string | null
+  summaryNote: string | null
   clientType: string | null
   leadsQuality: ServiceM8LeadTier | null
 }
@@ -117,17 +118,11 @@ export function buildServiceM8InboxEmail(
     record.clientName,
     humanizeValue(record.projectType),
   ].filter(Boolean).join(' - ')
-  const bodyLines = [
-    ...buildContactLines(record),
-    '',
-    ...buildProjectSummaryLines(record, projectDetails),
-    `Reference: RGTools Lead ${record.leadId}`,
-  ].filter((line): line is string => line !== null)
 
   return {
     to: recipients,
     subject,
-    body: bodyLines.join('\n'),
+    body: buildCompleteLeadDetails(record, projectDetails),
     noteSignature: [
       tier,
       score,
@@ -143,6 +138,22 @@ export function buildServiceM8LeadJobCardFields(
 ): ServiceM8LeadJobCardFields {
   const leadQuality = record.tier ?? null
   const projectDetails = buildReadableProjectDetails(record.freeText)
+  const completeDetails = buildCompleteLeadDetails(record, projectDetails)
+  const summaryNote = buildContactAndProjectSummary(record, projectDetails)
+
+  return {
+    jobDescription: buildShortJobDescription(record, projectDetails),
+    diaryNote: `RGTools calculator submission\n\n${completeDetails}`,
+    summaryNote,
+    clientType: optionLabel('clientType', record.clientProfileKey),
+    leadsQuality: leadQuality,
+  }
+}
+
+function buildCompleteLeadDetails(
+  record: ServiceM8LeadSyncRecord,
+  projectDetails: ReadableProjectDetails,
+): string {
   const leadScoreLines = [
     record.tier ? `Quality: ${record.tier}` : null,
     record.seedScore === null || record.seedScore === undefined ? null : `Score: ${record.seedScore}`,
@@ -165,9 +176,7 @@ export function buildServiceM8LeadJobCardFields(
     readableLine('Channel', humanizeValue(record.channel)),
     readableLine('Suburb', record.suburb),
   ].filter((line): line is string => Boolean(line))
-  const diaryNote = [
-    'RGTools calculator submission',
-    '',
+  return [
     ...buildContactLines(record),
     ...(leadScoreLines.length > 0 ? ['', '--- Lead Score ---', ...leadScoreLines] : []),
     '',
@@ -180,13 +189,18 @@ export function buildServiceM8LeadJobCardFields(
     '--- Reference ---',
     `RGTools Lead: ${record.leadId}`,
   ].join('\n')
+}
 
-  return {
-    jobDescription: buildShortJobDescription(record, projectDetails),
-    diaryNote,
-    clientType: optionLabel('clientType', record.clientProfileKey),
-    leadsQuality: leadQuality,
-  }
+function buildContactAndProjectSummary(
+  record: ServiceM8LeadSyncRecord,
+  projectDetails: ReadableProjectDetails,
+): string {
+  return [
+    ...buildContactLines(record),
+    '',
+    ...buildProjectSummaryLines(record, projectDetails),
+    `Reference: RGTools Lead ${record.leadId}`,
+  ].join('\n')
 }
 
 function buildShortJobDescription(
