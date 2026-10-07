@@ -72,4 +72,32 @@ describe('POST /api/servicem8/job', () => {
       body: expect.objectContaining({ object: 'job' }),
     }))
   })
+
+  it('decodes a form-encoded event webhook payload', async () => {
+    handleServiceM8JobWebhookMock.mockResolvedValue({
+      status: 200,
+      body: { ok: true, processed: 1 },
+    })
+    const jobUuid = '01a11890-73f9-7dbb-a2ab-35ed36ed866b'
+    const request = new Request('https://rgtools.example/api/servicem8/job?token=secret', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        type: 'job.created',
+        createdAt: '2026-10-08T11:51:26+13:00',
+        data: JSON.stringify({ uuid: jobUuid }),
+      }),
+    })
+
+    const response = await POST(request)
+
+    expect(response.status).toBe(200)
+    expect(handleServiceM8JobWebhookMock).toHaveBeenCalledWith(expect.objectContaining({
+      body: {
+        type: 'job.created',
+        createdAt: '2026-10-08T11:51:26+13:00',
+        data: { uuid: jobUuid },
+      },
+    }))
+  })
 })

@@ -12,6 +12,16 @@ type WebhookEntry = {
 type WebhookBody = {
   object?: unknown
   entry?: unknown
+  type?: unknown
+  createdAt?: unknown
+  uuid?: unknown
+  job_uuid?: unknown
+  jobUuid?: unknown
+  jobUUID?: unknown
+  data?: unknown
+  job?: unknown
+  payload?: unknown
+  resource_url?: unknown
 }
 
 type WebhookDependencies = {
@@ -38,6 +48,9 @@ export async function handleServiceM8JobWebhook(input: {
   }
 
   const jobUuids = readJobUuids(input.body)
+  if (input.body.type === 'job.created' && jobUuids.length === 0) {
+    return { status: 422, body: { error: 'ServiceM8 job UUID is missing' } }
+  }
   if (jobUuids.length > 10) {
     return { status: 413, body: { error: 'Too many webhook entries' } }
   }
@@ -87,11 +100,49 @@ export function isServiceM8JobWebhookAuthorized(input: {
 }
 
 function readJobUuids(body: WebhookBody): string[] {
-  if (body.object !== 'job' || !Array.isArray(body.entry)) return []
-  return [...new Set(body.entry
-    .filter((entry): entry is WebhookEntry => Boolean(entry && typeof entry === 'object'))
-    .map((entry) => entry.uuid)
-    .filter((uuid): uuid is string => typeof uuid === 'string' && uuid.length > 0))]
+  if (body.object === 'job' && Array.isArray(body.entry)) {
+    return [...new Set(body.entry
+      .filter((entry): entry is WebhookEntry => Boolean(entry && typeof entry === 'object'))
+      .map((entry) => entry.uuid)
+      .filter((uuid): uuid is string => typeof uuid === 'string' && uuid.length > 0))]
+  }
+
+  if (body.type !== 'job.created') return []
+
+  const data = objectValue(body.data)
+  const payload = objectValue(body.payload)
+  const containers = [
+    body,
+    data,
+    objectValue(data?.job),
+    objectValue(body.job),
+    payload,
+    objectValue(payload?.job),
+  ]
+  const candidates = containers.flatMap((container) => container
+    ? [container.uuid, container.job_uuid, container.jobUuid, container.jobUUID]
+    : [])
+
+  if (typeof body.resource_url === 'string') {
+    candidates.push(jobUuidFromResourceUrl(body.resource_url))
+  }
+
+  return [...new Set(candidates.filter(isUuid))]
+}
+
+function objectValue(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined
+}
+
+function jobUuidFromResourceUrl(value: string): string | undefined {
+  return /\/job\/([0-9a-f-]{36})(?:\.json)?(?:[?#]|$)/i.exec(value)?.[1]
+}
+
+function isUuid(value: unknown): value is string {
+  return typeof value === 'string'
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
 }
 
 async function fetchJob(
