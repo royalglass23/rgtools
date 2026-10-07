@@ -254,15 +254,8 @@ describe('fetchLeadFromServiceM8', () => {
       expect.objectContaining({ jobDescription: 'RGTools Lead - Pool Fence quote - Auckland Central' }),
       writeRequestMock,
     )
-    expect(upsertJobDiaryNoteMock).toHaveBeenNthCalledWith(
-      1,
-      'job-uuid-1',
-      expect.stringContaining('--- Contact ---'),
-      'RGTools Lead: lead-1',
-      writeRequestMock,
-    )
-    expect(upsertJobDiaryNoteMock).toHaveBeenNthCalledWith(
-      2,
+    expect(upsertJobDiaryNoteMock).toHaveBeenCalledOnce()
+    expect(upsertJobDiaryNoteMock).toHaveBeenCalledWith(
       'job-uuid-1',
       expect.stringContaining('Reference: RGTools Lead lead-1'),
       'Reference: RGTools Lead lead-1',
@@ -350,11 +343,7 @@ describe('fetchLeadFromServiceM8', () => {
     )
     const fields = setJobLeadCardFieldsMock.mock.calls[0][1]
     expect(fields.jobDescription).toBe('RGTools Lead - Stair Balustrade quote - 8m, Round Spigots on Timber')
-    expect(fields.diaryNote).toContain('--- Installation Details ---')
-    expect(fields.diaryNote).toContain('Length: 8 m')
-    expect(fields.diaryNote).toContain('Landing: 1 m')
-    expect(fields.diaryNote).toContain('Fixing: Round Spigots')
-    expect(fields.diaryNote).toContain('Contact consent: Yes')
+    expect(fields.diaryNote).toBeNull()
     expect(fields.summaryNote).toContain('--- Contact ---')
     expect(fields.summaryNote).toContain('--- Project Summary ---')
     expect(fields.summaryNote).not.toContain('--- Lead Score ---')
@@ -410,12 +399,13 @@ describe('fetchLeadFromServiceM8', () => {
       customFieldUpdated: true,
     })
     expect(setJobLeadCardFieldsMock).toHaveBeenCalledWith('job-uuid-3', expect.objectContaining({
-      diaryNote: expect.stringContaining('--- Contact ---\nName: Unscored Client'),
+      diaryNote: null,
+      summaryNote: expect.stringContaining('--- Contact ---\nName: Unscored Client'),
       leadsQuality: null,
     }), writeRequestMock)
-    const diaryNote = setJobLeadCardFieldsMock.mock.calls[0][1].diaryNote
-    expect(diaryNote).not.toContain('Quality:')
-    expect(diaryNote).not.toContain('Score:')
+    const summaryNote = setJobLeadCardFieldsMock.mock.calls[0][1].summaryNote
+    expect(summaryNote).not.toContain('Quality:')
+    expect(summaryNote).not.toContain('Score:')
   })
 
   it('does not block the RG Tools link when ServiceM8 rejects a job card write', async () => {
