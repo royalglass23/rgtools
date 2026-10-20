@@ -39,7 +39,7 @@
 
 .logoLink {
   display: flex;
-  border-radius: 0.35rem;
+  border-radius: var(--radius-control);
   text-decoration: none;
 }
 
@@ -160,7 +160,7 @@
   position: absolute;
   inset: 0.55rem auto 0.55rem -0.9rem;
   width: 0.2rem;
-  border-radius: 0 0.2rem 0.2rem 0;
+  border-radius: 0 var(--radius-control) var(--radius-control) 0;
   background: var(--brand-accent);
   content: "";
 }
@@ -217,7 +217,7 @@
 
 .subNavigationLink {
   padding: 0.48rem 0.6rem;
-  border-radius: 0.45rem;
+  border-radius: var(--radius-control);
   color: var(--shell-text-muted);
   font-size: 0.76rem;
   font-weight: 600;
@@ -331,6 +331,18 @@
   padding: 2rem;
 }
 
+@media (min-width: 1024px) {
+  .main {
+    font-size: 0.9375rem;
+    --text-sm: 0.8125rem;
+    --text-base: 0.9375rem;
+    --text-lg: 1.0625rem;
+    --text-xl: 1.1875rem;
+    --text-2xl: 1.375rem;
+    --text-3xl: 1.6875rem;
+  }
+}
+
 .mobileHeader,
 .scrim {
   display: none;
@@ -434,7 +446,7 @@
     width: 2rem;
     height: 2rem;
     place-items: center;
-    border-radius: 0.55rem;
+    border-radius: var(--radius-control);
     background: var(--brand-strong);
     color: var(--brand-highlight);
     font-size: 0.65rem;
