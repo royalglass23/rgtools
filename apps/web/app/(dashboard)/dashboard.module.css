@@ -26,7 +26,7 @@
 .liveStatus span {
   width: 0.45rem;
   height: 0.45rem;
-  border-radius: 50%;
+  border-radius: var(--radius-control);
   background: var(--state-positive);
   box-shadow: 0 0 0 0.2rem var(--state-positive-soft);
 }
@@ -119,7 +119,7 @@
 .nextActionDot {
   width: 0.42rem;
   height: 0.42rem;
-  border-radius: 50%;
+  border-radius: var(--radius-control);
   background: var(--attention-tone);
 }
 

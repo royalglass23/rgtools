@@ -11,7 +11,7 @@
   min-height: 1.8rem;
   padding: 0.25rem 0.45rem;
   border: 0;
-  border-radius: calc(var(--radius-control) - 0.2rem);
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--shell-text-secondary);
   font: inherit;

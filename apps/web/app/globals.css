@@ -52,9 +52,9 @@
   --shell-icon: #8cb8c1;
   --shell-icon-active: #63d6e0;
 
-  --radius-control: 0.45rem;
-  --radius-panel: 0.75rem;
-  --radius-pill: 999px;
+  --radius-control: 3px;
+  --radius-panel: 3px;
+  --radius-pill: 3px;
   --motion-fast: 120ms;
   --motion-standard: 180ms;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
@@ -124,6 +124,13 @@
 
 * {
   border-color: var(--border-default);
+}
+
+.rounded,
+.rounded-md,
+.rounded-lg,
+.rounded-full {
+  border-radius: var(--radius-control);
 }
 
 html {
