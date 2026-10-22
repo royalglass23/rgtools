@@ -1,5 +1,6 @@
 import type { StatusTag } from './score'
 import { computeScore, type EngagementData } from './score'
+import { DAY_MS } from './quote-period'
 
 export type EngagementPreview = Pick<EngagementData, 'totalOpens' | 'uniqueSessions' | 'totalTimeMs' | 'maxScrollDepth' | 'forwardingSuspected'> & {
   interestScore: number
@@ -31,6 +32,8 @@ export function buildEngagementPreview(engagement: EngagementSummary | null, eve
 
 export type AttentionCandidate = {
   id: string
+  createdAt: Date
+  outcome: 'won' | 'lost' | null
   clientName: string
   workOrderId: string | null
   jobAddress: string | null
@@ -82,8 +85,9 @@ export function buildAttentionRows<T extends AttentionCandidate>(candidates: T[]
   const rows: (T & { reasons: string[] })[] = []
 
   for (const row of candidates) {
+    if (row.outcome !== null) continue
     const reasons: string[] = []
-    if ((row.totalOpens ?? 0) === 0) reasons.push('No opens yet')
+    if ((row.totalOpens ?? 0) === 0 && row.createdAt.getTime() <= now.getTime() - 3 * DAY_MS) reasons.push('No opens yet')
     if (row.statusTag === 'hot') reasons.push('Hot status (may be manual)')
     if ((row.totalOpens ?? 0) >= 2) reasons.push('Opened more than once')
     if (row.forwardingSuspected) reasons.push('Possible forwarding')

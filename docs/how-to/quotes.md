@@ -27,7 +27,11 @@ The viewer and tracker are Cloudflare Workers. The dashboard is the rgtools app 
 
 Click **Quotes** in the left navigation to open the tracked quote activity dashboard. Use the separate arrow beside Quotes to expand its existing Quote Movement, Track Quotes, Configuration, and Guide links.
 
-The counts at the top show active tracked links, distinct active quotes opened in the last seven days, distinct active quotes opened in the last 30 days, and active links never opened. These are tracked links created in RG Tools, not every ServiceM8 Quote job.
+Use **Quotes tracked in** to select the last **7**, **14**, or **30 days**, or **All time**. The default is 30 days. This uses the tracked link's creation time, measured as rolling 24-hour days. All cards and both lists use the same period and include only active links, excluding quotes marked won or lost. All time removes the date restriction. These are tracked links created in RG Tools, not every ServiceM8 Quote job.
+
+The cards show total quote value, active links, Hot/Warm/Cold counts, unopened quotes older than three days, possible forwarding, and distinct quotes viewed. Select a card to open **Track Quotes** with the same period, active link status, outcome exclusions, and the card's specific filter. The list shows these filters and preserves them when sorting or paging. **Back to Quotes overview** returns with the same period. Entering Track Quotes directly retains its broader All time / All outcomes defaults.
+
+Unopened quotes enter Needs attention only after three full days from link creation. A newer quote can still appear for another signal, such as Hot status or repeated opens. Won and lost quotes are excluded regardless of their other signals. Recent activity shows events within the selected period belonging to the same group of quotes.
 
 **Needs attention** appears first and shows each quote's job number, client name, job address, and follow-up signals such as no opens, Hot status, multiple opens, possible forwarding, or an expiry within seven days. Hover over an entry or focus it with the keyboard to preview that quote's engagement: opens, unique viewers, total time, maximum scroll, forwarding signal, and interest score. On touch screens the preview appears below the entry. Hot status can be set manually. Open a row to inspect its full engagement before deciding whether to follow up.
 

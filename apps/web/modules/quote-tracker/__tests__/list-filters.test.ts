@@ -5,6 +5,7 @@ import { parseQuoteListFilters } from '../list-filters'
 describe('parseQuoteListFilters', () => {
   it('uses dashboard defaults', () => {
     expect(parseQuoteListFilters({})).toEqual({
+      trackedIn: 'all', outcome: 'all',
       search: '',
       status: 'all',
       linkStatus: 'active',
@@ -24,6 +25,7 @@ describe('parseQuoteListFilters', () => {
       page: '3',
       size: '50',
     })).toEqual({
+      trackedIn: 'all', outcome: 'all',
       search: 'Acme',
       status: 'cold',
       linkStatus: 'expired',
@@ -36,6 +38,12 @@ describe('parseQuoteListFilters', () => {
 
   it('accepts a page size of 5', () => {
     expect(parseQuoteListFilters({ size: '5' }).size).toBe(5)
+  })
+
+  it('preserves dashboard scope, including prefixed parameters on shared pages', () => {
+    expect(parseQuoteListFilters({ trackedIn: '14', outcome: 'open', activity: 'unopened_3_days' })).toMatchObject({ trackedIn: '14', outcome: 'open', activity: 'unopened_3_days' })
+    expect(parseQuoteListFilters({ quotes_trackedIn: '7', quotes_outcome: 'open' }, { prefix: 'quotes_' })).toMatchObject({ trackedIn: '7', outcome: 'open' })
+    expect(parseQuoteListFilters({ trackedIn: 'bad', outcome: 'bad' })).toMatchObject({ trackedIn: 'all', outcome: 'all' })
   })
 
   it('accepts a page size of 10', () => {
@@ -51,6 +59,7 @@ describe('parseQuoteListFilters', () => {
       page: '-1',
       size: '100',
     })).toEqual({
+      trackedIn: 'all', outcome: 'all',
       search: 'first',
       status: 'all',
       linkStatus: 'active',

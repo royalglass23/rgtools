@@ -1,4 +1,5 @@
 import type { StatusTag } from './score'
+import { parseTrackedIn, type TrackedPeriod } from './quote-period'
 
 export type QuoteListStatus = StatusTag | 'all'
 export type QuoteLinkStatus = 'active' | 'expired' | 'all'
@@ -12,9 +13,11 @@ export type QuoteListSort =
   | 'interest_desc'
 export type QuoteListPageSize = 5 | 10 | 20 | 50
 
-export type QuoteActivity = 'all' | 'expiring' | 'never_opened' | 'forwarding' | 'gone_cold'
+export type QuoteActivity = 'all' | 'expiring' | 'never_opened' | 'unopened_3_days' | 'viewed' | 'forwarding' | 'gone_cold'
 
 export type QuoteListFilters = {
+  trackedIn: TrackedPeriod
+  outcome: 'all' | 'open'
   search: string
   status: QuoteListStatus
   linkStatus: QuoteLinkStatus
@@ -46,6 +49,8 @@ export function parseQuoteListFilters(
   const size = Number(pick('size') ?? '5')
 
   return {
+    trackedIn: parseTrackedIn(searchParams[`${prefix}trackedIn`], 'all'),
+    outcome: stringValue(searchParams[`${prefix}outcome`]) === 'open' ? 'open' : 'all',
     search: (stringValue(searchParams[`${prefix}search`]) ?? '').trim(),
     status: isQuoteListStatus(status) ? status : 'all',
     linkStatus: isQuoteLinkStatus(linkStatus) ? linkStatus : 'active',
@@ -69,7 +74,7 @@ function isQuoteLinkStatus(value: string | undefined): value is QuoteLinkStatus 
 }
 
 function toQuoteActivity(value: string | undefined): QuoteActivity {
-  if (value === 'expiring' || value === 'never_opened' || value === 'forwarding' || value === 'gone_cold') return value
+  if (value === 'expiring' || value === 'never_opened' || value === 'unopened_3_days' || value === 'viewed' || value === 'forwarding' || value === 'gone_cold') return value
   return 'all'
 }
 

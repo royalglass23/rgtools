@@ -6,6 +6,8 @@ const now = new Date('2026-10-22T03:00:00Z')
 function candidate(overrides: Partial<AttentionCandidate> = {}): AttentionCandidate {
   return {
     id: 'quote-1',
+    createdAt: new Date('2026-10-19T03:00:00Z'),
+    outcome: null,
     clientName: 'Ada',
     workOrderId: 'Q100',
     jobAddress: '12 Glass Street',
@@ -41,6 +43,16 @@ describe('overview paging', () => {
 })
 
 describe('buildAttentionRows', () => {
+  it('waits three full days for unopened quotes but retains other signals on younger quotes', () => {
+    const young = candidate({ createdAt: new Date('2026-10-19T03:00:00.001Z') })
+    expect(buildAttentionRows([young], now)).toEqual([])
+    expect(buildAttentionRows([candidate()], now)[0]?.reasons).toEqual(['No opens yet'])
+    expect(buildAttentionRows([{ ...young, statusTag: 'hot' }], now)[0]?.reasons).toEqual(['Hot status (may be manual)'])
+  })
+
+  it.each(['won', 'lost'] as const)('excludes %s quotes even when hot or repeatedly opened', (outcome) => {
+    expect(buildAttentionRows([candidate({ outcome, statusTag: 'hot', totalOpens: 3 })], now)).toEqual([])
+  })
   it('explains every applicable attention signal without overstating observed interest', () => {
     const quote = candidate({
       statusTag: 'hot',

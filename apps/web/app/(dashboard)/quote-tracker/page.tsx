@@ -1,4 +1,5 @@
 import { requireModule } from "@/lib/guard";
+import Link from "next/link";
 import { listQuotes } from "@/modules/quote-tracker/queries";
 import { parseQuoteListFilters } from "@/modules/quote-tracker/list-filters";
 import { QuoteTableControls } from "@/modules/quote-tracker/QuoteTableControls";
@@ -33,6 +34,10 @@ export default async function QuoteTrackerPage({
         description="Track ServiceM8 quotes, engagement, expiry, and follow-up status."
         actions={<TrackQuoteButton action={createTrackedQuoteAction} />}
       />
+
+      <Link href={`/quote-tracker/overview?trackedIn=${filters.trackedIn}`} className="inline-block text-sm font-semibold underline underline-offset-4">
+        Back to Quotes overview
+      </Link>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-7">
         <div className="min-w-0 sm:col-span-2 lg:col-span-1 2xl:col-span-2">
