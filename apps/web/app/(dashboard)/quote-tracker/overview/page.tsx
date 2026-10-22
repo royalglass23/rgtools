@@ -92,7 +92,7 @@ export default async function TrackedQuoteOverviewPage({ searchParams }: { searc
       <PageHeader
         eyebrow="Quotes"
         title="Tracked quote activity"
-        description="See recent activity on tracked links and the quotes that may need attention."
+        description="See which tracked quotes need attention and what has happened on their links."
         actions={<Link className={styles.headerLink} href="/quote-tracker">Track Quotes</Link>}
       />
       <p className={styles.asOf}>As of <time dateTime={overview.asOf.toISOString()}>{nzDateTime.format(overview.asOf)}</time></p>
@@ -105,39 +105,6 @@ export default async function TrackedQuoteOverviewPage({ searchParams }: { searc
       </section>
 
       <div className={styles.mainGrid}>
-        <details className={styles.accordion} open>
-          <summary className={styles.accordionSummary}>
-            <div className={styles.accordionHeading}>
-              <span className={styles.accordionEyebrow}>Observed on tracked links</span>
-              <div className={styles.accordionTitle}><h2>Recent activity</h2><span className={styles.accordionCount}>{overview.activity.total} events</span></div>
-            </div>
-            <span className={styles.accordionToggle} aria-hidden="true"><span className={styles.showLabel}>Show</span><span className={styles.hideLabel}>Hide</span><span className={styles.chevron} /></span>
-          </summary>
-          <div className={styles.accordionBody}>
-          {overview.activity.rows.length === 0 ? (
-            <FeedbackState tone="empty">No quote opens, downloads, or action clicks have been recorded yet.</FeedbackState>
-          ) : (
-            <ul className={styles.activityList}>
-              {overview.activity.rows.map((event) => (
-                <li key={event.id}>
-                  <Link href={`/quote-tracker/${event.quoteId}`} className={styles.rowLink}>
-                    <span className={styles.rowMain}>
-                      <strong>{event.workOrderId ?? 'No job number'} · {event.clientName}</strong>
-                      <span className={styles.jobAddress}>{event.jobAddress ?? 'Address not recorded'}</span>
-                      <span>{eventLabel(event.eventType)}</span>
-                    </span>
-                    <time dateTime={event.createdAt.toISOString()}>{nzDateTime.format(event.createdAt)}</time>
-                  </Link>
-                  <EngagementPreviewPanel preview={event.engagementPreview} />
-                </li>
-              ))}
-            </ul>
-          )}
-          <p className={styles.panelNote}>Each line is an event, not a unique viewer or a confirmed sale.</p>
-          <ListPagination kind="activity" label="Recent activity" page={overview.activity} paging={currentPaging} />
-          </div>
-        </details>
-
         <details className={styles.accordion} open>
           <summary className={styles.accordionSummary}>
             <div className={styles.accordionHeading}>
@@ -168,6 +135,39 @@ export default async function TrackedQuoteOverviewPage({ searchParams }: { searc
           )}
           <p className={styles.panelNote}>Hot status may have been set manually. Check the quote detail before following up.</p>
           <ListPagination kind="attention" label="Needs attention" page={overview.attention} paging={currentPaging} />
+          </div>
+        </details>
+
+        <details className={styles.accordion} open>
+          <summary className={styles.accordionSummary}>
+            <div className={styles.accordionHeading}>
+              <span className={styles.accordionEyebrow}>Observed on tracked links</span>
+              <div className={styles.accordionTitle}><h2>Recent activity</h2><span className={styles.accordionCount}>{overview.activity.total} events</span></div>
+            </div>
+            <span className={styles.accordionToggle} aria-hidden="true"><span className={styles.showLabel}>Show</span><span className={styles.hideLabel}>Hide</span><span className={styles.chevron} /></span>
+          </summary>
+          <div className={styles.accordionBody}>
+          {overview.activity.rows.length === 0 ? (
+            <FeedbackState tone="empty">No quote opens, downloads, or action clicks have been recorded yet.</FeedbackState>
+          ) : (
+            <ul className={styles.activityList}>
+              {overview.activity.rows.map((event) => (
+                <li key={event.id}>
+                  <Link href={`/quote-tracker/${event.quoteId}`} className={styles.rowLink}>
+                    <span className={styles.rowMain}>
+                      <strong>{event.workOrderId ?? 'No job number'} · {event.clientName}</strong>
+                      <span className={styles.jobAddress}>{event.jobAddress ?? 'Address not recorded'}</span>
+                      <span>{eventLabel(event.eventType)}</span>
+                    </span>
+                    <time dateTime={event.createdAt.toISOString()}>{nzDateTime.format(event.createdAt)}</time>
+                  </Link>
+                  <EngagementPreviewPanel preview={event.engagementPreview} />
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className={styles.panelNote}>Each line is an event, not a unique viewer or a confirmed sale.</p>
+          <ListPagination kind="activity" label="Recent activity" page={overview.activity} paging={currentPaging} />
           </div>
         </details>
       </div>
