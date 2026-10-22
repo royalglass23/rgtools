@@ -118,6 +118,7 @@ export default async function TrackedQuoteOverviewPage({ searchParams }: { searc
                   <Link href={`/quote-tracker/${quote.id}`} className={styles.rowLink}>
                     <span className={styles.rowMain}>
                       <strong>{quote.workOrderId ? `${quote.workOrderId} · ` : ''}{quote.clientName}</strong>
+                      <span className={styles.jobAddress}>{quote.jobAddress ?? 'Address not recorded'}</span>
                       <span>{quote.reasons.join(' · ')}</span>
                     </span>
                     <span className={styles.rowTime}>{quote.lastOpenedAt ? `Last opened ${nzDateTime.format(quote.lastOpenedAt)}` : 'Not opened'}</span>

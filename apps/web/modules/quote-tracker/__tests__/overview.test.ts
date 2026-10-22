@@ -8,6 +8,7 @@ function candidate(overrides: Partial<AttentionCandidate> = {}): AttentionCandid
     id: 'quote-1',
     clientName: 'Ada',
     workOrderId: 'Q100',
+    jobAddress: '12 Glass Street',
     statusTag: 'cold',
     totalOpens: 0,
     forwardingSuspected: false,
