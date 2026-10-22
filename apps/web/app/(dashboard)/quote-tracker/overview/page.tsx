@@ -34,6 +34,12 @@ export default async function TrackedQuoteOverviewPage() {
       />
       <p className={styles.asOf}>As of <time dateTime={overview.asOf.toISOString()}>{nzDateTime.format(overview.asOf)}</time></p>
 
+      <section aria-label="Tracked link snapshot" className={styles.snapshot}>
+        <KpiCard label="Active tracked links" value={overview.snapshot.activeLinks} detail="Links currently available" />
+        <KpiCard label="Viewed in the last 7 days" value={overview.snapshot.viewedLastSevenDays} detail="Distinct active quotes with an open" />
+        <KpiCard label="Never opened" value={overview.snapshot.neverOpened} detail="Active links with no recorded open" />
+      </section>
+
       <div className={styles.mainGrid}>
         <DataPanel title="Recent activity" eyebrow="Observed on tracked links">
           {overview.activity.length === 0 ? (
@@ -44,7 +50,8 @@ export default async function TrackedQuoteOverviewPage() {
                 <li key={event.id}>
                   <Link href={`/quote-tracker/${event.quoteId}`} className={styles.rowLink}>
                     <span className={styles.rowMain}>
-                      <strong>{event.workOrderId ? `${event.workOrderId} · ` : ''}{event.clientName}</strong>
+                      <strong>{event.workOrderId ?? 'No job number'} · {event.clientName}</strong>
+                      <span className={styles.jobAddress}>{event.jobAddress ?? 'Address not recorded'}</span>
                       <span>{eventLabel(event.eventType)}</span>
                     </span>
                     <time dateTime={event.createdAt.toISOString()}>{nzDateTime.format(event.createdAt)}</time>
@@ -77,12 +84,6 @@ export default async function TrackedQuoteOverviewPage() {
           <p className={styles.panelNote}>Hot status may have been set manually. Check the quote detail before following up.</p>
         </DataPanel>
       </div>
-
-      <section aria-label="Tracked link snapshot" className={styles.snapshot}>
-        <KpiCard label="Active tracked links" value={overview.snapshot.activeLinks} detail="Links currently available" />
-        <KpiCard label="Viewed in the last 7 days" value={overview.snapshot.viewedLastSevenDays} detail="Distinct active quotes with an open" />
-        <KpiCard label="Never opened" value={overview.snapshot.neverOpened} detail="Active links with no recorded open" />
-      </section>
     </div>
   )
 }
