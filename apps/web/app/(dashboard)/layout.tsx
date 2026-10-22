@@ -43,7 +43,7 @@ export default async function DashboardLayout({
         label: module.name,
         href: `/${module.slug}`,
       })),
-    ...navigationGroup("quote-tracker", "Quotes", quoteTrackerItems),
+    ...navigationGroup("quote-tracker", "Quotes", quoteTrackerItems, "/quote-tracker/overview"),
     ...navigationGroup("work-order", "Work Orders", workOrderItems),
     ...navigationGroup("clients", "Clients", clientsItems),
     ...navigationGroup("ps-generator", "PS Generator", psGeneratorItems),
@@ -65,8 +65,8 @@ export default async function DashboardLayout({
   );
 }
 
-function navigationGroup(id: string, label: string, items: DashboardNavItem[]) {
+function navigationGroup(id: string, label: string, items: DashboardNavItem[], href?: string) {
   if (items.length === 0) return [];
 
-  return [{ kind: "group" as const, id, label, items }];
+  return [{ kind: "group" as const, id, label, href, items }];
 }

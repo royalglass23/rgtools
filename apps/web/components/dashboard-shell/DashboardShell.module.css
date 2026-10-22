@@ -150,13 +150,15 @@
 
 .navigationLink:hover,
 .navigationLink[data-active],
-.navigationGroup[data-active] > .navigationLink {
+.navigationGroup[data-active] > .navigationLink,
+.navigationGroup[data-active] .navigationGroupHeader {
   background: var(--shell-active);
   color: var(--shell-text-primary);
 }
 
 .navigationLink[data-active]::before,
-.navigationGroup[data-active] > .navigationLink::before {
+.navigationGroup[data-active] > .navigationLink::before,
+.navigationGroup[data-active] .navigationGroupHeader::before {
   position: absolute;
   inset: 0.55rem auto 0.55rem -0.9rem;
   width: 0.2rem;
@@ -172,6 +174,46 @@
   flex: 0 0 auto;
   place-items: center;
   color: var(--shell-icon);
+}
+
+.navigationGroupHeader {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-control);
+}
+
+.navigationGroupHeader .navigationLink {
+  min-width: 0;
+  flex: 1;
+}
+
+.navigationGroupToggle {
+  display: grid;
+  width: 2.85rem;
+  min-height: 2.85rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--shell-text-secondary);
+  cursor: pointer;
+}
+
+.navigationGroupToggle:hover {
+  background: var(--shell-surface);
+  color: var(--shell-text-primary);
+}
+
+.navigationGroupToggle:focus-visible,
+.navigationGroupHeader .navigationLink:focus-visible {
+  outline: 2px solid var(--focus-ring-inverse);
+  outline-offset: -2px;
+}
+
+.navigationGroupToggle .chevron {
+  display: block;
 }
 
 .navigationLink:hover .navigationIcon,
@@ -381,8 +423,22 @@
 }
 
 .shell[data-collapsed] .navigationLink[data-active]::before,
-.shell[data-collapsed] .navigationGroup[data-active] > .navigationLink::before {
+.shell[data-collapsed] .navigationGroup[data-active] > .navigationLink::before,
+.shell[data-collapsed] .navigationGroup[data-active] .navigationGroupHeader::before {
   left: -0.65rem;
+}
+
+.shell[data-collapsed] .navigationGroupHeader {
+  flex-direction: column;
+}
+
+.shell[data-collapsed] .navigationGroupToggle {
+  width: 100%;
+  min-height: 2rem;
+}
+
+.shell[data-collapsed] .navigationGroupToggle .chevron {
+  display: block;
 }
 
 .shell[data-collapsed] .account {

@@ -24,6 +24,7 @@ export type DashboardNavigationEntry =
       kind: "group";
       id: string;
       label: string;
+      href?: string;
       items: DashboardNavigationItem[];
     };
 
@@ -173,33 +174,58 @@ export function DashboardShell({
                   className={styles.navigationGroup}
                   data-active={active || undefined}
                 >
-                  <button
-                    type="button"
-                    className={styles.navigationLink}
-                    aria-expanded={expanded}
-                    aria-controls={`navigation-group-${entry.id}`}
-                    title={collapsed ? entry.label : undefined}
-                    onClick={() => toggleGroup(entry)}
-                  >
-                    <span className={styles.navigationIcon} aria-hidden="true">
-                      <Icon name={iconForEntry(entry.id)} />
-                    </span>
-                    <span className={styles.navigationText}>{entry.label}</span>
-                    <span
-                      className={styles.chevron}
-                      data-expanded={expanded || undefined}
-                      aria-hidden="true"
+                  {entry.href ? (
+                    <div className={styles.navigationGroupHeader}>
+                      <Link
+                        href={entry.href}
+                        className={styles.navigationLink}
+                        aria-current={routeIsActive(entry.href, pathname) ? "page" : undefined}
+                        title={collapsed ? entry.label : undefined}
+                      >
+                        <span className={styles.navigationIcon} aria-hidden="true">
+                          <Icon name={iconForEntry(entry.id)} />
+                        </span>
+                        <span className={styles.navigationText}>{entry.label}</span>
+                      </Link>
+                      <button
+                        type="button"
+                        className={styles.navigationGroupToggle}
+                        aria-label={`${expanded ? "Collapse" : "Expand"} ${entry.label} submenu`}
+                        aria-expanded={expanded}
+                        aria-controls={`navigation-group-${entry.id}`}
+                        onClick={() => toggleGroup(entry)}
+                      >
+                        <span className={styles.chevron} data-expanded={expanded || undefined} aria-hidden="true">
+                          <Icon name="chevron" />
+                        </span>
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className={styles.navigationLink}
+                      aria-expanded={expanded}
+                      aria-controls={`navigation-group-${entry.id}`}
+                      title={collapsed ? entry.label : undefined}
+                      onClick={() => toggleGroup(entry)}
                     >
-                      <Icon name="chevron" />
-                    </span>
-                  </button>
+                      <span className={styles.navigationIcon} aria-hidden="true">
+                        <Icon name={iconForEntry(entry.id)} />
+                      </span>
+                      <span className={styles.navigationText}>{entry.label}</span>
+                      <span className={styles.chevron} data-expanded={expanded || undefined} aria-hidden="true">
+                        <Icon name="chevron" />
+                      </span>
+                    </button>
+                  )}
                   <div
                     id={`navigation-group-${entry.id}`}
                     className={styles.subNavigation}
                     hidden={!expanded}
                   >
                     {entry.items.map((item) => {
-                      const itemActive = routeIsActive(item.href, pathname);
+                      const itemActive = routeIsActive(item.href, pathname)
+                        && !(entry.href && routeIsActive(entry.href, pathname));
                       return (
                         <Link
                           key={item.id}
@@ -277,7 +303,8 @@ function groupIsActive(
   entry: Extract<DashboardNavigationEntry, { kind: "group" }>,
   pathname: string,
 ) {
-  return entry.items.some((item) => routeIsActive(item.href, pathname));
+  return (entry.href ? routeIsActive(entry.href, pathname) : false)
+    || entry.items.some((item) => routeIsActive(item.href, pathname));
 }
 
 function initialsFor(name?: string | null) {

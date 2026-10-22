@@ -1,12 +1,13 @@
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DashboardShell,
   type DashboardNavigationEntry,
 } from "../DashboardShell";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
+const pathname = vi.hoisted(() => ({ current: "/" }));
+vi.mock("next/navigation", () => ({ usePathname: () => pathname.current }));
 vi.mock("next/link", () => ({
   default: ({
     children,
@@ -30,6 +31,7 @@ const navigation: DashboardNavigationEntry[] = [
 ];
 
 describe("DashboardShell", () => {
+  beforeEach(() => { pathname.current = "/"; });
   it("links the Royal Glass logo externally and keeps the product name concise", () => {
     render(
       <DashboardShell
@@ -111,6 +113,81 @@ describe("DashboardShell", () => {
       "href",
       "/leads",
     );
+  });
+
+  it("opens the Quotes dashboard from its label while retaining an independent submenu toggle", async () => {
+    const user = userEvent.setup();
+    render(
+      <DashboardShell
+        navigation={[...navigation, {
+          kind: "group",
+          id: "quote-tracker",
+          label: "Quotes",
+          href: "/quote-tracker/overview",
+          items: [{ id: "quote-tracker-list", name: "Track Quotes", href: "/quote-tracker" }],
+        }]}
+        user={{ name: "Roxy Huang", role: "staff" }}
+        signOutControl={<button type="button">Sign out</button>}
+      >
+        <h1>Dashboard content</h1>
+      </DashboardShell>,
+    );
+
+    expect(screen.getByRole("link", { name: "Quotes" })).toHaveAttribute("href", "/quote-tracker/overview");
+    const toggle = screen.getByRole("button", { name: "Expand Quotes submenu" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("link", { name: "Track Quotes" })).toHaveAttribute("href", "/quote-tracker");
+    expect(screen.getByRole("link", { name: "Quotes" })).toHaveAttribute("href", "/quote-tracker/overview");
+  });
+
+  it("marks Quotes as current on its dashboard without marking Track Quotes current", async () => {
+    pathname.current = "/quote-tracker/overview";
+    render(
+      <DashboardShell
+        navigation={[...navigation, {
+          kind: "group",
+          id: "quote-tracker",
+          label: "Quotes",
+          href: "/quote-tracker/overview",
+          items: [{ id: "quote-tracker-list", name: "Track Quotes", href: "/quote-tracker" }],
+        }]}
+        user={{ role: "staff" }}
+        signOutControl={<button type="button">Sign out</button>}
+      >
+        <h1>Dashboard content</h1>
+      </DashboardShell>,
+    );
+
+    expect(screen.getByRole("link", { name: "Quotes" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Track Quotes" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("retains a Quotes submenu control when the desktop sidebar is collapsed", async () => {
+    const user = userEvent.setup();
+    render(
+      <DashboardShell
+        navigation={[...navigation, {
+          kind: "group",
+          id: "quote-tracker",
+          label: "Quotes",
+          href: "/quote-tracker/overview",
+          items: [{ id: "quote-tracker-list", name: "Track Quotes", href: "/quote-tracker" }],
+        }]}
+        user={{ role: "staff" }}
+        signOutControl={<button type="button">Sign out</button>}
+      >
+        <h1>Dashboard content</h1>
+      </DashboardShell>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Collapse navigation" }));
+    expect(screen.getByRole("link", { name: "Quotes" })).toHaveAttribute("href", "/quote-tracker/overview");
+    screen.getByRole("button", { name: "Expand Quotes submenu" }).focus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("button", { name: "Collapse Quotes submenu" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("link", { name: "Track Quotes" })).toHaveAttribute("href", "/quote-tracker");
   });
 
   it("opens and dismisses the mobile navigation with Escape", async () => {

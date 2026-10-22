@@ -23,6 +23,18 @@ The viewer and tracker are Cloudflare Workers. The dashboard is the rgtools app 
 
 ---
 
+## Quotes activity dashboard
+
+Click **Quotes** in the left navigation to open the tracked quote activity dashboard. Use the separate arrow beside Quotes to expand its existing Quote Movement, Track Quotes, Configuration, and Guide links.
+
+**Recent activity** shows the latest 20 recorded opens, PDF downloads, and action clicks across tracked quote links. Each line opens that quote's detail page. It shows what happened and when in New Zealand time; it does not identify a unique person or prove a sale.
+
+**Needs attention** shows active tracked links with signals such as no opens, Hot status, multiple opens, possible forwarding, or an expiry within seven days. Hot status can be set manually. Open a row to inspect its engagement before deciding whether to follow up.
+
+The small snapshot counts active tracked links, active links opened in the last seven days, and active links never opened. These are tracked links created in RG Tools, not every ServiceM8 Quote job. Use **Quote Movement** for the wider ServiceM8 Quote list, or **Track Quotes** to create and manage links.
+
+---
+
 ## Quote Movement
 
 Quote Movement is the ServiceM8 Quote monitoring list inside rgtools. ServiceM8 data is read-only: rgtools pulls Quote jobs into its own cache and never writes Quote Movement changes back to ServiceM8. Project Complexity is an RG-owned assessment stored only in rgtools.
