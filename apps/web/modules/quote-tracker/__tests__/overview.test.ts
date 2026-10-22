@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildAttentionRows, type AttentionCandidate } from '../overview'
+import { buildAttentionRows, pageBounds, parseOverviewPaging, type AttentionCandidate } from '../overview'
 
 const now = new Date('2026-10-22T03:00:00Z')
 
@@ -17,8 +17,30 @@ function candidate(overrides: Partial<AttentionCandidate> = {}): AttentionCandid
   }
 }
 
+describe('overview paging', () => {
+  it('defaults both lists to five and accepts only offered sizes and positive pages', () => {
+    expect(parseOverviewPaging({})).toEqual({
+      activity: { page: 1, size: 5 },
+      attention: { page: 1, size: 5 },
+    })
+    expect(parseOverviewPaging({ activityPage: '2', activitySize: '10', attentionPage: '3', attentionSize: '50' })).toEqual({
+      activity: { page: 2, size: 10 },
+      attention: { page: 3, size: 50 },
+    })
+    expect(parseOverviewPaging({ activityPage: '-4', activitySize: '100', attentionPage: '2.5', attentionSize: '0' })).toEqual({
+      activity: { page: 1, size: 5 },
+      attention: { page: 1, size: 5 },
+    })
+  })
+
+  it('clamps a stale page to the last available page', () => {
+    expect(pageBounds(12, { page: 99, size: 5 })).toEqual({ total: 12, page: 3, size: 5, pageCount: 3, offset: 10 })
+    expect(pageBounds(0, { page: 4, size: 5 })).toEqual({ total: 0, page: 1, size: 5, pageCount: 1, offset: 0 })
+  })
+})
+
 describe('buildAttentionRows', () => {
-  it('deduplicates a quote and explains every applicable attention signal', () => {
+  it('explains every applicable attention signal without overstating observed interest', () => {
     const quote = candidate({
       statusTag: 'hot',
       totalOpens: 3,
@@ -27,41 +49,18 @@ describe('buildAttentionRows', () => {
       expiresAt: new Date('2026-10-25T03:00:00Z'),
     })
 
-    expect(buildAttentionRows([[quote], [quote]], now)).toEqual([{
+    expect(buildAttentionRows([quote], now)).toEqual([{
       ...quote,
       reasons: ['Hot status (may be manual)', 'Opened more than once', 'Possible forwarding', 'Link expires soon'],
     }])
-  })
-
-  it('distinguishes never opened from a repeat open and keeps the queue bounded', () => {
-    const never = candidate()
-    const repeat = candidate({ id: 'quote-2', totalOpens: 2, lastOpenedAt: now })
-    expect(buildAttentionRows([[never], [repeat]], now).map((row) => row.reasons)).toEqual([
-      ['No opens yet'],
-      ['Opened more than once'],
-    ])
-  })
-
-  it('keeps all four attention signal groups represented in a full queue', () => {
-    const groups = [
-      Array.from({ length: 6 }, (_, index) => candidate({ id: `hot-${index}`, totalOpens: 1, statusTag: 'hot' })),
-      Array.from({ length: 6 }, (_, index) => candidate({ id: `forward-${index}`, totalOpens: 1, forwardingSuspected: true })),
-      Array.from({ length: 6 }, (_, index) => candidate({ id: `expiry-${index}`, totalOpens: 1, expiresAt: new Date('2026-10-25T03:00:00Z') })),
-      Array.from({ length: 6 }, (_, index) => candidate({ id: `never-${index}` })),
-    ]
-
-    const rows = buildAttentionRows(groups, now)
-    expect(rows).toHaveLength(12)
-    expect(rows.filter((row) => row.id.startsWith('hot-'))).toHaveLength(3)
-    expect(rows.filter((row) => row.id.startsWith('forward-'))).toHaveLength(3)
-    expect(rows.filter((row) => row.id.startsWith('expiry-'))).toHaveLength(3)
-    expect(rows.filter((row) => row.id.startsWith('never-'))).toHaveLength(3)
-  })
-
-  it('does not claim observed high interest from a manually hot unopened quote', () => {
-    expect(buildAttentionRows([[candidate({ statusTag: 'hot' })]], now)[0]?.reasons).toEqual([
+    expect(buildAttentionRows([candidate({ statusTag: 'hot' })], now)[0]?.reasons).toEqual([
       'No opens yet',
       'Hot status (may be manual)',
     ])
+  })
+
+  it('does not truncate a database page of 20 quotes', () => {
+    const rows = Array.from({ length: 20 }, (_, index) => candidate({ id: `quote-${index}` }))
+    expect(buildAttentionRows(rows, now)).toHaveLength(20)
   })
 })

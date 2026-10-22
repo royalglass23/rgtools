@@ -1,40 +1,30 @@
-import { and, count, countDistinct, desc, eq, gt, gte, inArray, isNull, lte, or, sql, type SQL } from 'drizzle-orm'
+import { and, count, countDistinct, desc, eq, gt, gte, inArray, isNull, lte, or, sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { quoteEngagement, quoteEvents, quotes } from '@rgtools/db/schema'
-import { buildAttentionRows } from './overview'
+import { buildAttentionRows, pageBounds, type OverviewPaging } from './overview'
 
-const FEED_LIMIT = 20
-const CANDIDATE_LIMIT = 6
 const DAY_MS = 24 * 60 * 60 * 1000
 
 function activeLinks(now: Date) {
   return and(isNull(quotes.archivedAt), or(isNull(quotes.expiresAt), gt(quotes.expiresAt, now)))!
 }
 
-function attentionCandidates(predicate: SQL, order: SQL) {
-  return db.select({
-    id: quotes.id,
-    clientName: quotes.clientName,
-    workOrderId: quotes.workOrderId,
-    statusTag: quotes.statusTag,
-    totalOpens: quoteEngagement.totalOpens,
-    forwardingSuspected: quoteEngagement.forwardingSuspected,
-    lastOpenedAt: quoteEngagement.lastOpenedAt,
-    expiresAt: quotes.expiresAt,
-  })
-    .from(quotes)
-    .leftJoin(quoteEngagement, eq(quoteEngagement.quoteId, quotes.id))
-    .where(predicate)
-    .orderBy(order, desc(quotes.createdAt))
-    .limit(CANDIDATE_LIMIT)
-}
-
-export async function getTrackedQuoteOverview(now = new Date()) {
+export async function getTrackedQuoteOverview(paging: OverviewPaging, now = new Date()) {
   const active = activeLinks(now)
   const sevenDaysAgo = new Date(now.getTime() - 7 * DAY_MS)
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * DAY_MS)
   const expiryCutoff = new Date(now.getTime() + 7 * DAY_MS)
+  const activityWhere = and(inArray(quoteEvents.eventType, ['open', 'download', 'cta']), lte(quoteEvents.createdAt, now))!
+  const attentionWhere = and(active, or(
+    eq(quotes.statusTag, 'hot'),
+    gte(quoteEngagement.totalOpens, 2),
+    eq(quoteEngagement.forwardingSuspected, true),
+    and(gt(quotes.expiresAt, now), lte(quotes.expiresAt, expiryCutoff)),
+    isNull(quoteEngagement.totalOpens),
+    eq(quoteEngagement.totalOpens, 0),
+  ))!
 
-  const [snapshotRows, viewedRows, activity, highInterest, forwarding, expiring, neverOpened] = await Promise.all([
+  const [snapshotRows, viewedRows, activityCountRows, attentionCountRows] = await Promise.all([
     db.select({
       activeLinks: count(),
       neverOpened: sql<number>`count(*) filter (where coalesce(${quoteEngagement.totalOpens}, 0) = 0)`,
@@ -42,10 +32,27 @@ export async function getTrackedQuoteOverview(now = new Date()) {
       .from(quotes)
       .leftJoin(quoteEngagement, eq(quoteEngagement.quoteId, quotes.id))
       .where(active),
-    db.select({ viewedQuotes: countDistinct(quoteEvents.quoteId) })
+    db.select({
+      viewedLastSevenDays: sql<number>`count(distinct ${quoteEvents.quoteId}) filter (where ${quoteEvents.createdAt} >= ${sevenDaysAgo})`,
+      viewedLastThirtyDays: countDistinct(quoteEvents.quoteId),
+    })
       .from(quoteEvents)
       .innerJoin(quotes, eq(quotes.id, quoteEvents.quoteId))
-      .where(and(active, eq(quoteEvents.eventType, 'open'), gte(quoteEvents.createdAt, sevenDaysAgo), lte(quoteEvents.createdAt, now))),
+      .where(and(active, eq(quoteEvents.eventType, 'open'), gte(quoteEvents.createdAt, thirtyDaysAgo), lte(quoteEvents.createdAt, now))),
+    db.select({ total: count() })
+      .from(quoteEvents)
+      .innerJoin(quotes, eq(quotes.id, quoteEvents.quoteId))
+      .where(activityWhere),
+    db.select({ total: countDistinct(quotes.id) })
+      .from(quotes)
+      .leftJoin(quoteEngagement, eq(quoteEngagement.quoteId, quotes.id))
+      .where(attentionWhere),
+  ])
+
+  const activityPage = pageBounds(Number(activityCountRows[0]?.total ?? 0), paging.activity)
+  const attentionPage = pageBounds(Number(attentionCountRows[0]?.total ?? 0), paging.attention)
+
+  const [activityRows, attentionRows] = await Promise.all([
     db.select({
       id: quoteEvents.id,
       quoteId: quotes.id,
@@ -57,23 +64,47 @@ export async function getTrackedQuoteOverview(now = new Date()) {
     })
       .from(quoteEvents)
       .innerJoin(quotes, eq(quotes.id, quoteEvents.quoteId))
-      .where(and(inArray(quoteEvents.eventType, ['open', 'download', 'cta']), lte(quoteEvents.createdAt, now)))
+      .where(activityWhere)
       .orderBy(desc(quoteEvents.createdAt), desc(quoteEvents.id))
-      .limit(FEED_LIMIT),
-    attentionCandidates(and(active, or(eq(quotes.statusTag, 'hot'), gte(quoteEngagement.totalOpens, 2)))!, sql`${quoteEngagement.lastOpenedAt} desc nulls last`),
-    attentionCandidates(and(active, eq(quoteEngagement.forwardingSuspected, true))!, sql`${quoteEngagement.lastOpenedAt} desc nulls last`),
-    attentionCandidates(and(active, gt(quotes.expiresAt, now), lte(quotes.expiresAt, expiryCutoff))!, sql`${quotes.expiresAt} asc`),
-    attentionCandidates(and(active, or(isNull(quoteEngagement.totalOpens), eq(quoteEngagement.totalOpens, 0)))!, sql`${quotes.createdAt} desc`),
+      .limit(activityPage.size)
+      .offset(activityPage.offset),
+    db.select({
+      id: quotes.id,
+      clientName: quotes.clientName,
+      workOrderId: quotes.workOrderId,
+      statusTag: quotes.statusTag,
+      totalOpens: quoteEngagement.totalOpens,
+      forwardingSuspected: quoteEngagement.forwardingSuspected,
+      lastOpenedAt: quoteEngagement.lastOpenedAt,
+      expiresAt: quotes.expiresAt,
+    })
+      .from(quotes)
+      .leftJoin(quoteEngagement, eq(quoteEngagement.quoteId, quotes.id))
+      .where(attentionWhere)
+      .orderBy(
+        sql`case
+          when ${quotes.statusTag} = 'hot' or coalesce(${quoteEngagement.totalOpens}, 0) >= 2 then 0
+          when ${quoteEngagement.forwardingSuspected} = true then 1
+          when ${quotes.expiresAt} > ${now} and ${quotes.expiresAt} <= ${expiryCutoff} then 2
+          else 3
+        end`,
+        sql`${quoteEngagement.lastOpenedAt} desc nulls last`,
+        desc(quotes.createdAt),
+        desc(quotes.id),
+      )
+      .limit(attentionPage.size)
+      .offset(attentionPage.offset),
   ])
 
   return {
     asOf: now,
     snapshot: {
       activeLinks: Number(snapshotRows[0]?.activeLinks ?? 0),
-      viewedLastSevenDays: Number(viewedRows[0]?.viewedQuotes ?? 0),
+      viewedLastSevenDays: Number(viewedRows[0]?.viewedLastSevenDays ?? 0),
+      viewedLastThirtyDays: Number(viewedRows[0]?.viewedLastThirtyDays ?? 0),
       neverOpened: Number(snapshotRows[0]?.neverOpened ?? 0),
     },
-    activity,
-    attention: buildAttentionRows([highInterest, forwarding, expiring, neverOpened], now),
+    activity: { ...activityPage, rows: activityRows },
+    attention: { ...attentionPage, rows: buildAttentionRows(attentionRows, now) },
   }
 }
