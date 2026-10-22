@@ -1,4 +1,33 @@
 import type { StatusTag } from './score'
+import { computeScore, type EngagementData } from './score'
+
+export type EngagementPreview = Pick<EngagementData, 'totalOpens' | 'uniqueSessions' | 'totalTimeMs' | 'maxScrollDepth' | 'forwardingSuspected'> & {
+  interestScore: number
+}
+
+type EngagementSummary = Pick<EngagementData, 'totalOpens' | 'uniqueSessions' | 'totalTimeMs' | 'maxScrollDepth' | 'uniqueDevices' | 'forwardingSuspected'>
+type EventSummary = Pick<EngagementData, 'totalOpens' | 'uniqueSessions' | 'totalTimeMs' | 'maxScrollDepth' | 'uniqueDevices' | 'hasCta'>
+
+export function buildEngagementPreview(engagement: EngagementSummary | null, events: EventSummary | undefined): EngagementPreview {
+  const data: EngagementData = {
+    totalOpens: engagement?.totalOpens ?? events?.totalOpens ?? 0,
+    uniqueSessions: engagement?.uniqueSessions ?? events?.uniqueSessions ?? 0,
+    totalTimeMs: engagement?.totalTimeMs ?? events?.totalTimeMs ?? 0,
+    maxScrollDepth: engagement?.maxScrollDepth ?? events?.maxScrollDepth ?? 0,
+    uniqueDevices: engagement?.uniqueDevices ?? events?.uniqueDevices ?? 0,
+    forwardingSuspected: engagement?.forwardingSuspected ?? false,
+    hasCta: events?.hasCta ?? false,
+    hasReturnVisit: false,
+  }
+  return {
+    totalOpens: data.totalOpens,
+    uniqueSessions: data.uniqueSessions,
+    totalTimeMs: data.totalTimeMs,
+    maxScrollDepth: data.maxScrollDepth,
+    forwardingSuspected: data.forwardingSuspected,
+    interestScore: computeScore(data),
+  }
+}
 
 export type AttentionCandidate = {
   id: string
@@ -48,9 +77,9 @@ export function pageBounds(total: number, request: OverviewPageRequest) {
   return { total, page, size: request.size, pageCount, offset: (page - 1) * request.size }
 }
 
-export function buildAttentionRows(candidates: AttentionCandidate[], now: Date): AttentionRow[] {
+export function buildAttentionRows<T extends AttentionCandidate>(candidates: T[], now: Date): (T & { reasons: string[] })[] {
   const expiryCutoff = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
-  const rows: AttentionRow[] = []
+  const rows: (T & { reasons: string[] })[] = []
 
   for (const row of candidates) {
     const reasons: string[] = []

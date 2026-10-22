@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildAttentionRows, pageBounds, parseOverviewPaging, type AttentionCandidate } from '../overview'
+import { buildAttentionRows, buildEngagementPreview, pageBounds, parseOverviewPaging, type AttentionCandidate } from '../overview'
 
 const now = new Date('2026-10-22T03:00:00Z')
 
@@ -63,5 +63,32 @@ describe('buildAttentionRows', () => {
   it('does not truncate a database page of 20 quotes', () => {
     const rows = Array.from({ length: 20 }, (_, index) => candidate({ id: `quote-${index}` }))
     expect(buildAttentionRows(rows, now)).toHaveLength(20)
+  })
+})
+
+describe('buildEngagementPreview', () => {
+  const events = { totalOpens: 3, uniqueSessions: 2, totalTimeMs: 250_000, maxScrollDepth: 100, uniqueDevices: 2, hasCta: true }
+
+  it('uses stored engagement and the quote detail scoring formula', () => {
+    expect(buildEngagementPreview({ ...events, forwardingSuspected: true }, events)).toEqual({
+      totalOpens: 3,
+      uniqueSessions: 2,
+      totalTimeMs: 250_000,
+      maxScrollDepth: 100,
+      forwardingSuspected: true,
+      interestScore: 100,
+    })
+  })
+
+  it('uses event totals when an engagement summary has not been saved', () => {
+    expect(buildEngagementPreview(null, { ...events, hasCta: false })).toEqual({
+      totalOpens: 3,
+      uniqueSessions: 2,
+      totalTimeMs: 250_000,
+      maxScrollDepth: 100,
+      forwardingSuspected: false,
+      interestScore: 70,
+    })
+    expect(buildEngagementPreview(null, undefined).interestScore).toBe(0)
   })
 })
