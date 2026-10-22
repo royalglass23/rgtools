@@ -11,6 +11,7 @@ vi.mock('drizzle-orm', () => ({
   desc: vi.fn((column: { name?: string }) => ({ direction: 'desc', column: column.name })),
   eq: vi.fn((column: { name?: string }, value: unknown) => ({ type: 'eq', column: column.name, value })),
   gt: vi.fn((column: { name?: string }, value: unknown) => ({ type: 'gt', column: column.name, value })),
+  gte: vi.fn((column: { name?: string }, value: unknown) => ({ type: 'gte', column: column.name, value })),
   ilike: vi.fn((column: { name?: string }, value: unknown) => ({ type: 'ilike', column: column.name, value })),
   isNotNull: vi.fn((column: { name?: string }) => ({ type: 'isNotNull', column: column.name })),
   isNull: vi.fn((column: { name?: string }) => ({ type: 'isNull', column: column.name })),
@@ -23,6 +24,7 @@ vi.mock('drizzle-orm', () => ({
 vi.mock('@rgtools/db/schema', () => ({
   quotes: {
     id: { name: 'id' },
+    outcome: { name: 'outcome' },
     shortCode: { name: 'short_code' },
     clientName: { name: 'client_name' },
     companyName: { name: 'company_name' },
@@ -106,6 +108,7 @@ import { listQuotes } from '../queries'
 import type { QuoteListFilters } from '../list-filters'
 
 const filters: QuoteListFilters = {
+  trackedIn: 'all', outcome: 'all',
   search: '',
   status: 'all',
   linkStatus: 'all',
@@ -118,6 +121,28 @@ const filters: QuoteListFilters = {
 beforeEach(() => {
   vi.clearAllMocks()
   whereCalls.length = 0
+})
+
+describe('dashboard scope in Track Quotes', () => {
+  afterEach(() => vi.useRealTimers())
+
+  it('combines the rolling creation period, unresolved outcome and unopened age boundary', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-23T12:00:00Z'))
+    await listQuotes({ ...filters, trackedIn: '14', outcome: 'open', linkStatus: 'active', activity: 'unopened_3_days' })
+    expect(whereCalls[0]).toEqual(expect.objectContaining({
+      type: 'and', conditions: expect.arrayContaining([
+        { type: 'isNull', column: 'outcome' },
+        expect.objectContaining({ type: 'and', conditions: expect.arrayContaining([
+          { type: 'gte', column: 'created_at', value: new Date('2026-10-09T12:00:00Z') },
+          { type: 'lte', column: 'created_at', value: new Date('2026-10-23T12:00:00Z') },
+        ]) }),
+        expect.objectContaining({ type: 'and', conditions: expect.arrayContaining([
+          { type: 'lte', column: 'created_at', value: new Date('2026-10-20T12:00:00Z') },
+        ]) }),
+      ]),
+    }))
+  })
 })
 
 describe('listQuotes – activity=expiring WHERE clause', () => {

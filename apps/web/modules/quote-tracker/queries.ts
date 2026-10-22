@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gt, ilike, isNotNull, isNull, lte, or, sql, sum } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gt, ilike, isNotNull, isNull, lte, or, sql, sum, type SQL } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { quoteEngagement, quoteEvents, quoteNotifiedViewers, quoteRecipients, quoteViewerEmails, quotes, tagOverrides } from '@rgtools/db/schema'
 import type { QuoteListFilters } from './list-filters'
@@ -6,6 +6,7 @@ import { validateEmailGateSettings } from './email-gate'
 import { rollupDeviceSessions, rollupGatedEmails } from './viewer-analytics'
 import type { StatusTag } from './score'
 import { getLatestQuoteAiGuidance } from './ai-guidance'
+import { activeQuoteWhere, trackedPeriodWhere, unopenedAfterThreeDaysWhere, viewedInPeriodWhere } from './quote-scope'
 
 export const EXPIRING_SOON_DAYS = 7
 export const GONE_COLD_DAYS = 14
@@ -275,14 +276,16 @@ export async function updateQuoteEmailGate(
 }
 
 function listWhere(filters: QuoteListFilters) {
-  const conditions = []
+  const now = new Date()
+  const conditions: (SQL | undefined)[] = [trackedPeriodWhere(filters.trackedIn, now)]
+  if (filters.outcome === 'open') conditions.push(isNull(quotes.outcome))
 
   if (filters.status !== 'all') {
     conditions.push(eq(quotes.statusTag, filters.status))
   }
 
   if (filters.linkStatus === 'active') {
-    conditions.push(and(isNull(quotes.archivedAt), or(isNull(quotes.expiresAt), gt(quotes.expiresAt, sql`now()`))))
+    conditions.push(activeQuoteWhere(now))
   }
 
   if (filters.linkStatus === 'expired') {
@@ -296,6 +299,10 @@ function listWhere(filters: QuoteListFilters) {
     conditions.push(or(eq(quotes.statusTag, 'hot'), eq(quotes.statusTag, 'warm')))
     conditions.push(gt(quotes.expiresAt, sql`now()`))
     conditions.push(lte(quotes.expiresAt, cutoff))
+  } else if (filters.activity === 'unopened_3_days') {
+    conditions.push(unopenedAfterThreeDaysWhere(now))
+  } else if (filters.activity === 'viewed') {
+    conditions.push(viewedInPeriodWhere(filters.trackedIn, now))
   } else if (filters.activity === 'never_opened') {
     conditions.push(isNull(quotes.archivedAt))
     conditions.push(or(isNull(quoteEngagement.totalOpens), eq(quoteEngagement.totalOpens, 0)))

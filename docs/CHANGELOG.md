@@ -8,6 +8,8 @@ All notable changes to rgtools are recorded here, grouped by release.
 
 ### Added
 
+- **Quotes dashboard scope** — shared Quotes tracked in selector (7/14/30 days or All time, default 30), clickable value/status/engagement cards with matching Track Quotes filters, and return navigation preserving the period. Needs attention delays unopened quotes for three full days and excludes won/lost quotes. Dashboard cards and lists use active, unresolved links in the selected creation period.
+
 - **Tracked Quotes activity dashboard (RG-385)** — clicking Quotes now opens recent tracked-link activity, attention signals, and an active-link snapshot. A separate submenu control retains Quote Movement, Track Quotes, Configuration, and Guide.
 
 ### Fixed

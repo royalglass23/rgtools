@@ -9,6 +9,7 @@ import { isExpired } from "./expiry";
 import type { QuoteListFilters } from "./list-filters";
 import { StatusBadge, formatCurrency, formatRelative } from "./presentation";
 import type { StatusTag } from "./score";
+import { TRACKED_PERIODS, trackedPeriodLabel } from "./quote-period";
 
 type QuoteRow = {
   id: string;
@@ -28,6 +29,8 @@ type QuoteRow = {
 
 /** Param names this table owns; used for carry-over of other tables' params on shared URLs. */
 const OWNED_PARAMS = [
+  "trackedIn",
+  "outcome",
   "search",
   "status",
   "linkStatus",
@@ -304,11 +307,15 @@ function FilterBar({
   const resetParams = new URLSearchParams(carryOver);
   resetParams.set(`${paramPrefix}size`, String(filters.size));
   resetParams.set(`${paramPrefix}page`, "1");
+  resetParams.set(`${paramPrefix}trackedIn`, filters.trackedIn);
+  resetParams.set(`${paramPrefix}outcome`, filters.outcome);
   const resetHref = resetParams.toString()
     ? `${basePath}?${resetParams}`
     : basePath;
 
   const filterKey = [
+    filters.trackedIn,
+    filters.outcome,
     filters.search,
     filters.status,
     filters.linkStatus,
@@ -331,6 +338,18 @@ function FilterBar({
         value={String(filters.size)}
       />
       <input type="hidden" name={`${paramPrefix}page`} value="1" />
+      <Select
+        name={`${paramPrefix}trackedIn`}
+        label="Quotes tracked in"
+        value={filters.trackedIn}
+        options={TRACKED_PERIODS.map((period) => [period, trackedPeriodLabel(period)])}
+      />
+      <Select
+        name={`${paramPrefix}outcome`}
+        label="Outcome"
+        value={filters.outcome}
+        options={[["all", "All outcomes"], ["open", "Exclude won and lost"]]}
+      />
 
       <label className="block sm:col-span-2">
         <span className="text-xs font-medium text-gray-600">Search</span>
@@ -379,6 +398,8 @@ function FilterBar({
           ["all", "All"],
           ["expiring", "Expiring soon (7d)"],
           ["never_opened", "Never opened"],
+          ["unopened_3_days", "Unopened after 3 days"],
+          ["viewed", "Viewed in period"],
           ["forwarding", "Forwarding suspected"],
           ["gone_cold", "Gone cold (14d)"],
         ]}
@@ -467,6 +488,8 @@ function PageLink({
   if (filters.search) params.set(`${paramPrefix}search`, filters.search);
   else params.delete(`${paramPrefix}search`);
   params.set(`${paramPrefix}status`, filters.status);
+  params.set(`${paramPrefix}trackedIn`, filters.trackedIn);
+  params.set(`${paramPrefix}outcome`, filters.outcome);
   params.set(`${paramPrefix}linkStatus`, filters.linkStatus);
   params.set(`${paramPrefix}sort`, filters.sort);
   params.set(`${paramPrefix}size`, String(filters.size));

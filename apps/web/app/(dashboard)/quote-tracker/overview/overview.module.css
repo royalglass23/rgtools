@@ -281,6 +281,60 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.cardLink {
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.cardLink > article {
+  height: 100%;
+}
+
+.cardLink:hover > article {
+  border-color: var(--border-interactive);
+}
+
+.cardLink:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+  border-radius: var(--radius-panel);
+}
+
+.periodFilter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.periodFilter > span {
+  margin-right: 0.5rem;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.periodFilter a {
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--border-interactive);
+  border-radius: var(--radius-control);
+  color: var(--text-primary);
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+
+.periodFilter a[aria-current='page'] {
+  background: var(--brand-primary);
+  color: var(--surface-elevated);
+  font-weight: 700;
+}
+
+.periodFilter a:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 .pagination {
   display: flex;
   align-items: center;

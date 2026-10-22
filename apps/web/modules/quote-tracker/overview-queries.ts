@@ -2,43 +2,36 @@ import { and, count, countDistinct, desc, eq, gt, gte, inArray, isNull, lte, or,
 import { db } from '@/lib/db'
 import { quoteEngagement, quoteEvents, quotes } from '@rgtools/db/schema'
 import { buildAttentionRows, buildEngagementPreview, pageBounds, type OverviewPaging } from './overview'
+import { DAY_MS, trackedSince, type TrackedPeriod } from './quote-period'
+import { activeQuoteWhere, trackedPeriodWhere, unopenedAfterThreeDaysWhere, viewedInPeriodWhere } from './quote-scope'
 
-const DAY_MS = 24 * 60 * 60 * 1000
-
-function activeLinks(now: Date) {
-  return and(isNull(quotes.archivedAt), or(isNull(quotes.expiresAt), gt(quotes.expiresAt, now)))!
-}
-
-export async function getTrackedQuoteOverview(paging: OverviewPaging, now = new Date()) {
-  const active = activeLinks(now)
-  const sevenDaysAgo = new Date(now.getTime() - 7 * DAY_MS)
-  const thirtyDaysAgo = new Date(now.getTime() - 30 * DAY_MS)
+export async function getTrackedQuoteOverview(paging: OverviewPaging, period: TrackedPeriod = '30', now = new Date()) {
+  const active = and(activeQuoteWhere(now), isNull(quotes.outcome), trackedPeriodWhere(period, now))!
+  const since = trackedSince(period, now)
   const expiryCutoff = new Date(now.getTime() + 7 * DAY_MS)
-  const activityWhere = and(inArray(quoteEvents.eventType, ['open', 'download', 'cta']), lte(quoteEvents.createdAt, now))!
+  const activityWhere = and(active, inArray(quoteEvents.eventType, ['open', 'download', 'cta']), lte(quoteEvents.createdAt, now), since ? gte(quoteEvents.createdAt, since) : undefined)!
   const attentionWhere = and(active, or(
     eq(quotes.statusTag, 'hot'),
     gte(quoteEngagement.totalOpens, 2),
     eq(quoteEngagement.forwardingSuspected, true),
     and(gt(quotes.expiresAt, now), lte(quotes.expiresAt, expiryCutoff)),
-    isNull(quoteEngagement.totalOpens),
-    eq(quoteEngagement.totalOpens, 0),
+    unopenedAfterThreeDaysWhere(now),
   ))!
 
-  const [snapshotRows, viewedRows, activityCountRows, attentionCountRows] = await Promise.all([
+  const [snapshotRows, activityCountRows, attentionCountRows] = await Promise.all([
     db.select({
       activeLinks: count(),
-      neverOpened: sql<number>`count(*) filter (where coalesce(${quoteEngagement.totalOpens}, 0) = 0)`,
+      totalValue: sql<string>`coalesce(sum(${quotes.quoteValue}), 0)`,
+      hotCount: sql<number>`count(*) filter (where ${quotes.statusTag} = 'hot')`,
+      warmCount: sql<number>`count(*) filter (where ${quotes.statusTag} = 'warm')`,
+      coldCount: sql<number>`count(*) filter (where ${quotes.statusTag} = 'cold')`,
+      unopenedAfterThreeDays: sql<number>`count(*) filter (where ${unopenedAfterThreeDaysWhere(now)})`,
+      forwardingCount: sql<number>`count(*) filter (where ${quoteEngagement.forwardingSuspected} = true)`,
+      viewedCount: sql<number>`count(*) filter (where ${viewedInPeriodWhere(period, now)})`,
     })
       .from(quotes)
       .leftJoin(quoteEngagement, eq(quoteEngagement.quoteId, quotes.id))
       .where(active),
-    db.select({
-      viewedLastSevenDays: sql<number>`count(distinct ${quoteEvents.quoteId}) filter (where ${quoteEvents.createdAt} >= ${sevenDaysAgo})`,
-      viewedLastThirtyDays: countDistinct(quoteEvents.quoteId),
-    })
-      .from(quoteEvents)
-      .innerJoin(quotes, eq(quotes.id, quoteEvents.quoteId))
-      .where(and(active, eq(quoteEvents.eventType, 'open'), gte(quoteEvents.createdAt, thirtyDaysAgo), lte(quoteEvents.createdAt, now))),
     db.select({ total: count() })
       .from(quoteEvents)
       .innerJoin(quotes, eq(quotes.id, quoteEvents.quoteId))
@@ -77,6 +70,8 @@ export async function getTrackedQuoteOverview(paging: OverviewPaging, now = new 
       .offset(activityPage.offset),
     db.select({
       id: quotes.id,
+      createdAt: quotes.createdAt,
+      outcome: quotes.outcome,
       clientName: quotes.clientName,
       workOrderId: quotes.workOrderId,
       jobAddress: quotes.jobAddress,
@@ -149,9 +144,13 @@ export async function getTrackedQuoteOverview(paging: OverviewPaging, now = new 
     asOf: now,
     snapshot: {
       activeLinks: Number(snapshotRows[0]?.activeLinks ?? 0),
-      viewedLastSevenDays: Number(viewedRows[0]?.viewedLastSevenDays ?? 0),
-      viewedLastThirtyDays: Number(viewedRows[0]?.viewedLastThirtyDays ?? 0),
-      neverOpened: Number(snapshotRows[0]?.neverOpened ?? 0),
+      totalValue: String(snapshotRows[0]?.totalValue ?? '0'),
+      hotCount: Number(snapshotRows[0]?.hotCount ?? 0),
+      warmCount: Number(snapshotRows[0]?.warmCount ?? 0),
+      coldCount: Number(snapshotRows[0]?.coldCount ?? 0),
+      unopenedAfterThreeDays: Number(snapshotRows[0]?.unopenedAfterThreeDays ?? 0),
+      forwardingCount: Number(snapshotRows[0]?.forwardingCount ?? 0),
+      viewedCount: Number(snapshotRows[0]?.viewedCount ?? 0),
     },
     activity: { ...activityPage, rows: activityRows.map((row) => ({ ...row, engagementPreview: previewFor(row, row.quoteId) })) },
     attention: { ...attentionPage, rows: buildAttentionRows(attentionRows, now).map((row) => ({ ...row, engagementPreview: previewFor(row, row.id) })) },

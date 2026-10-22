@@ -29,7 +29,7 @@ const attentionQuote = {
 function result() {
   return {
     asOf: new Date('2026-10-22T03:00:00Z'),
-    snapshot: { activeLinks: 12, viewedLastSevenDays: 1, viewedLastThirtyDays: 3, neverOpened: 5 },
+    snapshot: { activeLinks: 12, totalValue: '1200.50', hotCount: 1, warmCount: 2, coldCount: 4, unopenedAfterThreeDays: 5, forwardingCount: 1, viewedCount: 3 },
     activity: { rows: [event], total: 12, page: 1, size: 5, pageCount: 3, offset: 0 },
     attention: { rows: [attentionQuote], total: 6, page: 1, size: 5, pageCount: 2, offset: 0 },
   }
@@ -49,19 +49,23 @@ describe('TrackedQuoteOverviewPage', () => {
     expect(getTrackedQuoteOverview).not.toHaveBeenCalled()
   })
 
-  it('shows four metrics, linked entries, and independent five-row pagination', async () => {
+  it('shows scoped clickable metrics, linked entries, and independent five-row pagination', async () => {
     getTrackedQuoteOverview.mockResolvedValueOnce(result())
     render(await page())
 
     expect(getTrackedQuoteOverview).toHaveBeenCalledWith({
       activity: { page: 1, size: 5 }, attention: { page: 1, size: 5 },
-    })
+    }, '30')
     const snapshot = screen.getByRole('region', { name: 'Tracked link snapshot' })
     const attentionHeading = screen.getByRole('heading', { name: 'Needs attention' })
     const activityHeading = screen.getByRole('heading', { name: 'Recent activity' })
     expect(snapshot.compareDocumentPosition(attentionHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(attentionHeading.compareDocumentPosition(activityHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(within(snapshot).getByText('Viewed in the last 30 days')).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Quotes tracked in' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Last 30 days' })).toHaveAttribute('aria-current', 'page')
+    expect(within(snapshot).getByRole('link', { name: /Total value/ })).toHaveAttribute('href', '/quote-tracker?trackedIn=30&linkStatus=active&outcome=open')
+    expect(within(snapshot).getByRole('link', { name: /Hot quotes/ })).toHaveAttribute('href', '/quote-tracker?trackedIn=30&linkStatus=active&outcome=open&status=hot')
+    expect(within(snapshot).getByRole('link', { name: /Unopened after 3 days/ })).toHaveAttribute('href', '/quote-tracker?trackedIn=30&linkStatus=active&outcome=open&activity=unopened_3_days')
     expect(screen.getByRole('link', { name: /Q100 · Ada/ })).toHaveAttribute('href', '/quote-tracker/quote-1')
     expect(screen.getByText('12 Glass Street')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Q200 · Lee/ })).toHaveAttribute('href', '/quote-tracker/quote-2')
@@ -76,9 +80,9 @@ describe('TrackedQuoteOverviewPage', () => {
     expect(screen.getByText('Each line is an event, not a unique viewer or a confirmed sale.')).toBeInTheDocument()
 
     const activityPages = screen.getByRole('navigation', { name: 'Recent activity pages' })
-    expect(within(activityPages).getByRole('link', { name: 'Next' })).toHaveAttribute('href', '/quote-tracker/overview?activityPage=2&activitySize=5&attentionPage=1&attentionSize=5')
+    expect(within(activityPages).getByRole('link', { name: 'Next' })).toHaveAttribute('href', '/quote-tracker/overview?activityPage=2&activitySize=5&attentionPage=1&attentionSize=5&trackedIn=30')
     const attentionPages = screen.getByRole('navigation', { name: 'Needs attention pages' })
-    expect(within(attentionPages).getByRole('link', { name: 'Next' })).toHaveAttribute('href', '/quote-tracker/overview?activityPage=1&activitySize=5&attentionPage=2&attentionSize=5')
+    expect(within(attentionPages).getByRole('link', { name: 'Next' })).toHaveAttribute('href', '/quote-tracker/overview?activityPage=1&activitySize=5&attentionPage=2&attentionSize=5&trackedIn=30')
     expect(screen.getByRole('combobox', { name: 'Recent activity rows per page' })).toHaveValue('5')
     expect(screen.getByRole('combobox', { name: 'Needs attention rows per page' })).toHaveValue('5')
     expect(within(screen.getByRole('combobox', { name: 'Recent activity rows per page' })).getAllByRole('option').map((option) => option.textContent)).toEqual(['5', '10', '20', '50'])
@@ -110,21 +114,23 @@ describe('TrackedQuoteOverviewPage', () => {
     data.activity = { ...data.activity, page: 2, size: 10, pageCount: 2, offset: 10 }
     data.attention = { ...data.attention, page: 3, size: 20, pageCount: 3, offset: 40 }
     getTrackedQuoteOverview.mockResolvedValueOnce(data)
-    render(await page({ activityPage: '2', activitySize: '10', attentionPage: '3', attentionSize: '20' }))
+    render(await page({ activityPage: '2', activitySize: '10', attentionPage: '3', attentionSize: '20', trackedIn: '14' }))
 
     expect(getTrackedQuoteOverview).toHaveBeenCalledWith({
       activity: { page: 2, size: 10 }, attention: { page: 3, size: 20 },
-    })
-    expect(within(screen.getByRole('navigation', { name: 'Recent activity pages' })).getByRole('link', { name: 'Previous' })).toHaveAttribute('href', '/quote-tracker/overview?activityPage=1&activitySize=10&attentionPage=3&attentionSize=20')
+    }, '14')
+    expect(within(screen.getByRole('navigation', { name: 'Recent activity pages' })).getByRole('link', { name: 'Previous' })).toHaveAttribute('href', '/quote-tracker/overview?activityPage=1&activitySize=10&attentionPage=3&attentionSize=20&trackedIn=14')
     const activityForm = screen.getByRole('combobox', { name: 'Recent activity rows per page' }).closest('form')
     expect(activityForm?.querySelector('input[name="attentionPage"]')).toHaveValue('3')
     expect(activityForm?.querySelector('input[name="attentionSize"]')).toHaveValue('20')
     expect(activityForm?.querySelector('input[name="activityPage"]')).toHaveValue('1')
+    expect(activityForm?.querySelector('input[name="trackedIn"]')).toHaveValue('14')
+    expect(screen.getByRole('link', { name: 'All time' })).toHaveAttribute('href', '/quote-tracker/overview?trackedIn=all&activitySize=10&attentionSize=20')
   })
 
   it('explains when there is no recorded activity', async () => {
     const data = result()
-    data.snapshot = { activeLinks: 0, viewedLastSevenDays: 0, viewedLastThirtyDays: 0, neverOpened: 0 }
+    data.snapshot = { activeLinks: 0, totalValue: '0', hotCount: 0, warmCount: 0, coldCount: 0, unopenedAfterThreeDays: 0, forwardingCount: 0, viewedCount: 0 }
     data.activity = { rows: [], total: 0, page: 1, size: 5, pageCount: 1, offset: 0 }
     data.attention = { rows: [], total: 0, page: 1, size: 5, pageCount: 1, offset: 0 }
     getTrackedQuoteOverview.mockResolvedValueOnce(data)

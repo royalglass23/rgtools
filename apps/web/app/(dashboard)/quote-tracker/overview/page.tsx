@@ -3,7 +3,8 @@ import { PageHeader, FeedbackState, KpiCard } from '@/components/precision-ui/Pr
 import { requireModule } from '@/lib/guard'
 import { getTrackedQuoteOverview } from '@/modules/quote-tracker/overview-queries'
 import { OVERVIEW_PAGE_SIZES, parseOverviewPaging, type EngagementPreview, type OverviewPaging, type OverviewPageSize } from '@/modules/quote-tracker/overview'
-import { formatDuration } from '@/modules/quote-tracker/presentation'
+import { formatCurrency, formatDuration } from '@/modules/quote-tracker/presentation'
+import { parseTrackedIn, TRACKED_PERIODS, trackedPeriodLabel, trackedQuoteListHref, type TrackedPeriod } from '@/modules/quote-tracker/quote-period'
 import styles from './overview.module.css'
 
 const nzDateTime = new Intl.DateTimeFormat('en-NZ', {
@@ -25,27 +26,29 @@ function eventLabel(type: string) {
 type ListPage = { total: number; page: number; size: OverviewPageSize; pageCount: number }
 type ListKind = keyof OverviewPaging
 
-function overviewHref(paging: OverviewPaging, kind: ListKind, page: number) {
+function overviewHref(paging: OverviewPaging, kind: ListKind, page: number, period: TrackedPeriod) {
   const params = new URLSearchParams({
     activityPage: String(kind === 'activity' ? page : paging.activity.page),
     activitySize: String(paging.activity.size),
     attentionPage: String(kind === 'attention' ? page : paging.attention.page),
     attentionSize: String(paging.attention.size),
+    trackedIn: period,
   })
   return `/quote-tracker/overview?${params}`
 }
 
-function ListPagination({ kind, label, page, paging }: { kind: ListKind; label: string; page: ListPage; paging: OverviewPaging }) {
+function ListPagination({ kind, label, page, paging, period }: { kind: ListKind; label: string; page: ListPage; paging: OverviewPaging; period: TrackedPeriod }) {
   const otherKind = kind === 'activity' ? 'attention' : 'activity'
   return (
     <div className={styles.pagination}>
       <span className={styles.pageTotal}>{page.total} {kind === 'activity' ? 'events' : 'quotes'}</span>
       <nav aria-label={`${label} pages`} className={styles.pageLinks}>
-        {page.page > 1 ? <Link href={overviewHref(paging, kind, page.page - 1)}>Previous</Link> : <span aria-disabled="true">Previous</span>}
+        {page.page > 1 ? <Link href={overviewHref(paging, kind, page.page - 1, period)}>Previous</Link> : <span aria-disabled="true">Previous</span>}
         <span>Page {page.page} of {page.pageCount}</span>
-        {page.page < page.pageCount ? <Link href={overviewHref(paging, kind, page.page + 1)}>Next</Link> : <span aria-disabled="true">Next</span>}
+        {page.page < page.pageCount ? <Link href={overviewHref(paging, kind, page.page + 1, period)}>Next</Link> : <span aria-disabled="true">Next</span>}
       </nav>
       <form action="/quote-tracker/overview" method="get" className={styles.pageSizeForm}>
+        <input type="hidden" name="trackedIn" value={period} />
         <input type="hidden" name={`${kind}Page`} value="1" />
         <input type="hidden" name={`${otherKind}Page`} value={paging[otherKind].page} />
         <input type="hidden" name={`${otherKind}Size`} value={paging[otherKind].size} />
@@ -80,12 +83,24 @@ function EngagementPreviewPanel({ preview }: { preview: EngagementPreview }) {
 
 export default async function TrackedQuoteOverviewPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await requireModule('quote-tracker')
-  const paging = parseOverviewPaging(await searchParams)
-  const overview = await getTrackedQuoteOverview(paging)
+  const params = await searchParams
+  const period = parseTrackedIn(params.trackedIn)
+  const paging = parseOverviewPaging(params)
+  const overview = await getTrackedQuoteOverview(paging, period)
   const currentPaging: OverviewPaging = {
     activity: { page: overview.activity.page, size: overview.activity.size },
     attention: { page: overview.attention.page, size: overview.attention.size },
   }
+  const cards = [
+    { label: 'Total value', value: formatCurrency(overview.snapshot.totalValue), filter: {} },
+    { label: 'Active tracked links', value: overview.snapshot.activeLinks, filter: {} },
+    { label: 'Hot quotes', value: overview.snapshot.hotCount, filter: { status: 'hot' } },
+    { label: 'Warm quotes', value: overview.snapshot.warmCount, filter: { status: 'warm' } },
+    { label: 'Cold quotes', value: overview.snapshot.coldCount, filter: { status: 'cold' } },
+    { label: 'Unopened after 3 days', value: overview.snapshot.unopenedAfterThreeDays, filter: { activity: 'unopened_3_days' } },
+    { label: 'Possible forwarding', value: overview.snapshot.forwardingCount, filter: { activity: 'forwarding' } },
+    { label: 'Quotes viewed', value: overview.snapshot.viewedCount, filter: { activity: 'viewed' } },
+  ]
 
   return (
     <div className={styles.page}>
@@ -93,15 +108,25 @@ export default async function TrackedQuoteOverviewPage({ searchParams }: { searc
         eyebrow="Quotes"
         title="Tracked quote activity"
         description="See which tracked quotes need attention and what has happened on their links."
-        actions={<Link className={styles.headerLink} href="/quote-tracker">Track Quotes</Link>}
+        actions={<Link className={styles.headerLink} href={trackedQuoteListHref(period)}>Track Quotes</Link>}
       />
       <p className={styles.asOf}>As of <time dateTime={overview.asOf.toISOString()}>{nzDateTime.format(overview.asOf)}</time></p>
 
+      <nav aria-label="Quotes tracked in" className={styles.periodFilter}>
+        <span>Quotes tracked in</span>
+        {TRACKED_PERIODS.map((choice) => (
+          <Link key={choice} aria-current={choice === period ? 'page' : undefined}
+            href={`/quote-tracker/overview?${new URLSearchParams({ trackedIn: choice, activitySize: String(paging.activity.size), attentionSize: String(paging.attention.size) })}`}>
+            {trackedPeriodLabel(choice)}
+          </Link>
+        ))}
+      </nav>
+      <p className={styles.asOf}>Active links only, excluding won and lost quotes. Every section uses this period. Select a card to see its quotes.</p>
+
       <section aria-label="Tracked link snapshot" className={styles.snapshot}>
-        <KpiCard label="Active tracked links" value={overview.snapshot.activeLinks} detail="Links currently available" />
-        <KpiCard label="Viewed in the last 7 days" value={overview.snapshot.viewedLastSevenDays} detail="Distinct active quotes with an open" />
-        <KpiCard label="Viewed in the last 30 days" value={overview.snapshot.viewedLastThirtyDays} detail="Distinct active quotes with an open" />
-        <KpiCard label="Never opened" value={overview.snapshot.neverOpened} detail="Active links with no recorded open" />
+        {cards.map((card) => <Link key={card.label} href={trackedQuoteListHref(period, card.filter)} className={styles.cardLink} aria-label={`${card.label}: ${card.value}. View quotes`}>
+          <KpiCard label={card.label} value={card.value} />
+        </Link>)}
       </section>
 
       <div className={styles.mainGrid}>
@@ -115,7 +140,7 @@ export default async function TrackedQuoteOverviewPage({ searchParams }: { searc
           </summary>
           <div className={styles.accordionBody}>
           {overview.attention.rows.length === 0 ? (
-            <FeedbackState tone="empty">No active tracked quotes currently match the follow-up signals.</FeedbackState>
+            <FeedbackState tone="empty">No active tracked quotes currently match the follow-up signals in this period.</FeedbackState>
           ) : (
             <ul className={styles.attentionList}>
               {overview.attention.rows.map((quote) => (
@@ -134,7 +159,7 @@ export default async function TrackedQuoteOverviewPage({ searchParams }: { searc
             </ul>
           )}
           <p className={styles.panelNote}>Hot status may have been set manually. Check the quote detail before following up.</p>
-          <ListPagination kind="attention" label="Needs attention" page={overview.attention} paging={currentPaging} />
+          <ListPagination kind="attention" label="Needs attention" page={overview.attention} paging={currentPaging} period={period} />
           </div>
         </details>
 
@@ -148,7 +173,7 @@ export default async function TrackedQuoteOverviewPage({ searchParams }: { searc
           </summary>
           <div className={styles.accordionBody}>
           {overview.activity.rows.length === 0 ? (
-            <FeedbackState tone="empty">No quote opens, downloads, or action clicks have been recorded yet.</FeedbackState>
+            <FeedbackState tone="empty">No quote opens, downloads, or action clicks match this period and active quote filters.</FeedbackState>
           ) : (
             <ul className={styles.activityList}>
               {overview.activity.rows.map((event) => (
@@ -167,7 +192,7 @@ export default async function TrackedQuoteOverviewPage({ searchParams }: { searc
             </ul>
           )}
           <p className={styles.panelNote}>Each line is an event, not a unique viewer or a confirmed sale.</p>
-          <ListPagination kind="activity" label="Recent activity" page={overview.activity} paging={currentPaging} />
+          <ListPagination kind="activity" label="Recent activity" page={overview.activity} paging={currentPaging} period={period} />
           </div>
         </details>
       </div>
