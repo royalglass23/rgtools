@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { requireModule, getTrackedQuoteOverview } = vi.hoisted(() => ({
@@ -17,11 +17,13 @@ import TrackedQuoteOverviewPage from './page'
 const event = {
   id: 'event-1', quoteId: 'quote-1', clientName: 'Ada', workOrderId: 'Q100',
   jobAddress: '12 Glass Street', eventType: 'open', createdAt: new Date('2026-10-22T02:00:00Z'),
+  engagementPreview: { totalOpens: 3, uniqueSessions: 2, totalTimeMs: 250_000, maxScrollDepth: 100, forwardingSuspected: true, interestScore: 75 },
 }
 const attentionQuote = {
   id: 'quote-2', clientName: 'Lee', workOrderId: 'Q200',
   jobAddress: '34 Window Road',
   reasons: ['No opens yet'], lastOpenedAt: null,
+  engagementPreview: { totalOpens: 0, uniqueSessions: 0, totalTimeMs: 0, maxScrollDepth: 0, forwardingSuspected: false, interestScore: 0 },
 }
 
 function result() {
@@ -61,6 +63,13 @@ describe('TrackedQuoteOverviewPage', () => {
     expect(screen.getByText('12 Glass Street')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Q200 · Lee/ })).toHaveAttribute('href', '/quote-tracker/quote-2')
     expect(within(screen.getByRole('link', { name: /Q200 · Lee/ })).getByText('34 Window Road')).toBeInTheDocument()
+    const activityPreview = screen.getByRole('link', { name: /Q100 · Ada/ }).closest('li')!
+    expect(within(activityPreview).getByRole('heading', { name: 'Engagement' })).toBeInTheDocument()
+    expect(within(activityPreview).getByText('4m 10s')).toBeInTheDocument()
+    expect(within(activityPreview).getByText('Suspected')).toBeInTheDocument()
+    expect(within(activityPreview).getByRole('progressbar', { name: 'Interest score' })).toHaveAttribute('aria-valuenow', '75')
+    const attentionPreview = screen.getByRole('link', { name: /Q200 · Lee/ }).closest('li')!
+    expect(within(attentionPreview).getByText('No signal')).toBeInTheDocument()
     expect(screen.getByText('Each line is an event, not a unique viewer or a confirmed sale.')).toBeInTheDocument()
 
     const activityPages = screen.getByRole('navigation', { name: 'Recent activity pages' })
@@ -70,6 +79,27 @@ describe('TrackedQuoteOverviewPage', () => {
     expect(screen.getByRole('combobox', { name: 'Recent activity rows per page' })).toHaveValue('5')
     expect(screen.getByRole('combobox', { name: 'Needs attention rows per page' })).toHaveValue('5')
     expect(within(screen.getByRole('combobox', { name: 'Recent activity rows per page' })).getAllByRole('option').map((option) => option.textContent)).toEqual(['5', '10', '20', '50'])
+  })
+
+  it('shows prominent section summaries and lets each list collapse independently', async () => {
+    getTrackedQuoteOverview.mockResolvedValueOnce(result())
+    render(await page())
+
+    const activity = screen.getByRole('heading', { name: 'Recent activity' }).closest('details')
+    const attention = screen.getByRole('heading', { name: 'Needs attention' }).closest('details')
+    expect(activity).toHaveAttribute('open')
+    expect(attention).toHaveAttribute('open')
+    expect(within(activity!.querySelector('summary')!).getByText('12 events')).toBeInTheDocument()
+    expect(within(attention!.querySelector('summary')!).getByText('6 quotes')).toBeInTheDocument()
+
+    fireEvent.click(activity!.querySelector('summary')!)
+    expect(activity).not.toHaveAttribute('open')
+    expect(attention).toHaveAttribute('open')
+
+    fireEvent.click(attention!.querySelector('summary')!)
+    expect(attention).not.toHaveAttribute('open')
+    fireEvent.click(activity!.querySelector('summary')!)
+    expect(activity).toHaveAttribute('open')
   })
 
   it('passes chosen pages and sizes to the query and preserves the other list in navigation', async () => {

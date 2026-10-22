@@ -1,8 +1,9 @@
 import Link from 'next/link'
-import { PageHeader, DataPanel, FeedbackState, KpiCard } from '@/components/precision-ui/PrecisionUI'
+import { PageHeader, FeedbackState, KpiCard } from '@/components/precision-ui/PrecisionUI'
 import { requireModule } from '@/lib/guard'
 import { getTrackedQuoteOverview } from '@/modules/quote-tracker/overview-queries'
-import { OVERVIEW_PAGE_SIZES, parseOverviewPaging, type OverviewPaging, type OverviewPageSize } from '@/modules/quote-tracker/overview'
+import { OVERVIEW_PAGE_SIZES, parseOverviewPaging, type EngagementPreview, type OverviewPaging, type OverviewPageSize } from '@/modules/quote-tracker/overview'
+import { formatDuration } from '@/modules/quote-tracker/presentation'
 import styles from './overview.module.css'
 
 const nzDateTime = new Intl.DateTimeFormat('en-NZ', {
@@ -58,6 +59,25 @@ function ListPagination({ kind, label, page, paging }: { kind: ListKind; label: 
   )
 }
 
+function EngagementPreviewPanel({ preview }: { preview: EngagementPreview }) {
+  return (
+    <div className={styles.engagementPreview}>
+      <h3>Engagement</h3>
+      <dl className={styles.engagementMetrics}>
+        <div><dt>Total opens</dt><dd>{preview.totalOpens}</dd></div>
+        <div><dt>Unique viewers</dt><dd>{preview.uniqueSessions}</dd></div>
+        <div><dt>Total time</dt><dd>{formatDuration(preview.totalTimeMs)}</dd></div>
+        <div><dt>Max scroll</dt><dd>{preview.maxScrollDepth}%</dd></div>
+        <div><dt>Forwarding</dt><dd>{preview.forwardingSuspected ? <span className={styles.forwardingFlag}>Suspected</span> : 'No signal'}</dd></div>
+      </dl>
+      <div className={styles.scoreLabel}><span>Interest score</span><span>{preview.interestScore}/100</span></div>
+      <div className={styles.scoreTrack} role="progressbar" aria-label="Interest score" aria-valuemin={0} aria-valuemax={100} aria-valuenow={preview.interestScore}>
+        <div className={styles.scoreFill} style={{ width: `${preview.interestScore}%` }} />
+      </div>
+    </div>
+  )
+}
+
 export default async function TrackedQuoteOverviewPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await requireModule('quote-tracker')
   const paging = parseOverviewPaging(await searchParams)
@@ -85,7 +105,15 @@ export default async function TrackedQuoteOverviewPage({ searchParams }: { searc
       </section>
 
       <div className={styles.mainGrid}>
-        <DataPanel title="Recent activity" eyebrow="Observed on tracked links">
+        <details className={styles.accordion} open>
+          <summary className={styles.accordionSummary}>
+            <div className={styles.accordionHeading}>
+              <span className={styles.accordionEyebrow}>Observed on tracked links</span>
+              <div className={styles.accordionTitle}><h2>Recent activity</h2><span className={styles.accordionCount}>{overview.activity.total} events</span></div>
+            </div>
+            <span className={styles.accordionToggle} aria-hidden="true"><span className={styles.showLabel}>Show</span><span className={styles.hideLabel}>Hide</span><span className={styles.chevron} /></span>
+          </summary>
+          <div className={styles.accordionBody}>
           {overview.activity.rows.length === 0 ? (
             <FeedbackState tone="empty">No quote opens, downloads, or action clicks have been recorded yet.</FeedbackState>
           ) : (
@@ -100,15 +128,25 @@ export default async function TrackedQuoteOverviewPage({ searchParams }: { searc
                     </span>
                     <time dateTime={event.createdAt.toISOString()}>{nzDateTime.format(event.createdAt)}</time>
                   </Link>
+                  <EngagementPreviewPanel preview={event.engagementPreview} />
                 </li>
               ))}
             </ul>
           )}
           <p className={styles.panelNote}>Each line is an event, not a unique viewer or a confirmed sale.</p>
           <ListPagination kind="activity" label="Recent activity" page={overview.activity} paging={currentPaging} />
-        </DataPanel>
+          </div>
+        </details>
 
-        <DataPanel title="Needs attention" eyebrow="Active tracked links">
+        <details className={styles.accordion} open>
+          <summary className={styles.accordionSummary}>
+            <div className={styles.accordionHeading}>
+              <span className={styles.accordionEyebrow}>Active tracked links</span>
+              <div className={styles.accordionTitle}><h2>Needs attention</h2><span className={styles.accordionCount}>{overview.attention.total} quotes</span></div>
+            </div>
+            <span className={styles.accordionToggle} aria-hidden="true"><span className={styles.showLabel}>Show</span><span className={styles.hideLabel}>Hide</span><span className={styles.chevron} /></span>
+          </summary>
+          <div className={styles.accordionBody}>
           {overview.attention.rows.length === 0 ? (
             <FeedbackState tone="empty">No active tracked quotes currently match the follow-up signals.</FeedbackState>
           ) : (
@@ -123,13 +161,15 @@ export default async function TrackedQuoteOverviewPage({ searchParams }: { searc
                     </span>
                     <span className={styles.rowTime}>{quote.lastOpenedAt ? `Last opened ${nzDateTime.format(quote.lastOpenedAt)}` : 'Not opened'}</span>
                   </Link>
+                  <EngagementPreviewPanel preview={quote.engagementPreview} />
                 </li>
               ))}
             </ul>
           )}
           <p className={styles.panelNote}>Hot status may have been set manually. Check the quote detail before following up.</p>
           <ListPagination kind="attention" label="Needs attention" page={overview.attention} paging={currentPaging} />
-        </DataPanel>
+          </div>
+        </details>
       </div>
     </div>
   )

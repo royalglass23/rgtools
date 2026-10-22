@@ -1,7 +1,7 @@
 import { and, count, countDistinct, desc, eq, gt, gte, inArray, isNull, lte, or, sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { quoteEngagement, quoteEvents, quotes } from '@rgtools/db/schema'
-import { buildAttentionRows, pageBounds, type OverviewPaging } from './overview'
+import { buildAttentionRows, buildEngagementPreview, pageBounds, type OverviewPaging } from './overview'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -59,11 +59,18 @@ export async function getTrackedQuoteOverview(paging: OverviewPaging, now = new 
       clientName: quotes.clientName,
       workOrderId: quotes.workOrderId,
       jobAddress: quotes.jobAddress,
+      totalOpens: quoteEngagement.totalOpens,
+      uniqueSessions: quoteEngagement.uniqueSessions,
+      totalTimeMs: quoteEngagement.totalTimeMs,
+      maxScrollDepth: quoteEngagement.maxScrollDepth,
+      uniqueDevices: quoteEngagement.uniqueDevices,
+      forwardingSuspected: quoteEngagement.forwardingSuspected,
       eventType: quoteEvents.eventType,
       createdAt: quoteEvents.createdAt,
     })
       .from(quoteEvents)
       .innerJoin(quotes, eq(quotes.id, quoteEvents.quoteId))
+      .leftJoin(quoteEngagement, eq(quoteEngagement.quoteId, quotes.id))
       .where(activityWhere)
       .orderBy(desc(quoteEvents.createdAt), desc(quoteEvents.id))
       .limit(activityPage.size)
@@ -75,6 +82,10 @@ export async function getTrackedQuoteOverview(paging: OverviewPaging, now = new 
       jobAddress: quotes.jobAddress,
       statusTag: quotes.statusTag,
       totalOpens: quoteEngagement.totalOpens,
+      uniqueSessions: quoteEngagement.uniqueSessions,
+      totalTimeMs: quoteEngagement.totalTimeMs,
+      maxScrollDepth: quoteEngagement.maxScrollDepth,
+      uniqueDevices: quoteEngagement.uniqueDevices,
       forwardingSuspected: quoteEngagement.forwardingSuspected,
       lastOpenedAt: quoteEngagement.lastOpenedAt,
       expiresAt: quotes.expiresAt,
@@ -97,6 +108,43 @@ export async function getTrackedQuoteOverview(paging: OverviewPaging, now = new 
       .offset(attentionPage.offset),
   ])
 
+  const visibleQuoteIds = [...new Set([
+    ...activityRows.map((row) => row.quoteId),
+    ...attentionRows.map((row) => row.id),
+  ])]
+  const eventSummaries = visibleQuoteIds.length === 0 ? [] : await db.select({
+    quoteId: quoteEvents.quoteId,
+    totalOpens: sql<number>`count(*) filter (where ${quoteEvents.eventType} = 'open')`,
+    uniqueSessions: countDistinct(quoteEvents.sessionId),
+    totalTimeMs: sql<number>`coalesce(sum(${quoteEvents.durationMs}), 0)`,
+    maxScrollDepth: sql<number>`coalesce(max(${quoteEvents.scrollDepth}), 0)`,
+    uniqueDevices: sql<number>`count(distinct ${quoteEvents.deviceType})`,
+    hasCta: sql<boolean>`coalesce(bool_or(${quoteEvents.eventType} in ('cta', 'download')), false)`,
+  })
+    .from(quoteEvents)
+    .where(inArray(quoteEvents.quoteId, visibleQuoteIds))
+    .groupBy(quoteEvents.quoteId)
+  const eventSummaryByQuote = new Map(eventSummaries.map((row) => [row.quoteId, {
+    totalOpens: Number(row.totalOpens),
+    uniqueSessions: Number(row.uniqueSessions),
+    totalTimeMs: Number(row.totalTimeMs),
+    maxScrollDepth: Number(row.maxScrollDepth),
+    uniqueDevices: Number(row.uniqueDevices),
+    hasCta: row.hasCta,
+  }]))
+
+  function previewFor(row: typeof activityRows[number] | typeof attentionRows[number], quoteId: string) {
+    const engagement = row.totalOpens === null ? null : {
+      totalOpens: row.totalOpens,
+      uniqueSessions: row.uniqueSessions ?? 0,
+      totalTimeMs: row.totalTimeMs ?? 0,
+      maxScrollDepth: row.maxScrollDepth ?? 0,
+      uniqueDevices: row.uniqueDevices ?? 0,
+      forwardingSuspected: row.forwardingSuspected ?? false,
+    }
+    return buildEngagementPreview(engagement, eventSummaryByQuote.get(quoteId))
+  }
+
   return {
     asOf: now,
     snapshot: {
@@ -105,7 +153,7 @@ export async function getTrackedQuoteOverview(paging: OverviewPaging, now = new 
       viewedLastThirtyDays: Number(viewedRows[0]?.viewedLastThirtyDays ?? 0),
       neverOpened: Number(snapshotRows[0]?.neverOpened ?? 0),
     },
-    activity: { ...activityPage, rows: activityRows },
-    attention: { ...attentionPage, rows: buildAttentionRows(attentionRows, now) },
+    activity: { ...activityPage, rows: activityRows.map((row) => ({ ...row, engagementPreview: previewFor(row, row.quoteId) })) },
+    attention: { ...attentionPage, rows: buildAttentionRows(attentionRows, now).map((row) => ({ ...row, engagementPreview: previewFor(row, row.id) })) },
   }
 }
