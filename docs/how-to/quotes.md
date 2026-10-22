@@ -31,7 +31,7 @@ The counts at the top show active tracked links, distinct active quotes opened i
 
 **Recent activity** lists recorded opens, PDF downloads, and action clicks across tracked quote links, newest first. Each line shows the job number, client name, and job address, followed by what happened and when in New Zealand time. Open a line to see that quote's detail page. An event does not identify a unique person or prove a sale.
 
-**Needs attention** shows active tracked links with signals such as no opens, Hot status, multiple opens, possible forwarding, or an expiry within seven days. Hot status can be set manually. Open a row to inspect its engagement before deciding whether to follow up.
+**Needs attention** appears below Recent activity and shows each quote's job number, client name, job address, and follow-up signals such as no opens, Hot status, multiple opens, possible forwarding, or an expiry within seven days. Hot status can be set manually. Open a row to inspect its engagement before deciding whether to follow up.
 
 Both lists show five rows per page by default. Use their separate Previous and Next links or choose 10, 20, or 50 rows per page and click **Apply**. Changing one list keeps the other list's page and row count.
 

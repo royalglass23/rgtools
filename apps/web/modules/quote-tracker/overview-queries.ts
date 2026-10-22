@@ -72,6 +72,7 @@ export async function getTrackedQuoteOverview(paging: OverviewPaging, now = new 
       id: quotes.id,
       clientName: quotes.clientName,
       workOrderId: quotes.workOrderId,
+      jobAddress: quotes.jobAddress,
       statusTag: quotes.statusTag,
       totalOpens: quoteEngagement.totalOpens,
       forwardingSuspected: quoteEngagement.forwardingSuspected,

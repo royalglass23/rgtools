@@ -4,6 +4,7 @@ export type AttentionCandidate = {
   id: string
   clientName: string
   workOrderId: string | null
+  jobAddress: string | null
   statusTag: StatusTag | null
   totalOpens: number | null
   forwardingSuspected: boolean | null

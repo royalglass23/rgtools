@@ -20,6 +20,7 @@ const event = {
 }
 const attentionQuote = {
   id: 'quote-2', clientName: 'Lee', workOrderId: 'Q200',
+  jobAddress: '34 Window Road',
   reasons: ['No opens yet'], lastOpenedAt: null,
 }
 
@@ -59,6 +60,7 @@ describe('TrackedQuoteOverviewPage', () => {
     expect(screen.getByRole('link', { name: /Q100 · Ada/ })).toHaveAttribute('href', '/quote-tracker/quote-1')
     expect(screen.getByText('12 Glass Street')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Q200 · Lee/ })).toHaveAttribute('href', '/quote-tracker/quote-2')
+    expect(within(screen.getByRole('link', { name: /Q200 · Lee/ })).getByText('34 Window Road')).toBeInTheDocument()
     expect(screen.getByText('Each line is an event, not a unique viewer or a confirmed sale.')).toBeInTheDocument()
 
     const activityPages = screen.getByRole('navigation', { name: 'Recent activity pages' })
