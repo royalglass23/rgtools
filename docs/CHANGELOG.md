@@ -6,6 +6,10 @@ All notable changes to rgtools are recorded here, grouped by release.
 
 ## [Unreleased]
 
+### Added
+
+- **Tracked Quotes activity dashboard (RG-385)** — clicking Quotes now opens recent tracked-link activity, attention signals, and an active-link snapshot. A separate submenu control retains Quote Movement, Track Quotes, Configuration, and Guide.
+
 ### Fixed
 
 - Calculator jobs created from ServiceM8 inbox email now reconcile through a retryable `job.created` webhook, including legacy `RGTools Lead:` references. The callback authenticates before reading a bounded payload, deduplicates job IDs, waits for the job-card write before acknowledging delivery, retries writes for already-linked leads, and redacts its dedicated callback credential from registration errors.

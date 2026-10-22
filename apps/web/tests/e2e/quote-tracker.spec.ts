@@ -60,6 +60,31 @@ test.describe('quote tracker', () => {
     await login(page)
   })
 
+  test('Quotes opens tracked activity while its submenu remains accessible', async ({ page }) => {
+    test.setTimeout(150_000)
+    await page.goto('/quote-tracker')
+    await page.getByRole('link', { name: 'Quotes', exact: true }).click()
+    await expect(page).toHaveURL(/\/quote-tracker\/overview$/, { timeout: 60_000 })
+    await expect(page.getByRole('heading', { name: 'Tracked quote activity' })).toBeVisible()
+    const submenuToggle = page.getByRole('button', { name: /Quotes submenu/ })
+    await expect(submenuToggle).toHaveAttribute('aria-expanded', 'true')
+    await submenuToggle.click()
+    await expect(submenuToggle).toHaveAttribute('aria-expanded', 'false')
+    await submenuToggle.click()
+    await expect(page.getByRole('link', { name: 'Quote Movement' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Track Quotes' }).first()).toBeVisible()
+
+    await page.getByRole('button', { name: 'Collapse navigation' }).click()
+    await expect(page.getByRole('link', { name: 'Quotes', exact: true })).toBeVisible()
+    await page.getByRole('button', { name: 'Expand Quotes submenu' }).click()
+    await expect(page.getByRole('link', { name: 'Quote Movement' })).toBeVisible()
+
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.getByRole('button', { name: 'Open navigation' }).click()
+    await expect(page.getByRole('link', { name: 'Quotes', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Quotes submenu/ })).toBeVisible()
+  })
+
   test('loads with primary content and no critical browser errors', async ({ page }) => {
     await expectNoCriticalBrowserErrors(page, async () => {
       await page.goto('/quote-tracker')

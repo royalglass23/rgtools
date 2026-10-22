@@ -29,7 +29,7 @@ flow.
 | **Lead Intake** | Captures and scores enquiries, then synchronises eligible lead records with ServiceM8. |
 | **Leads** | Searches leads, shows tier and follow-up context, and links to ServiceM8 jobs. |
 | **Clients** | Maintains canonical RG Tools client records, linked context, and merge review. |
-| **Quote Tracker** | Creates tracked quote links from ServiceM8 PDFs and records viewer engagement. |
+| **Quotes** | Opens an activity dashboard for tracked links, with recent events and follow-up signals; Track Quotes creates links from ServiceM8 PDFs and shows detailed engagement. |
 | **Quote Movement** | Retains ServiceM8 Quote evidence, reports source coverage, and preserves converted Quote context. |
 | **Work Orders** | Reconciles active ServiceM8 Work Order jobs and manages RG-owned operational enrichment. |
 | **PS Generator** | Generates PS1 and PS3 Producer Statement packages from published configuration and templates. |

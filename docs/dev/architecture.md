@@ -66,6 +66,10 @@ client-merge, quote, and Work Order changes.
 
 ## Important workflow boundaries
 
+- The Quotes navigation label opens the tracked quote activity dashboard. It reads bounded event
+  and engagement summaries from `quotes`, `quote_events`, and `quote_engagement`; the separate
+  submenu retains Quote Movement and Track Quotes. The overview is protected by the existing
+  `quote-tracker` module grant and displays no raw viewer identity.
 - Quote Movement is a staff monitoring surface, not a ranking engine or ServiceM8 write-back
   workflow. It retains source evidence and reports incomplete coverage explicitly.
 - Work Orders initially reads active ServiceM8 jobs in `Work Order` status. RG Tools does not
