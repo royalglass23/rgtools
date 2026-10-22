@@ -6,7 +6,7 @@ import { validateEmailGateSettings } from './email-gate'
 import { rollupDeviceSessions, rollupGatedEmails } from './viewer-analytics'
 import type { StatusTag } from './score'
 import { getLatestQuoteAiGuidance } from './ai-guidance'
-import { activeQuoteWhere, trackedPeriodWhere, unopenedAfterThreeDaysWhere, viewedInPeriodWhere } from './quote-scope'
+import { activeQuoteWhere, quoteProgressWhere, trackedPeriodWhere, unopenedAfterThreeDaysWhere, viewedInPeriodWhere } from './quote-scope'
 
 export const EXPIRING_SOON_DAYS = 7
 export const GONE_COLD_DAYS = 14
@@ -279,6 +279,9 @@ function listWhere(filters: QuoteListFilters) {
   const now = new Date()
   const conditions: (SQL | undefined)[] = [trackedPeriodWhere(filters.trackedIn, now)]
   if (filters.outcome === 'open') conditions.push(isNull(quotes.outcome))
+  if (filters.outcome === 'won' || filters.outcome === 'lost') {
+    conditions.push(eq(quotes.outcome, filters.outcome), isNull(quotes.archivedAt))
+  }
 
   if (filters.status !== 'all') {
     conditions.push(eq(quotes.statusTag, filters.status))
@@ -301,6 +304,12 @@ function listWhere(filters: QuoteListFilters) {
     conditions.push(lte(quotes.expiresAt, cutoff))
   } else if (filters.activity === 'unopened_3_days') {
     conditions.push(unopenedAfterThreeDaysWhere(now))
+  } else if (filters.activity === 'unopened_under_3_days') {
+    conditions.push(quoteProgressWhere('waiting', now))
+  } else if (filters.activity === 'opened_once') {
+    conditions.push(quoteProgressWhere('once', now))
+  } else if (filters.activity === 'opened_multiple') {
+    conditions.push(quoteProgressWhere('repeat', now))
   } else if (filters.activity === 'viewed') {
     conditions.push(viewedInPeriodWhere(filters.trackedIn, now))
   } else if (filters.activity === 'never_opened') {

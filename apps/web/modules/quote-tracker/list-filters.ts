@@ -13,11 +13,11 @@ export type QuoteListSort =
   | 'interest_desc'
 export type QuoteListPageSize = 5 | 10 | 20 | 50
 
-export type QuoteActivity = 'all' | 'expiring' | 'never_opened' | 'unopened_3_days' | 'viewed' | 'forwarding' | 'gone_cold'
+export type QuoteActivity = 'all' | 'expiring' | 'never_opened' | 'unopened_3_days' | 'unopened_under_3_days' | 'opened_once' | 'opened_multiple' | 'viewed' | 'forwarding' | 'gone_cold'
 
 export type QuoteListFilters = {
   trackedIn: TrackedPeriod
-  outcome: 'all' | 'open'
+  outcome: 'all' | 'open' | 'won' | 'lost'
   search: string
   status: QuoteListStatus
   linkStatus: QuoteLinkStatus
@@ -50,7 +50,7 @@ export function parseQuoteListFilters(
 
   return {
     trackedIn: parseTrackedIn(searchParams[`${prefix}trackedIn`], 'all'),
-    outcome: stringValue(searchParams[`${prefix}outcome`]) === 'open' ? 'open' : 'all',
+    outcome: toQuoteOutcome(stringValue(searchParams[`${prefix}outcome`])),
     search: (stringValue(searchParams[`${prefix}search`]) ?? '').trim(),
     status: isQuoteListStatus(status) ? status : 'all',
     linkStatus: isQuoteLinkStatus(linkStatus) ? linkStatus : 'active',
@@ -74,8 +74,13 @@ function isQuoteLinkStatus(value: string | undefined): value is QuoteLinkStatus 
 }
 
 function toQuoteActivity(value: string | undefined): QuoteActivity {
+  if (value === 'unopened_under_3_days' || value === 'opened_once' || value === 'opened_multiple') return value
   if (value === 'expiring' || value === 'never_opened' || value === 'unopened_3_days' || value === 'viewed' || value === 'forwarding' || value === 'gone_cold') return value
   return 'all'
+}
+
+function toQuoteOutcome(value: string | undefined): QuoteListFilters['outcome'] {
+  return value === 'open' || value === 'won' || value === 'lost' ? value : 'all'
 }
 
 function isQuoteListSort(value: string | undefined): value is QuoteListSort {

@@ -13,6 +13,7 @@ vi.mock('next/link', () => ({
 }))
 
 import TrackedQuoteOverviewPage from './page'
+import { QUOTE_PROGRESS_GROUPS } from '@/modules/quote-tracker/quote-progress'
 
 const event = {
   id: 'event-1', quoteId: 'quote-1', clientName: 'Ada', workOrderId: 'Q100',
@@ -29,6 +30,7 @@ const attentionQuote = {
 function result() {
   return {
     asOf: new Date('2026-10-22T03:00:00Z'),
+    progress: QUOTE_PROGRESS_GROUPS.map(({ id }) => ({ id, count: id === 'overdue' ? 5 : 0, totalValue: '1200.50' })),
     snapshot: { activeLinks: 12, totalValue: '1200.50', hotCount: 1, warmCount: 2, coldCount: 4, unopenedAfterThreeDays: 5, forwardingCount: 1, viewedCount: 3 },
     activity: { rows: [event], total: 12, page: 1, size: 5, pageCount: 3, offset: 0 },
     attention: { rows: [attentionQuote], total: 6, page: 1, size: 5, pageCount: 2, offset: 0 },
@@ -42,6 +44,23 @@ beforeEach(() => {
 })
 
 describe('TrackedQuoteOverviewPage', () => {
+  it('shows compact amounts, shorter labels and six bar destinations for the selected period', async () => {
+    const data = result()
+    data.snapshot.totalValue = '1699999.99'
+    getTrackedQuoteOverview.mockResolvedValueOnce(data)
+    render(await page({ trackedIn: '14' }))
+    const snapshot = screen.getByRole('region', { name: 'Tracked link snapshot' })
+    expect(within(snapshot).getByText('$1.6m+')).toBeInTheDocument()
+    expect(within(snapshot).getByRole('link', { name: /Total value/ })).toHaveAccessibleDescription('Exact value: $1,699,999.99')
+    expect(within(snapshot).getByText('Active links')).toBeInTheDocument()
+    expect(within(snapshot).getByText('Forwarded')).toBeInTheDocument()
+    const progress = screen.getByRole('region', { name: 'Quote progress' })
+    expect(within(progress).getAllByRole('link')).toHaveLength(6)
+    expect(within(progress).getByRole('link', { name: /Unopened — under 3 days/ })).toHaveAttribute('href', '/quote-tracker?trackedIn=14&linkStatus=active&outcome=open&activity=unopened_under_3_days')
+    expect(within(progress).getByRole('link', { name: /Opened multiple times/ })).toHaveAttribute('href', '/quote-tracker?trackedIn=14&linkStatus=active&outcome=open&activity=opened_multiple')
+    expect(within(progress).getByRole('link', { name: /Won:/ })).toHaveAttribute('href', '/quote-tracker?trackedIn=14&linkStatus=all&outcome=won')
+    expect(within(progress).getByRole('link', { name: /Lost:/ })).toHaveAccessibleDescription('$1,200.50 · Confirmed outcome')
+  })
   it('checks the Quote Tracker grant before reading engagement data', async () => {
     requireModule.mockRejectedValueOnce(new Error('denied'))
     await expect(page()).rejects.toThrow('denied')
@@ -65,7 +84,7 @@ describe('TrackedQuoteOverviewPage', () => {
     expect(screen.getByRole('link', { name: 'Last 30 days' })).toHaveAttribute('aria-current', 'page')
     expect(within(snapshot).getByRole('link', { name: /Total value/ })).toHaveAttribute('href', '/quote-tracker?trackedIn=30&linkStatus=active&outcome=open')
     expect(within(snapshot).getByRole('link', { name: /Hot quotes/ })).toHaveAttribute('href', '/quote-tracker?trackedIn=30&linkStatus=active&outcome=open&status=hot')
-    expect(within(snapshot).getByRole('link', { name: /Unopened after 3 days/ })).toHaveAttribute('href', '/quote-tracker?trackedIn=30&linkStatus=active&outcome=open&activity=unopened_3_days')
+    expect(within(snapshot).getByRole('link', { name: /Unopened:/ })).toHaveAttribute('href', '/quote-tracker?trackedIn=30&linkStatus=active&outcome=open&activity=unopened_3_days')
     expect(screen.getByRole('link', { name: /Q100 · Ada/ })).toHaveAttribute('href', '/quote-tracker/quote-1')
     expect(screen.getByText('12 Glass Street')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Q200 · Lee/ })).toHaveAttribute('href', '/quote-tracker/quote-2')
@@ -133,10 +152,12 @@ describe('TrackedQuoteOverviewPage', () => {
     data.snapshot = { activeLinks: 0, totalValue: '0', hotCount: 0, warmCount: 0, coldCount: 0, unopenedAfterThreeDays: 0, forwardingCount: 0, viewedCount: 0 }
     data.activity = { rows: [], total: 0, page: 1, size: 5, pageCount: 1, offset: 0 }
     data.attention = { rows: [], total: 0, page: 1, size: 5, pageCount: 1, offset: 0 }
+    data.progress = data.progress.map((bucket) => ({ ...bucket, count: 0, totalValue: '0' }))
     getTrackedQuoteOverview.mockResolvedValueOnce(data)
 
     render(await page())
     expect(screen.getByText(/No quote opens, downloads, or action clicks/)).toBeInTheDocument()
     expect(screen.getByText(/No active tracked quotes currently match/)).toBeInTheDocument()
+    expect(screen.getByText('No tracked quotes match this period and scope.')).toBeInTheDocument()
   })
 })

@@ -15,7 +15,7 @@ export function trackedPeriodLabel(period: TrackedPeriod) {
   return period === 'all' ? 'All time' : `Last ${period} days`
 }
 
-export function trackedQuoteListHref(period: TrackedPeriod, filter: { status?: string; activity?: string } = {}) {
+export function trackedQuoteListHref(period: TrackedPeriod, filter: { status?: string; activity?: string; outcome?: string; linkStatus?: string } = {}) {
   const params = new URLSearchParams({ trackedIn: period, linkStatus: 'active', outcome: 'open', ...filter })
   return `/quote-tracker?${params}`
 }

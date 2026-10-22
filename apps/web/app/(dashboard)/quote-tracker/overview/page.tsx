@@ -1,11 +1,12 @@
 import Link from 'next/link'
-import { PageHeader, FeedbackState, KpiCard } from '@/components/precision-ui/PrecisionUI'
+import { PageHeader, FeedbackState } from '@/components/precision-ui/PrecisionUI'
 import { requireModule } from '@/lib/guard'
 import { getTrackedQuoteOverview } from '@/modules/quote-tracker/overview-queries'
 import { OVERVIEW_PAGE_SIZES, parseOverviewPaging, type EngagementPreview, type OverviewPaging, type OverviewPageSize } from '@/modules/quote-tracker/overview'
 import { formatCurrency, formatDuration } from '@/modules/quote-tracker/presentation'
 import { parseTrackedIn, TRACKED_PERIODS, trackedPeriodLabel, trackedQuoteListHref, type TrackedPeriod } from '@/modules/quote-tracker/quote-period'
 import styles from './overview.module.css'
+import { compactQuoteValue, QUOTE_PROGRESS_GROUPS, quoteProgressHref } from '@/modules/quote-tracker/quote-progress'
 
 const nzDateTime = new Intl.DateTimeFormat('en-NZ', {
   timeZone: 'Pacific/Auckland',
@@ -92,15 +93,17 @@ export default async function TrackedQuoteOverviewPage({ searchParams }: { searc
     attention: { page: overview.attention.page, size: overview.attention.size },
   }
   const cards = [
-    { label: 'Total value', value: formatCurrency(overview.snapshot.totalValue), filter: {} },
-    { label: 'Active tracked links', value: overview.snapshot.activeLinks, filter: {} },
+    { label: 'Total value', value: compactQuoteValue(overview.snapshot.totalValue), detail: `Exact value: ${formatCurrency(overview.snapshot.totalValue)}`, filter: {} },
+    { label: 'Active links', value: overview.snapshot.activeLinks, filter: {} },
     { label: 'Hot quotes', value: overview.snapshot.hotCount, filter: { status: 'hot' } },
     { label: 'Warm quotes', value: overview.snapshot.warmCount, filter: { status: 'warm' } },
     { label: 'Cold quotes', value: overview.snapshot.coldCount, filter: { status: 'cold' } },
-    { label: 'Unopened after 3 days', value: overview.snapshot.unopenedAfterThreeDays, filter: { activity: 'unopened_3_days' } },
-    { label: 'Possible forwarding', value: overview.snapshot.forwardingCount, filter: { activity: 'forwarding' } },
+    { label: 'Unopened', value: overview.snapshot.unopenedAfterThreeDays, detail: 'Unopened for at least 3 days. Excludes won and lost quotes.', filter: { activity: 'unopened_3_days' } },
+    { label: 'Forwarded', value: overview.snapshot.forwardingCount, detail: 'Suspected forwarding based on tracking signals; not confirmed forwarding.', filter: { activity: 'forwarding' } },
     { label: 'Quotes viewed', value: overview.snapshot.viewedCount, filter: { activity: 'viewed' } },
   ]
+  const progressTotal = overview.progress.reduce((sum, group) => sum + group.count, 0)
+  const maxProgress = Math.max(1, ...overview.progress.map((group) => group.count))
 
   return (
     <div className={styles.page}>
@@ -121,12 +124,34 @@ export default async function TrackedQuoteOverviewPage({ searchParams }: { searc
           </Link>
         ))}
       </nav>
-      <p className={styles.asOf}>Active links only, excluding won and lost quotes. Every section uses this period. Select a card to see its quotes.</p>
+      <p className={styles.asOf}>Cards and attention lists include active links, excluding won and lost quotes. Every section uses the selected period.</p>
 
       <section aria-label="Tracked link snapshot" className={styles.snapshot}>
-        {cards.map((card) => <Link key={card.label} href={trackedQuoteListHref(period, card.filter)} className={styles.cardLink} aria-label={`${card.label}: ${card.value}. View quotes`}>
-          <KpiCard label={card.label} value={card.value} />
+        {cards.map((card, index) => <Link key={card.label} href={trackedQuoteListHref(period, card.filter)} className={`${styles.cardLink} ${index < 2 ? styles.primaryCard : styles.smallCard}`} aria-label={`${card.label}: ${card.value}. View quotes`} aria-describedby={card.detail ? `card-hint-${index}` : undefined}>
+          <span className={styles.cardLabel}>{card.label}</span><strong className={styles.cardValue}>{card.value}</strong>
+          {card.detail && <span role="tooltip" id={`card-hint-${index}`} className={styles.tooltip}>{card.detail}</span>}
         </Link>)}
+      </section>
+
+      <section className={styles.progressPanel} aria-labelledby="quote-progress-heading">
+        <div className={styles.progressHeading}>
+          <h2 id="quote-progress-heading">Quote progress</h2><span>{progressTotal} quotes</span>
+        </div>
+        <p className={styles.panelNote}>Active links and confirmed outcomes · Select a status to view entries</p>
+        <ul className={styles.progressList}>
+          {QUOTE_PROGRESS_GROUPS.map((group) => {
+            const bucket = overview.progress.find((entry) => entry.id === group.id)!
+            return <li key={group.id}>
+              <Link className={styles.progressRow} href={quoteProgressHref(period, group.id)} aria-label={`${group.label}: ${bucket.count} quotes. View quotes`} aria-describedby={`progress-hint-${group.id}`}>
+                <span className={styles.progressLabel}>{group.label}</span>
+                <span className={styles.progressTrack} aria-hidden="true"><span className={`${styles.progressFill} ${group.id === 'overdue' ? styles.overdueFill : ''}`} style={{ width: `${bucket.count / maxProgress * 100}%` }} /></span>
+                <strong className={styles.progressCount}>{bucket.count}</strong>
+                <span role="tooltip" className={styles.tooltip} id={`progress-hint-${group.id}`}>{formatCurrency(bucket.totalValue)} · {group.detail}{group.id === 'won' || group.id === 'lost' ? '' : ' · Recorded opens do not confirm a sale'}</span>
+              </Link>
+            </li>
+          })}
+        </ul>
+        {progressTotal === 0 && <p className={styles.panelNote}>No tracked quotes match this period and scope.</p>}
       </section>
 
       <div className={styles.mainGrid}>
