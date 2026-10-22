@@ -57,7 +57,10 @@ describe('TrackedQuoteOverviewPage', () => {
       activity: { page: 1, size: 5 }, attention: { page: 1, size: 5 },
     })
     const snapshot = screen.getByRole('region', { name: 'Tracked link snapshot' })
-    expect(snapshot.compareDocumentPosition(screen.getByRole('heading', { name: 'Recent activity' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const attentionHeading = screen.getByRole('heading', { name: 'Needs attention' })
+    const activityHeading = screen.getByRole('heading', { name: 'Recent activity' })
+    expect(snapshot.compareDocumentPosition(attentionHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(attentionHeading.compareDocumentPosition(activityHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(within(snapshot).getByText('Viewed in the last 30 days')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Q100 · Ada/ })).toHaveAttribute('href', '/quote-tracker/quote-1')
     expect(screen.getByText('12 Glass Street')).toBeInTheDocument()
