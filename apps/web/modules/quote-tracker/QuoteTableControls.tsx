@@ -348,7 +348,7 @@ function FilterBar({
         name={`${paramPrefix}outcome`}
         label="Outcome"
         value={filters.outcome}
-        options={[["all", "All outcomes"], ["open", "Exclude won and lost"]]}
+        options={[["all", "All outcomes"], ["open", "Exclude won and lost"], ["won", "Won"], ["lost", "Lost"]]}
       />
 
       <label className="block sm:col-span-2">
@@ -399,6 +399,9 @@ function FilterBar({
           ["expiring", "Expiring soon (7d)"],
           ["never_opened", "Never opened"],
           ["unopened_3_days", "Unopened after 3 days"],
+          ["unopened_under_3_days", "Unopened under 3 days"],
+          ["opened_once", "Opened once"],
+          ["opened_multiple", "Opened multiple times"],
           ["viewed", "Viewed in period"],
           ["forwarding", "Forwarding suspected"],
           ["gone_cold", "Gone cold (14d)"],

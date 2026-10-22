@@ -1,9 +1,10 @@
-import { and, count, countDistinct, desc, eq, gt, gte, inArray, isNull, lte, or, sql } from 'drizzle-orm'
+import { and, count, countDistinct, desc, eq, gt, gte, inArray, isNull, lte, or, sql, type SQL } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { quoteEngagement, quoteEvents, quotes } from '@rgtools/db/schema'
 import { buildAttentionRows, buildEngagementPreview, pageBounds, type OverviewPaging } from './overview'
 import { DAY_MS, trackedSince, type TrackedPeriod } from './quote-period'
-import { activeQuoteWhere, trackedPeriodWhere, unopenedAfterThreeDaysWhere, viewedInPeriodWhere } from './quote-scope'
+import { activeQuoteWhere, quoteProgressWhere, trackedPeriodWhere, unopenedAfterThreeDaysWhere, viewedInPeriodWhere } from './quote-scope'
+import { QUOTE_PROGRESS_GROUPS, type QuoteProgressGroup } from './quote-progress'
 
 export async function getTrackedQuoteOverview(paging: OverviewPaging, period: TrackedPeriod = '30', now = new Date()) {
   const active = and(activeQuoteWhere(now), isNull(quotes.outcome), trackedPeriodWhere(period, now))!
@@ -18,7 +19,15 @@ export async function getTrackedQuoteOverview(paging: OverviewPaging, period: Tr
     unopenedAfterThreeDaysWhere(now),
   ))!
 
-  const [snapshotRows, activityCountRows, attentionCountRows] = await Promise.all([
+  const progressColumns = Object.fromEntries(QUOTE_PROGRESS_GROUPS.map(({ id }) => {
+    const condition = quoteProgressWhere(id, now)
+    return [id, sql<{ count: number; totalValue: string }>`json_build_object(
+      'count', count(*) filter (where ${condition}),
+      'totalValue', coalesce(sum(${quotes.quoteValue}) filter (where ${condition}), 0)::text
+    )`]
+  })) as Record<QuoteProgressGroup, SQL<{ count: number; totalValue: string }>>
+
+  const [snapshotRows, activityCountRows, attentionCountRows, progressRows] = await Promise.all([
     db.select({
       activeLinks: count(),
       totalValue: sql<string>`coalesce(sum(${quotes.quoteValue}), 0)`,
@@ -40,6 +49,10 @@ export async function getTrackedQuoteOverview(paging: OverviewPaging, period: Tr
       .from(quotes)
       .leftJoin(quoteEngagement, eq(quoteEngagement.quoteId, quotes.id))
       .where(attentionWhere),
+    db.select(progressColumns)
+      .from(quotes)
+      .leftJoin(quoteEngagement, eq(quoteEngagement.quoteId, quotes.id))
+      .where(and(isNull(quotes.archivedAt), trackedPeriodWhere(period, now))),
   ])
 
   const activityPage = pageBounds(Number(activityCountRows[0]?.total ?? 0), paging.activity)
@@ -142,6 +155,11 @@ export async function getTrackedQuoteOverview(paging: OverviewPaging, period: Tr
 
   return {
     asOf: now,
+    progress: QUOTE_PROGRESS_GROUPS.map(({ id }) => ({
+      id,
+      count: Number(progressRows[0]?.[id]?.count ?? 0),
+      totalValue: String(progressRows[0]?.[id]?.totalValue ?? '0'),
+    })),
     snapshot: {
       activeLinks: Number(snapshotRows[0]?.activeLinks ?? 0),
       totalValue: String(snapshotRows[0]?.totalValue ?? '0'),

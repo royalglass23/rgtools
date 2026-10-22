@@ -126,6 +126,38 @@ beforeEach(() => {
 describe('dashboard scope in Track Quotes', () => {
   afterEach(() => vi.useRealTimers())
 
+  it('keeps the three-day boundary exclusive for recently unopened quotes', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-23T12:00:00Z'))
+    await listQuotes({ ...filters, activity: 'unopened_under_3_days' })
+    expect(JSON.stringify(whereCalls[0])).toContain('2026-10-20T12:00:00.000Z')
+    const scope = (whereCalls[0] as { conditions: unknown[] }).conditions[1]
+    expect(scope).toEqual(expect.objectContaining({ type: 'and', conditions: expect.arrayContaining([
+      { type: 'isNull', column: 'outcome' },
+      expect.objectContaining({ type: 'and', conditions: expect.arrayContaining([
+        { type: 'gt', column: 'created_at', value: new Date('2026-10-20T12:00:00Z') },
+      ]) }),
+    ]) }))
+  })
+
+  it.each([['opened_once', 'eq', 1], ['opened_multiple', 'gte', 2]] as const)('uses the matching open count for %s', async (activity, type, value) => {
+    await listQuotes({ ...filters, activity })
+    const scope = (whereCalls[0] as { conditions: unknown[] }).conditions[1]
+    expect(scope).toEqual(expect.objectContaining({ type: 'and', conditions: expect.arrayContaining([
+      { type: 'isNull', column: 'outcome' },
+      { type, column: 'total_opens', value },
+    ]) }))
+  })
+
+  it.each(['won', 'lost'] as const)('shows nonarchived %s outcomes even with expired links', async (outcome) => {
+    await listQuotes({ ...filters, outcome, linkStatus: 'all' })
+    expect(whereCalls[0]).toEqual(expect.objectContaining({ type: 'and', conditions: expect.arrayContaining([
+      { type: 'eq', column: 'outcome', value: outcome },
+      { type: 'isNull', column: 'archived_at' },
+    ]) }))
+    expect(JSON.stringify(whereCalls[0])).not.toContain('expires_at')
+  })
+
   it('combines the rolling creation period, unresolved outcome and unopened age boundary', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-10-23T12:00:00Z'))

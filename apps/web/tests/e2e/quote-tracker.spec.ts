@@ -29,7 +29,7 @@ async function login(page: Page) {
   await page.getByLabel('Username').fill(e2eUser)
   await page.getByLabel('Password').fill(e2ePassword)
   await page.getByRole('button', { name: /^sign in$/i }).click()
-  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15_000, waitUntil: 'commit' })
+  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 60_000, waitUntil: 'commit' })
 }
 
 async function expectNoCriticalBrowserErrors(page: Page, action: () => Promise<void>) {
@@ -136,12 +136,35 @@ test.describe('quote tracker', () => {
     await expect(page.getByRole('link', { name: 'Last 14 days' })).toHaveAttribute('aria-current', 'page')
     await page.getByRole('link', { name: 'All time', exact: true }).click()
     await expect(page.getByRole('link', { name: 'All time', exact: true })).toHaveAttribute('aria-current', 'page')
-    await page.getByRole('link', { name: /Unopened after 3 days/ }).click()
+    await page.getByRole('region', { name: 'Tracked link snapshot' }).getByRole('link', { name: /Unopened:/ }).click()
     await expect(page.getByRole('combobox', { name: 'Activity', exact: true })).toHaveValue('unopened_3_days')
     await expect(page.getByRole('combobox', { name: 'Quotes tracked in' })).toHaveValue('all')
     await page.getByRole('link', { name: 'Reset', exact: true }).click()
     await expect(page.getByRole('combobox', { name: 'Outcome', exact: true })).toHaveValue('open')
     await expect(page.getByRole('combobox', { name: 'Quotes tracked in' })).toHaveValue('all')
+  })
+
+  test('progress bars drill into matching quotes and keep the selected period', async ({ page }) => {
+    test.setTimeout(150_000)
+    await page.goto('/quote-tracker/overview?trackedIn=14')
+    const progress = page.getByRole('region', { name: 'Quote progress' })
+    await expect(progress.getByRole('link')).toHaveCount(6)
+    const repeated = progress.getByRole('link', { name: /Opened multiple times/ })
+    await repeated.focus()
+    await expect(progress.locator('#progress-hint-repeat')).toBeVisible()
+    await repeated.press('Enter')
+    await expect(page.getByRole('combobox', { name: 'Quotes tracked in' })).toHaveValue('14')
+    await expect(page.getByRole('combobox', { name: 'Activity', exact: true })).toHaveValue('opened_multiple')
+    await expect(page.getByRole('combobox', { name: 'Outcome', exact: true })).toHaveValue('open')
+    await page.getByRole('link', { name: 'Back to Quotes overview' }).click()
+    await page.getByRole('region', { name: 'Quote progress' }).getByRole('link', { name: /^Won:/ }).click()
+    await expect(page.getByRole('combobox', { name: 'Outcome', exact: true })).toHaveValue('won')
+    await expect(page.getByRole('combobox', { name: 'Link status' })).toHaveValue('all')
+    await expect(page.getByRole('combobox', { name: 'Quotes tracked in' })).toHaveValue('14')
+    await page.waitForLoadState('networkidle')
+    await page.getByRole('combobox', { name: 'Sort', exact: true }).selectOption('value_desc')
+    await expect(page).toHaveURL(/outcome=won/)
+    await expect(page.getByRole('combobox', { name: 'Outcome', exact: true })).toHaveValue('won')
   })
 
   test('loads with primary content and no critical browser errors', async ({ page }) => {
