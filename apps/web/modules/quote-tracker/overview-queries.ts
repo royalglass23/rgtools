@@ -51,6 +51,7 @@ export async function getTrackedQuoteOverview(now = new Date()) {
       quoteId: quotes.id,
       clientName: quotes.clientName,
       workOrderId: quotes.workOrderId,
+      jobAddress: quotes.jobAddress,
       eventType: quoteEvents.eventType,
       createdAt: quoteEvents.createdAt,
     })

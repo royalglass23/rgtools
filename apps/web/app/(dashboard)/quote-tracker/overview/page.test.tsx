@@ -30,15 +30,18 @@ describe('TrackedQuoteOverviewPage', () => {
     getTrackedQuoteOverview.mockResolvedValueOnce({
       asOf: new Date('2026-10-22T03:00:00Z'),
       snapshot: { activeLinks: 2, viewedLastSevenDays: 1, neverOpened: 1 },
-      activity: [{ id: 'event-1', quoteId: 'quote-1', clientName: 'Ada', workOrderId: 'Q100', eventType: 'open', createdAt: new Date('2026-10-22T02:00:00Z') }],
+      activity: [{ id: 'event-1', quoteId: 'quote-1', clientName: 'Ada', workOrderId: 'Q100', jobAddress: '12 Glass Street', eventType: 'open', createdAt: new Date('2026-10-22T02:00:00Z') }],
       attention: [{ id: 'quote-2', clientName: 'Lee', workOrderId: 'Q200', reasons: ['No opens yet'], lastOpenedAt: null }],
     })
 
     render(await TrackedQuoteOverviewPage())
 
     expect(screen.getByRole('heading', { name: 'Tracked quote activity' })).toBeInTheDocument()
+    const snapshot = screen.getByRole('region', { name: 'Tracked link snapshot' })
+    expect(snapshot.compareDocumentPosition(screen.getByRole('heading', { name: 'Recent activity' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(screen.getByText('Opened the quote')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Q100 · Ada/ })).toHaveAttribute('href', '/quote-tracker/quote-1')
+    expect(screen.getByText('12 Glass Street')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Q200 · Lee/ })).toHaveAttribute('href', '/quote-tracker/quote-2')
     expect(screen.getByText('No opens yet')).toBeInTheDocument()
     expect(screen.getByText('Each line is an event, not a unique viewer or a confirmed sale.')).toBeInTheDocument()
