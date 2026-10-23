@@ -1,4 +1,5 @@
 import { auth } from '@/lib/auth'
+import { PaginationBar } from '@/components/pagination/PaginationBar'
 import { requireModule } from '@/lib/guard'
 import { getJobProgressSnapshot, type JobProgressRow } from '@/modules/job-progress/registry'
 import { parseJobProgressDays, updatedWithinDays, type JobProgressDays } from '@/modules/job-progress/period'
@@ -155,22 +156,26 @@ export default async function JobProgressPage({
             </table>
           </div>
         )}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 p-4 text-xs text-slate-600">
-          <span>Page {currentPage} of {pageCount} · {filtered.length} matching jobs. {snapshot.unnumberedJobs} jobs lack a number; {snapshot.duplicateNumberJobs} share a duplicate number; {snapshot.missingCustomer} lack a customer; {snapshot.missingAddress} lack a site address; {snapshot.missingValue} lack a positive value.</span>
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex gap-3">{currentPage > 1 && <a className="font-semibold text-teal-800 underline" href={href(view, q, days, pageSize, currentPage - 1)}>Previous</a>}{currentPage < pageCount && <a className="font-semibold text-teal-800 underline" href={href(view, q, days, pageSize, currentPage + 1)}>Next</a>}</div>
-            <form action="/admin/job-progress" method="get" className="flex items-center gap-2">
+        <PaginationBar
+          count={`${filtered.length} ${filtered.length === 1 ? 'job' : 'jobs'}`}
+          page={currentPage}
+          pageCount={pageCount}
+          label="Job progress pages"
+          className="border-t border-slate-200 p-4"
+          previous={currentPage > 1 ? <a href={href(view, q, days, pageSize, currentPage - 1)}>Previous</a> : <span aria-disabled="true">Previous</span>}
+          next={currentPage < pageCount ? <a href={href(view, q, days, pageSize, currentPage + 1)}>Next</a> : <span aria-disabled="true">Next</span>}
+          pageSize={<form action="/admin/job-progress" method="get">
               {view !== 'all' && <input type="hidden" name="view" value={view} />}
               {q && <input type="hidden" name="q" value={q} />}
               {days !== 7 && <input type="hidden" name="days" value={days} />}
-              <label htmlFor="job-progress-size" className="font-semibold text-slate-700">Jobs per page</label>
+              <label htmlFor="job-progress-size">Page size</label>
               <select id="job-progress-size" name="size" defaultValue={String(pageSize)} className="min-h-9 rounded border border-slate-300 bg-white px-2 text-sm text-slate-900">
                 {PAGE_SIZES.map((size) => <option key={size} value={size}>{size}</option>)}
               </select>
               <button type="submit" className="min-h-9 rounded border border-slate-300 px-3 font-semibold text-slate-800">Apply</button>
-            </form>
-          </div>
-        </div>
+            </form>}
+        />
+        <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-600">{snapshot.unnumberedJobs} jobs lack a number; {snapshot.duplicateNumberJobs} share a duplicate number; {snapshot.missingCustomer} lack a customer; {snapshot.missingAddress} lack a site address; {snapshot.missingValue} lack a positive value.</p>
       </section>
     </div>
   )

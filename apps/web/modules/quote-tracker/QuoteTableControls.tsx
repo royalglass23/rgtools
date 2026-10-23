@@ -10,6 +10,7 @@ import type { QuoteListFilters } from "./list-filters";
 import { StatusBadge, formatCurrency, formatRelative } from "./presentation";
 import type { StatusTag } from "./score";
 import { TRACKED_PERIODS, trackedPeriodLabel } from "./quote-period";
+import { PaginationBar } from "@/components/pagination/PaginationBar";
 
 type QuoteRow = {
   id: string;
@@ -253,39 +254,31 @@ export function QuoteTableControls({
         </table>
       </div>
 
-      <div className="grid grid-cols-3 items-center gap-3 text-sm text-gray-600">
-        <span>{total} tracked quotes</span>
-        <div className="flex items-center justify-center gap-2">
-          <PageLink
+      <PaginationBar
+        count={`${total} tracked quotes`}
+        page={filters.page}
+        pageCount={pageCount}
+        label="Tracked quote pages"
+        previous={<PageLink
             filters={filters}
             page={Math.max(1, filters.page - 1)}
             disabled={filters.page <= 1}
             basePath={basePath}
             paramPrefix={paramPrefix}
-          >
-            Previous
-          </PageLink>
-          <span>
-            Page {filters.page} of {pageCount}
-          </span>
-          <PageLink
+          >Previous</PageLink>}
+        next={<PageLink
             filters={filters}
             page={Math.min(pageCount, filters.page + 1)}
             disabled={filters.page >= pageCount}
             basePath={basePath}
             paramPrefix={paramPrefix}
-          >
-            Next
-          </PageLink>
-        </div>
-        <div className="flex justify-end">
-          <PageSizeSelect
+          >Next</PageLink>}
+        pageSize={<PageSizeSelect
             filters={filters}
             basePath={basePath}
             paramPrefix={paramPrefix}
-          />
-        </div>
-      </div>
+          />}
+      />
     </>
   );
 }
@@ -530,11 +523,16 @@ function PageSizeSelect({
   }
 
   return (
+    <form onSubmit={(event) => {
+      event.preventDefault();
+      handleChange(String(new FormData(event.currentTarget).get("size")));
+    }}>
     <label className="flex items-center gap-2 text-sm text-gray-600">
       <span className="whitespace-nowrap">Page size</span>
       <select
-        value={String(filters.size)}
-        onChange={(e) => handleChange(e.target.value)}
+        key={filters.size}
+        name="size"
+        defaultValue={String(filters.size)}
         className="rounded border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-950"
       >
         {(["5", "10", "20", "50"] as const).map((n) => (
@@ -544,5 +542,7 @@ function PageSizeSelect({
         ))}
       </select>
     </label>
+    <button type="submit">Apply</button>
+    </form>
   );
 }

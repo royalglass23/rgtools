@@ -175,8 +175,8 @@ describe('WorkOrdersTableControls', () => {
     expect(within(pageSize).getAllByRole('option').map((option) => option.textContent)).toEqual(['5', '10', '20', '50'])
     expect(pageSize).toHaveValue('5')
     expect(pageSize.closest('form')?.querySelector('input[name="page"]')).toHaveValue('1')
-    expect(screen.getByText('Page 1 of 1').parentElement).toHaveClass('justify-center')
-    expect(pageSize.closest('div')).toHaveClass('justify-end')
+    expect(within(screen.getByRole('navigation', { name: 'Work order pages' })).getByText('Page 1 of 1')).toBeInTheDocument()
+    expect(pageSize.closest('form')).toHaveTextContent('Apply')
   })
 
   it('renders operational ownership from items without showing legacy parent values', () => {

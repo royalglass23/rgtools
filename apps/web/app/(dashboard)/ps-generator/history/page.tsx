@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { PaginationBar } from '@/components/pagination/PaginationBar'
 import { count, desc, ilike, inArray, or, type SQL } from 'drizzle-orm'
 
 import { db } from '@/lib/db'
@@ -119,24 +120,20 @@ export default async function PsGeneratorHistoryPage({ searchParams }: PsGenerat
         </div>
       </div>
 
-      <div className="grid gap-3 text-sm text-gray-600 sm:grid-cols-3 sm:items-center">
-        <span>{historyPage.total} records</span>
-        <div className="flex items-center justify-center gap-2">
-          <PaginationLink
+      <PaginationBar
+        count={`${historyPage.total} records`}
+        page={historyPage.page}
+        pageCount={historyPage.pageCount}
+        label="PS history pages"
+        previous={<PaginationLink
             href={buildHistoryHref({ search, page: historyPage.page - 1, pageSize })}
             disabled={historyPage.page <= 1}
-          >
-            Previous
-          </PaginationLink>
-          <span>Page {historyPage.page} of {historyPage.pageCount}</span>
-          <PaginationLink
+          >Previous</PaginationLink>}
+        next={<PaginationLink
             href={buildHistoryHref({ search, page: historyPage.page + 1, pageSize })}
             disabled={historyPage.page >= historyPage.pageCount}
-          >
-            Next
-          </PaginationLink>
-        </div>
-        <form action="/ps-generator/history" className="flex items-center justify-start gap-2 sm:justify-end">
+          >Next</PaginationLink>}
+        pageSize={<form action="/ps-generator/history">
           {search ? <input type="hidden" name="search" value={search} /> : null}
           <input type="hidden" name="page" value="1" />
           <label htmlFor="ps-history-page-size" className="flex items-center gap-2">
@@ -155,8 +152,8 @@ export default async function PsGeneratorHistoryPage({ searchParams }: PsGenerat
           <button type="submit" className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
             Apply
           </button>
-        </form>
-      </div>
+        </form>}
+      />
     </div>
   )
 }
