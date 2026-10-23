@@ -48,7 +48,6 @@ describe('buildDashboardNavigation', () => {
     ])
     expect(nav.adminItems).toEqual([
       { id: 'm5', slug: 'admin', name: 'Administration', href: '/admin/administration' },
-      { id: 'admin-job-progress', slug: 'admin/job-progress', name: 'Job Progress', href: '/admin/job-progress' },
       {
         id: 'm4',
         slug: 'admin/calculator-pricing',
@@ -94,10 +93,10 @@ describe('buildDashboardNavigation', () => {
     expect(nav.adminItems).not.toContainEqual(expect.objectContaining({ slug: 'admin/job-progress' }))
   })
 
-  it('keeps the Job Progress link admin-only even if an admin module is supplied', () => {
+  it('does not duplicate the Admin destination in its submenu', () => {
     const nav = buildDashboardNavigation([
       moduleRow('admin', 'admin', 'Administration', 99, true),
-    ], { isAdmin: false })
+    ], { isAdmin: true })
 
     expect(nav.adminItems).not.toContainEqual(expect.objectContaining({ slug: 'admin/job-progress' }))
   })
