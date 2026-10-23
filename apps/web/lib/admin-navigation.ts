@@ -151,8 +151,9 @@ const ADMIN_ROUTE_BY_SLUG: Record<string, string> = {
 const ADMIN_SORT_ORDER: Record<string, number> = {
   admin: 0,
   'admin/administration': 0,
-  'admin/calculator-pricing': 1,
-  'admin/dashboard-settings': 2,
+  'admin/job-progress': 1,
+  'admin/calculator-pricing': 2,
+  'admin/dashboard-settings': 3,
 }
 
 function adminItemKey(slug: string) {
@@ -317,6 +318,15 @@ export function buildDashboardNavigation(modules: DashboardModule[], options: { 
         href,
       })
     }
+  }
+
+  if (options.isAdmin && adminItemsByKey.has('admin')) {
+    adminItemsByKey.set('admin/job-progress', {
+      id: 'admin-job-progress',
+      slug: 'admin/job-progress',
+      name: 'Job Progress',
+      href: '/admin/job-progress',
+    })
   }
 
   const adminItems = Array.from(adminItemsByKey.values()).toSorted((a, b) => {
