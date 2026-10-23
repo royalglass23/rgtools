@@ -8,6 +8,8 @@ All notable changes to rgtools are recorded here, grouped by release.
 
 ### Added
 
+- **ServiceM8 quote outcomes** — status-change callbacks set tracked quotes to Won for Work Order/Completed, Lost for Unsuccessful, and pending for Quote. Current job status is verified through the read API before persistence; stale concurrent writes retry, and outcome changes are audited. Separate subscription registration and dry-run/apply reconciliation commands support activation and existing quotes.
+
 - **Quote progress** — clickable status bars for unopened under three days, unopened three days or older, opened once, opened multiple times, Won and Lost. Each opens matching Track Quotes entries with the selected period retained. Compact dashboard cards use abbreviated values (`$633k+`, `$1.6m+`) with exact amounts on hover/focus, shorter labels and a single desktop row of secondary metrics.
 
 - **Quotes dashboard scope** — shared Quotes tracked in selector (7/14/30 days or All time, default 30), clickable value/status/engagement cards with matching Track Quotes filters, and return navigation preserving the period. Needs attention delays unopened quotes for three full days and excludes won/lost quotes. Dashboard cards and lists use active, unresolved links in the selected creation period.

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { handleServiceM8QuoteStatusWebhook } from '@/modules/quote-tracker/servicem8-status-webhook'
 import {
   handleServiceM8JobWebhook,
   isServiceM8JobWebhookAuthorized,
@@ -16,7 +17,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Payload too large' }, { status: 413 })
   }
 
-  const result = await handleServiceM8JobWebhook({
+  const handle = body.value.type === 'job.status_changed' ? handleServiceM8QuoteStatusWebhook : handleServiceM8JobWebhook
+  const result = await handle({
     url: request.url,
     headers: request.headers,
     body: body.value,
@@ -40,7 +42,7 @@ async function readWebhookBody(request: Request) {
     const body: unknown = contentType.includes('application/x-www-form-urlencoded')
       ? Object.fromEntries([...new URLSearchParams(text)].map(([key, value]) => [key, parseFormValue(value)]))
       : JSON.parse(text)
-    return { tooLarge: false as const, value: body && typeof body === 'object' ? body : {} }
+    return { tooLarge: false as const, value: body && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : {} }
   } catch {
     return { tooLarge: false as const, value: {} }
   }

@@ -6,6 +6,8 @@ vi.mock('next/server', async (importOriginal) => {
 })
 
 const handleServiceM8JobWebhookMock = vi.hoisted(() => vi.fn())
+const statusWebhook = vi.hoisted(() => vi.fn())
+vi.mock('@/modules/quote-tracker/servicem8-status-webhook', () => ({ handleServiceM8QuoteStatusWebhook: statusWebhook }))
 const isServiceM8JobWebhookAuthorizedMock = vi.hoisted(() => vi.fn(() => true))
 
 vi.mock('@/modules/leads/servicem8-job-webhook', () => ({
@@ -16,6 +18,17 @@ vi.mock('@/modules/leads/servicem8-job-webhook', () => ({
 import { POST } from '../route'
 
 describe('POST /api/servicem8/job', () => {
+  it('routes status changes to quote outcomes without reconciling calculator leads', async () => {
+    statusWebhook.mockResolvedValueOnce({ status: 200, body: { ok: true, processed: 1 } })
+    const before = handleServiceM8JobWebhookMock.mock.calls.length
+    const response = await POST(new Request('https://rgtools.example/api/servicem8/job?token=secret', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ type: 'job.status_changed', data: { uuid: '01a11890-73f9-7dbb-a2ab-35ed36ed866b' } }),
+    }))
+    expect(response.status).toBe(200)
+    expect(statusWebhook).toHaveBeenCalledOnce()
+    expect(handleServiceM8JobWebhookMock.mock.calls.length).toBe(before)
+  })
   it('rejects an unauthorized callback before reading its body', async () => {
     isServiceM8JobWebhookAuthorizedMock.mockReturnValueOnce(false)
     const json = vi.fn(() => {
