@@ -113,17 +113,21 @@ export default async function JobProgressPage({
 
       <section aria-labelledby="register-title" className="rounded border border-slate-200 bg-white">
         <div className="flex flex-col items-start gap-3 border-b border-slate-200 p-4">
-          <div>
-            <h2 id="register-title" className="text-lg font-semibold text-slate-950">Job register</h2>
-            <p className="text-xs text-slate-600">As at {new Date(snapshot.asOf).toLocaleString('en-NZ', { timeZone: 'Pacific/Auckland' })} NZ time · {filtered.length} matching jobs of {snapshot.rows.length} returned · one row per ServiceM8 job</p>
+          <h2 id="register-title" className="text-lg font-semibold text-slate-950">Job register</h2>
+          <div className="flex w-full flex-wrap items-end justify-between gap-3">
+            <form className="flex flex-wrap items-end gap-2" action="/admin/job-progress" method="get">
+              {view !== 'all' && <input type="hidden" name="view" value={view} />}
+              {days !== 7 && <input type="hidden" name="days" value={days} />}
+              {pageSize !== DEFAULT_PAGE_SIZE && <input type="hidden" name="size" value={pageSize} />}
+              <div><label htmlFor="job-progress-search" className="mb-1 block text-xs font-semibold text-slate-700">Find a job</label><input id="job-progress-search" name="q" type="search" defaultValue={q} placeholder="Number, customer or site" className="min-h-11 w-60 max-w-full rounded border border-slate-300 px-3 text-sm" /></div>
+              <button type="submit" className="min-h-11 rounded bg-slate-900 px-4 text-sm font-semibold text-white">Search</button>
+            </form>
+            <div className="w-full text-left text-xs leading-5 text-slate-600 sm:w-auto sm:text-right">
+              <p>As at {new Date(snapshot.asOf).toLocaleString('en-NZ', { timeZone: 'Pacific/Auckland' })} NZ time</p>
+              <p>{filtered.length} matching jobs of {snapshot.rows.length} returned</p>
+              <p>One row per ServiceM8 job</p>
+            </div>
           </div>
-          <form className="flex flex-wrap items-end gap-2" action="/admin/job-progress" method="get">
-            {view !== 'all' && <input type="hidden" name="view" value={view} />}
-            {days !== 7 && <input type="hidden" name="days" value={days} />}
-            {pageSize !== DEFAULT_PAGE_SIZE && <input type="hidden" name="size" value={pageSize} />}
-            <div><label htmlFor="job-progress-search" className="mb-1 block text-xs font-semibold text-slate-700">Find a job</label><input id="job-progress-search" name="q" type="search" defaultValue={q} placeholder="Number, customer or site" className="min-h-11 w-60 max-w-full rounded border border-slate-300 px-3 text-sm" /></div>
-            <button type="submit" className="min-h-11 rounded bg-slate-900 px-4 text-sm font-semibold text-white">Search</button>
-          </form>
         </div>
         <nav aria-label="Update period" className="flex flex-wrap items-center gap-2 border-b border-slate-200 p-4 text-sm font-semibold">
           <span className="mr-1 text-slate-600">Updated within</span>
