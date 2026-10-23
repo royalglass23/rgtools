@@ -48,6 +48,7 @@ describe('buildDashboardNavigation', () => {
     ])
     expect(nav.adminItems).toEqual([
       { id: 'm5', slug: 'admin', name: 'Administration', href: '/admin/administration' },
+      { id: 'admin-job-progress', slug: 'admin/job-progress', name: 'Job Progress', href: '/admin/job-progress' },
       {
         id: 'm4',
         slug: 'admin/calculator-pricing',
@@ -90,6 +91,7 @@ describe('buildDashboardNavigation', () => {
       { id: 'lead-intake-list', slug: 'leads', name: 'List', href: '/leads' },
       { id: 'lead-intake-guide', slug: 'lead-intake/guide', name: 'Guide', href: '/lead-intake/guide' },
     ])
+    expect(nav.adminItems).not.toContainEqual(expect.objectContaining({ slug: 'admin/job-progress' }))
   })
 
   it('groups Quote Tracker and Clients with their staff-facing guide links', () => {
