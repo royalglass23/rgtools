@@ -21,6 +21,8 @@
     "quote:create": "tsx scripts/create-tracked-quote-test.ts",
     "servicem8:webhook:register": "tsx scripts/register-servicem8-attachment-webhook.ts",
     "servicem8:job-webhook:register": "tsx scripts/register-servicem8-job-webhook.ts",
+    "servicem8:quote-status-webhook:register": "tsx scripts/register-servicem8-quote-status-webhook.ts",
+    "quotes:sync-outcomes": "tsx scripts/sync-quote-outcomes.ts",
     "clients:merge-cleanup": "tsx scripts/client-merge-cleanup.ts",
     "quotes:client-backfill": "tsx scripts/quote-client-link-backfill.ts",
     "work-orders:retention-cleanup": "tsx scripts/cleanup-work-order-retention.ts"

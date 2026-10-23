@@ -113,6 +113,41 @@ non-2xx response when ServiceM8 lookup or calculator reconciliation fails so Ser
 Registration, deployment, and credential rotation are operational actions; running tests or builds
 does not perform them.
 
+### Quote outcome status sync
+
+The same authenticated `/api/servicem8/job` callback handles a separate `job.status_changed`
+subscription. It reads the current Job using `SERVICEM8_API_KEY`, verifies its UUID, and updates
+only an already tracked quote. Work Order and Completed map to Won, Unsuccessful to Lost, and
+Quote clears the outcome. Unknown statuses and failed lookups retain existing outcomes.
+The provider's event subscription API requires a response within 10 seconds:
+[ServiceM8 event webhooks](https://developer.servicem8.com/reference/post_event_webhook_subscription).
+Status lookups use a four-second timeout and one attempt; failed deliveries return 503 for retry.
+
+After deploying the route with the existing job webhook URL and secret configured, explicitly
+register the status subscription (the calculator `job.created` subscription is separate):
+
+```text
+pnpm --dir apps/web servicem8:quote-status-webhook:register
+```
+
+For quotes tracked before activation, reconcile their current job statuses. The command defaults
+to **dry-run** and uses the configured `DATABASE_URL` and read-only ServiceM8 key. It processes all
+retained quotes, including expired/archived records; dashboard archive exclusions still apply.
+It prints aggregate counts and failed quote IDs, not customer data. Verify the target environment
+and review the dry-run result before explicitly applying:
+
+```text
+pnpm --dir apps/web quotes:sync-outcomes
+pnpm --dir apps/web quotes:sync-outcomes --apply
+```
+
+Only RG Tools outcomes and audit records are written; no ServiceM8 job card is modified.
+The PostgreSQL timestamp text is retained at full precision for optimistic concurrency. A
+conflicting update fails the callback so a fresh delivery reads current provider status again.
+Outcome and audit updates commit together. Repeated unchanged outcomes advance the concurrency
+version without duplicating the outcome audit. The existing creation-period filter is unaffected.
+Do not register subscriptions or run `--apply` against production without target-specific approval.
+
 ## Prepare the database
 
 Run migrations from the repository root:
