@@ -126,7 +126,6 @@ describe("DashboardShell", () => {
           href: "/admin/job-progress",
           items: [
             { id: "administration", name: "Administration", href: "/admin/administration" },
-            { id: "admin-job-progress", name: "Job Progress", href: "/admin/job-progress" },
           ],
         }]}
         user={{ role: "admin" }}
@@ -138,7 +137,8 @@ describe("DashboardShell", () => {
 
     expect(screen.getByRole("link", { name: "Admin" })).toHaveAttribute("href", "/admin/job-progress");
     await user.click(screen.getByRole("button", { name: "Expand Admin submenu" }));
-    expect(screen.getByRole("link", { name: "Job Progress" })).toHaveAttribute("href", "/admin/job-progress");
+    expect(screen.getByRole("link", { name: "Administration" })).toHaveAttribute("href", "/admin/administration");
+    expect(screen.queryByRole("link", { name: "Job Progress" })).not.toBeInTheDocument();
   });
 
   it("opens the Quotes dashboard from its label while retaining an independent submenu toggle", async () => {

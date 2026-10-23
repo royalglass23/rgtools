@@ -8,9 +8,9 @@ All notable changes to rgtools are recorded here, grouped by release.
 
 ### Added
 
-- **Admin navigation** — clicking Admin opens Job Progress; a separate arrow expands Administration and settings.
+- **Admin navigation** — clicking Admin opens Job Progress; a separate arrow expands Administration and settings without repeating Job Progress in the submenu.
 
-- **Job Progress period views** — admins can open the register from the Admin submenu and view jobs updated within 7, 14, or 30 days (default 7), or choose All dates to retain access to older and undated jobs. Periods use the ServiceM8 job record edit date, not Diary activity.
+- **Job Progress period views** — admins can open the register from Admin and view jobs updated within 7, 14, or 30 days (default 7), or choose All dates to retain access to older and undated jobs. Periods use the ServiceM8 job record edit date, not Diary activity.
 
 - **Track Quotes layout** — removed duplicate summary cards from the management page and placed Search first in the filter and keyboard order. Summary cards remain on the Quotes overview.
 
