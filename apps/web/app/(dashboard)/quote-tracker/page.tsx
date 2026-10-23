@@ -3,20 +3,14 @@ import Link from "next/link";
 import { listQuotes } from "@/modules/quote-tracker/queries";
 import { parseQuoteListFilters } from "@/modules/quote-tracker/list-filters";
 import { QuoteTableControls } from "@/modules/quote-tracker/QuoteTableControls";
-import {
-  StatusBadge,
-  formatCurrency,
-} from "@/modules/quote-tracker/presentation";
+import { StatusBadge } from "@/modules/quote-tracker/presentation";
 import {
   STATUS_TAG_RULES,
   type StatusTag,
 } from "@/modules/quote-tracker/score";
 import { TrackQuoteButton } from "@/modules/quote-tracker/TrackQuoteButton";
 import { createTrackedQuoteAction } from "@/modules/quote-tracker/actions";
-import {
-  KpiCard as PrecisionKpiCard,
-  PageHeader,
-} from "@/components/precision-ui/PrecisionUI";
+import { PageHeader } from "@/components/precision-ui/PrecisionUI";
 
 export default async function QuoteTrackerPage({
   searchParams,
@@ -25,7 +19,7 @@ export default async function QuoteTrackerPage({
 }) {
   await requireModule("quote-tracker");
   const filters = parseQuoteListFilters(await searchParams);
-  const { rows, total, pageCount, kpis } = await listQuotes(filters);
+  const { rows, total, pageCount } = await listQuotes(filters);
 
   return (
     <div className="space-y-5">
@@ -38,37 +32,6 @@ export default async function QuoteTrackerPage({
       <Link href={`/quote-tracker/overview?trackedIn=${filters.trackedIn}`} className="inline-block text-sm font-semibold underline underline-offset-4">
         Back to Quotes overview
       </Link>
-
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-7">
-        <div className="min-w-0 sm:col-span-2 lg:col-span-1 2xl:col-span-2">
-          <KpiCard
-            label="Total value"
-            value={formatCurrency(kpis.totalValue)}
-            tone="green"
-          />
-        </div>
-        <KpiCard label="Hot quotes" value={String(kpis.hotCount)} tone="red" />
-        <KpiCard
-          label="Warm quotes"
-          value={String(kpis.warmCount)}
-          tone="amber"
-        />
-        <KpiCard
-          label="Cold quotes"
-          value={String(kpis.coldCount)}
-          tone="blue"
-        />
-        <KpiCard
-          label="Dead quotes"
-          value={String(kpis.deadCount)}
-          tone="gray"
-        />
-        <KpiCard
-          label="Forwarding flags"
-          value={String(kpis.forwardingCount)}
-          tone="amber"
-        />
-      </div>
 
       <QuoteTableControls
         filters={filters}
@@ -100,26 +63,3 @@ export default async function QuoteTrackerPage({
     </div>
   );
 }
-
-function KpiCard({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone: "blue" | "red" | "green" | "slate" | "amber" | "gray";
-}) {
-  return (
-    <PrecisionKpiCard label={label} value={value} marker={toneMarker[tone]} />
-  );
-}
-
-const toneMarker = {
-  blue: "C",
-  red: "H",
-  green: "$",
-  slate: "S",
-  amber: "W",
-  gray: "D",
-} as const;

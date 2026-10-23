@@ -31,6 +31,8 @@ Use **Quotes tracked in** to select the last **7**, **14**, or **30 days**, or *
 
 The cards show total quote value, active links, Hot/Warm/Cold counts, unopened quotes older than three days, possible forwarding, and distinct quotes viewed. Select a card to open **Track Quotes** with the same period, active link status, outcome exclusions, and the card's specific filter. The list shows these filters and preserves them when sorting or paging. **Back to Quotes overview** returns with the same period. Entering Track Quotes directly retains its broader All time / All outcomes defaults.
 
+**Track Quotes** focuses on managing entries: Search is the first filter, followed by the tracked period and outcome. Summary cards live on the Quotes overview rather than being repeated above this table.
+
 Total value uses compact lower-bound amounts, such as **$633k+** and **$1.6m+**; hover or focus it for the exact amount. The **Unopened** card still means no opens after three full days. **Forwarded** means suspected forwarding from tracking signals, not confirmed forwarding. The six secondary cards share one row on wide screens and wrap on smaller screens.
 
 **Quote progress** appears below the cards. Its bars show unopened under three days, unopened three days or older, opened once, opened multiple times, Won and Lost. Each quote appears once. Open counts are lifetime engagement for the quotes created in the selected period. Open quotes must have an active link; confirmed Won/Lost outcomes remain included even if the link expires. Archived quotes are excluded from every bar. Hover or focus a bar to see its total value and context. Select it to open matching **Track Quotes** entries with the same period and status filters. Recorded opens do not confirm a sale.

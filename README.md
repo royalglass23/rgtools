@@ -35,6 +35,8 @@ flow.
 | **PS Generator** | Generates PS1 and PS3 Producer Statement packages from published configuration and templates. |
 | **Admin** | Manages users, module grants, pricing, tracking, dashboard tables, Work Order configuration, and audit/error exports. |
 
+Track Quotes opens directly to its management table with Search first; summary cards remain on the Quotes overview.
+
 Calculator enquiries with email and phone matches on different provisional clients are retained as separate leads with a visible contact-review reason. Customer estimate email and ServiceM8 handling continue after the lead is saved.
 
 ### Workflow boundaries

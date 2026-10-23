@@ -338,19 +338,6 @@ function FilterBar({
         value={String(filters.size)}
       />
       <input type="hidden" name={`${paramPrefix}page`} value="1" />
-      <Select
-        name={`${paramPrefix}trackedIn`}
-        label="Quotes tracked in"
-        value={filters.trackedIn}
-        options={TRACKED_PERIODS.map((period) => [period, trackedPeriodLabel(period)])}
-      />
-      <Select
-        name={`${paramPrefix}outcome`}
-        label="Outcome"
-        value={filters.outcome}
-        options={[["all", "All outcomes"], ["open", "Exclude won and lost"], ["won", "Won"], ["lost", "Lost"]]}
-      />
-
       <label className="block sm:col-span-2">
         <span className="text-xs font-medium text-gray-600">Search</span>
         <div className="mt-1 flex gap-2">
@@ -368,6 +355,18 @@ function FilterBar({
           </button>
         </div>
       </label>
+      <Select
+        name={`${paramPrefix}trackedIn`}
+        label="Quotes tracked in"
+        value={filters.trackedIn}
+        options={TRACKED_PERIODS.map((period) => [period, trackedPeriodLabel(period)])}
+      />
+      <Select
+        name={`${paramPrefix}outcome`}
+        label="Outcome"
+        value={filters.outcome}
+        options={[["all", "All outcomes"], ["open", "Exclude won and lost"], ["won", "Won"], ["lost", "Lost"]]}
+      />
       <Select
         name={`${paramPrefix}status`}
         label="Status"
