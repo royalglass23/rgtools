@@ -9,6 +9,7 @@ import { saveTablePrefs } from './table-prefs-actions'
 import { DEFAULT_LEADS_PREFS, type TablePrefs } from './table-prefs-shared'
 import { formatAnswerKey, formatProjectType } from '../lead-intake/display-labels'
 import { StatusBadge, TableShell } from '@/components/precision-ui/PrecisionUI'
+import { PaginationBar } from '@/components/pagination/PaginationBar'
 
 type LeadRow = {
   id: string
@@ -206,17 +207,15 @@ export function LeadsTableControls({
         />
       )}
 
-      <div className="grid grid-cols-3 items-center gap-3 text-sm text-text-secondary max-sm:grid-cols-1">
-        <span>{total} leads</span>
-        <div className="flex items-center justify-center gap-2">
-          <PageLink filters={filters} page={Math.max(1, filters.page - 1)} disabled={filters.page <= 1} basePath={basePath} paramPrefix={paramPrefix}>Previous</PageLink>
-          <span>Page {filters.page} of {pageCount}</span>
-          <PageLink filters={filters} page={Math.min(pageCount, filters.page + 1)} disabled={filters.page >= pageCount} basePath={basePath} paramPrefix={paramPrefix}>Next</PageLink>
-        </div>
-        <div className="flex justify-end">
-          <PageSizeSelect filters={filters} basePath={basePath} paramPrefix={paramPrefix} />
-        </div>
-      </div>
+      <PaginationBar
+        count={`${total} leads`}
+        page={filters.page}
+        pageCount={pageCount}
+        label="Lead pages"
+        previous={<PageLink filters={filters} page={Math.max(1, filters.page - 1)} disabled={filters.page <= 1} basePath={basePath} paramPrefix={paramPrefix}>Previous</PageLink>}
+        next={<PageLink filters={filters} page={Math.min(pageCount, filters.page + 1)} disabled={filters.page >= pageCount} basePath={basePath} paramPrefix={paramPrefix}>Next</PageLink>}
+        pageSize={<PageSizeSelect filters={filters} basePath={basePath} paramPrefix={paramPrefix} />}
+      />
     </>
   )
 }
@@ -478,16 +477,23 @@ function PageSizeSelect({ filters, basePath, paramPrefix }: { filters: LeadsList
   }
 
   return (
+    <form onSubmit={(event) => {
+      event.preventDefault()
+      handleChange(String(new FormData(event.currentTarget).get('size')))
+    }}>
     <label className="flex items-center gap-2 text-sm text-text-secondary">
       <span className="whitespace-nowrap">Page size</span>
       <select
-        value={String(filters.size)}
-        onChange={(e) => handleChange(e.target.value)}
+        key={filters.size}
+        name="size"
+        defaultValue={String(filters.size)}
         className="rounded-[var(--radius-control)] border border-border bg-surface px-2 py-1.5 text-sm text-text-primary"
       >
         {(['5', '10', '20', '50', '100'] as const).map((n) => <option key={n} value={n}>{n}</option>)}
       </select>
     </label>
+    <button type="submit">Apply</button>
+    </form>
   )
 }
 

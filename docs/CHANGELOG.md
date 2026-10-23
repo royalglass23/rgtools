@@ -8,6 +8,8 @@ All notable changes to rgtools are recorded here, grouped by release.
 
 ### Added
 
+- **Consistent list pagination** — Clients, Leads, Track Quotes, Work Orders, Job Progress, PS History, Quotes overview lists, viewer analytics, and Admin logs now place the item count left, page navigation center, and Page size with Apply right. Existing list defaults and filters remain in place.
+
 - **Job Progress register controls** — default to 5 jobs per page with 10, 20, and 50 options; replace the no-booking view with upcoming bookings sorted earliest first; remove the coverage notice above the metrics.
 
 - **Admin navigation** — clicking Admin opens Job Progress; a separate arrow expands Administration and settings without repeating Job Progress in the submenu.

@@ -49,8 +49,8 @@ describe('admin job progress page', () => {
     expect(screen.queryByText('Customer D')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: '7 days' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('link', { name: '14 days' })).toHaveAttribute('href', '/admin/job-progress?days=14')
-    expect(screen.getByRole('combobox', { name: 'Jobs per page' })).toHaveValue('5')
-    expect(within(screen.getByRole('combobox', { name: 'Jobs per page' })).getAllByRole('option').map((option) => option.textContent)).toEqual(['5', '10', '20', '50'])
+    expect(screen.getByRole('combobox', { name: 'Page size' })).toHaveValue('5')
+    expect(within(screen.getByRole('combobox', { name: 'Page size' })).getAllByRole('option').map((option) => option.textContent)).toEqual(['5', '10', '20', '50'])
     expect(screen.queryByText(/Coverage limit:/)).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Upcoming bookings' })).toHaveAttribute('href', '/admin/job-progress?view=upcoming')
     expect(screen.getByText('No Upcoming Booking')).toBeInTheDocument()
@@ -65,7 +65,7 @@ describe('admin job progress page', () => {
     expect(screen.getByRole('link', { name: '14 days' })).toHaveAttribute('href', '/admin/job-progress?view=review&q=Customer+C&days=14&size=20')
     expect(screen.getByRole('searchbox', { name: 'Find a job' })).toHaveValue('Customer C')
     expect(screen.getByRole('searchbox', { name: 'Find a job' }).closest('form')).toHaveFormValues({ view: 'review', days: '30', size: '20', q: 'Customer C' })
-    expect(screen.getByRole('combobox', { name: 'Jobs per page' }).closest('form')).toHaveFormValues({ view: 'review', days: '30', size: '20', q: 'Customer C' })
+    expect(screen.getByRole('combobox', { name: 'Page size' }).closest('form')).toHaveFormValues({ view: 'review', days: '30', size: '20', q: 'Customer C' })
   })
 
   it('keeps the complete returned inventory reachable with All dates', async () => {
@@ -100,7 +100,7 @@ describe('admin job progress page', () => {
 
     secondPage.unmount()
     render(await JobProgressPage({ searchParams: Promise.resolve({ view: 'upcoming', size: '10' }) }))
-    expect(screen.getByRole('combobox', { name: 'Jobs per page' })).toHaveValue('10')
+    expect(screen.getByRole('combobox', { name: 'Page size' })).toHaveValue('10')
     expect(screen.getByText('Customer 0')).toBeInTheDocument()
     expect(screen.getByText(/Page 1 of 1/)).toBeInTheDocument()
   })

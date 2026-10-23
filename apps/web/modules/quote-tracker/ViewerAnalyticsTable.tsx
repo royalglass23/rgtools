@@ -1,6 +1,7 @@
 'use client'
 
 import { Fragment, useState } from 'react'
+import { PaginationBar } from '@/components/pagination/PaginationBar'
 
 import { PageTimeModal } from './PageTimeModal'
 import { formatDateTime, formatDuration, maskIp } from './presentation'
@@ -37,8 +38,7 @@ export function ViewerAnalyticsTable(props: Props) {
           pageSize={pageSize}
           page={currentPage}
           pageCount={pageCount}
-          rangeStart={start + 1}
-          rangeEnd={Math.min(end, total)}
+          itemLabel={props.gated ? 'email groups' : 'devices'}
           onPageSize={(size) => {
             setPageSize(size)
             setPage(1)
@@ -58,8 +58,7 @@ function PaginationControls({
   pageSize,
   page,
   pageCount,
-  rangeStart,
-  rangeEnd,
+  itemLabel,
   onPageSize,
   onPrev,
   onNext,
@@ -68,53 +67,31 @@ function PaginationControls({
   pageSize: number
   page: number
   pageCount: number
-  rangeStart: number
-  rangeEnd: number
+  itemLabel: string
   onPageSize: (size: number) => void
   onPrev: () => void
   onNext: () => void
 }) {
+  const [draftSize, setDraftSize] = useState(pageSize)
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-gray-600">
-      <label className="flex items-center gap-2">
-        <span>Rows per page</span>
-        <select
-          aria-label="Rows per page"
-          value={pageSize}
-          onChange={(event) => onPageSize(Number(event.target.value))}
-          className="rounded border border-gray-300 bg-white px-2 py-1 text-sm text-gray-950"
-        >
-          {PAGE_SIZE_OPTIONS.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
+    <PaginationBar
+      count={`${total} ${itemLabel}`}
+      page={page}
+      pageCount={pageCount}
+      label="Viewer analytics pages"
+      previous={<button type="button" onClick={onPrev} disabled={page <= 1}>Previous</button>}
+      next={<button type="button" onClick={onNext} disabled={page >= pageCount}>Next</button>}
+      pageSize={<form onSubmit={(event) => {
+        event.preventDefault()
+        onPageSize(draftSize)
+      }}>
+        <label htmlFor="viewer-page-size">Page size</label>
+        <select id="viewer-page-size" value={draftSize} onChange={(event) => setDraftSize(Number(event.target.value))}>
+          {PAGE_SIZE_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
         </select>
-      </label>
-      <div className="flex items-center gap-3">
-        <span>
-          {rangeStart}–{rangeEnd} of {total}
-        </span>
-        <div className="flex gap-1">
-          <button
-            type="button"
-            onClick={onPrev}
-            disabled={page <= 1}
-            className="rounded border border-gray-300 px-3 py-1 font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-          >
-            Prev
-          </button>
-          <button
-            type="button"
-            onClick={onNext}
-            disabled={page >= pageCount}
-            className="rounded border border-gray-300 px-3 py-1 font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-          >
-            Next
-          </button>
-        </div>
-      </div>
-    </div>
+        <button type="submit">Apply</button>
+      </form>}
+    />
   )
 }
 

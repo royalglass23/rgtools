@@ -102,9 +102,11 @@ describe('TrackedQuoteOverviewPage', () => {
     expect(within(activityPages).getByRole('link', { name: 'Next' })).toHaveAttribute('href', '/quote-tracker/overview?activityPage=2&activitySize=5&attentionPage=1&attentionSize=5&trackedIn=30')
     const attentionPages = screen.getByRole('navigation', { name: 'Needs attention pages' })
     expect(within(attentionPages).getByRole('link', { name: 'Next' })).toHaveAttribute('href', '/quote-tracker/overview?activityPage=1&activitySize=5&attentionPage=2&attentionSize=5&trackedIn=30')
-    expect(screen.getByRole('combobox', { name: 'Recent activity rows per page' })).toHaveValue('5')
-    expect(screen.getByRole('combobox', { name: 'Needs attention rows per page' })).toHaveValue('5')
-    expect(within(screen.getByRole('combobox', { name: 'Recent activity rows per page' })).getAllByRole('option').map((option) => option.textContent)).toEqual(['5', '10', '20', '50'])
+    const activitySize = within(activityHeading.closest('details')!).getByRole('combobox', { name: 'Page size' })
+    const attentionSize = within(attentionHeading.closest('details')!).getByRole('combobox', { name: 'Page size' })
+    expect(activitySize).toHaveValue('5')
+    expect(attentionSize).toHaveValue('5')
+    expect(within(activitySize).getAllByRole('option').map((option) => option.textContent)).toEqual(['5', '10', '20', '50'])
   })
 
   it('shows prominent section summaries and lets each list collapse independently', async () => {
@@ -139,7 +141,7 @@ describe('TrackedQuoteOverviewPage', () => {
       activity: { page: 2, size: 10 }, attention: { page: 3, size: 20 },
     }, '14')
     expect(within(screen.getByRole('navigation', { name: 'Recent activity pages' })).getByRole('link', { name: 'Previous' })).toHaveAttribute('href', '/quote-tracker/overview?activityPage=1&activitySize=10&attentionPage=3&attentionSize=20&trackedIn=14')
-    const activityForm = screen.getByRole('combobox', { name: 'Recent activity rows per page' }).closest('form')
+    const activityForm = within(screen.getByRole('heading', { name: 'Recent activity' }).closest('details')!).getByRole('combobox', { name: 'Page size' }).closest('form')
     expect(activityForm?.querySelector('input[name="attentionPage"]')).toHaveValue('3')
     expect(activityForm?.querySelector('input[name="attentionSize"]')).toHaveValue('20')
     expect(activityForm?.querySelector('input[name="activityPage"]')).toHaveValue('1')

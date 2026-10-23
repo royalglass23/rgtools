@@ -5,6 +5,7 @@ import { users, modules, userModuleAccess, auditLog, errorLog } from '@rgtools/d
 import { and, count, desc, eq, gte, isNull, like, lte, or } from 'drizzle-orm'
 import { deriveAuditEntityType, formatAuditDetail } from '@/lib/audit'
 import Link from 'next/link'
+import { PaginationBar } from '@/components/pagination/PaginationBar'
 import { CreateUserForm } from '@/modules/admin/CreateUserForm'
 import { TestErrorButton } from '@/modules/admin/TestErrorButton'
 import { UserRow } from '@/modules/admin/UserRow'
@@ -112,30 +113,25 @@ function Pagination({
   searchParams: Record<string, string | string[] | undefined>
 }) {
   const totalPages = Math.max(1, Math.ceil(totalRows / pageSize))
+  const itemLabel = pageParam === 'errorPage' ? 'errors' : 'audit entries'
 
   return (
-    <div className="relative flex flex-wrap items-center justify-center gap-3 border-t border-gray-100 px-4 py-3 text-sm">
-      <div className="flex items-center justify-center gap-2">
-        <Link
+    <PaginationBar
+      count={`${totalRows} ${itemLabel}`}
+      page={currentPage}
+      pageCount={totalPages}
+      label={`${itemLabel} pages`}
+      className="border-t border-gray-100 px-4 py-3"
+      previous={currentPage > 1 ? <Link
           href={buildHref(searchParams, { [pageParam]: String(Math.max(1, currentPage - 1)) })}
-          className={`border border-gray-200 rounded px-3 py-1 ${currentPage <= 1 ? 'pointer-events-none text-gray-300' : 'text-gray-600 hover:bg-gray-50'}`}
-        >
-          Previous
-        </Link>
-        <span className="text-gray-500 text-xs">
-          Page {currentPage} of {totalPages}
-        </span>
-        <Link
+        >Previous</Link> : <span aria-disabled="true">Previous</span>}
+      next={currentPage < totalPages ? <Link
           href={buildHref(searchParams, { [pageParam]: String(Math.min(totalPages, currentPage + 1)) })}
-          className={`border border-gray-200 rounded px-3 py-1 ${currentPage >= totalPages ? 'pointer-events-none text-gray-300' : 'text-gray-600 hover:bg-gray-50'}`}
-        >
-          Next
-        </Link>
-      </div>
-      <form action="/admin/administration" className="flex items-center gap-2 md:absolute md:right-4">
+        >Next</Link> : <span aria-disabled="true">Next</span>}
+      pageSize={<form action="/admin/administration">
         <HiddenSearchInputs params={searchParams} exclude={[pageParam, sizeParam]} />
         <input type="hidden" name={pageParam} value="1" />
-        <label className="text-xs text-gray-400" htmlFor={`${sizeParam}-select`}>Per page</label>
+        <label htmlFor={`${sizeParam}-select`}>Page size</label>
         <select
           id={`${sizeParam}-select`}
           name={sizeParam}
@@ -152,8 +148,8 @@ function Pagination({
         >
           Apply
         </button>
-      </form>
-    </div>
+      </form>}
+    />
   )
 }
 

@@ -1,11 +1,13 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { LeadsListFilters } from '../queries'
 import type { TablePrefs } from '../table-prefs-shared'
 import { LeadsTableControls } from '../LeadsTableControls'
 
+const pushMock = vi.hoisted(() => vi.fn())
+
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: pushMock }),
   useSearchParams: () => new URLSearchParams(),
 }))
 
@@ -70,6 +72,19 @@ const rows = [{
 }]
 
 describe('LeadsTableControls', () => {
+  it('applies the selected page size only after Apply', () => {
+    pushMock.mockClear()
+    render(<LeadsTableControls filters={filters} rows={rows} total={12} pageCount={2} isAdmin={false} prefs={prefs} />)
+
+    const select = screen.getByRole('combobox', { name: 'Page size' })
+    expect(screen.getByRole('navigation', { name: 'Lead pages' })).toHaveTextContent('Page 1 of 2')
+    fireEvent.change(select, { target: { value: '20' } })
+    expect(pushMock).not.toHaveBeenCalled()
+    fireEvent.click(select.closest('form')!.querySelector('button')!)
+    expect(pushMock).toHaveBeenCalledWith(expect.stringContaining('size=20'))
+    expect(pushMock).toHaveBeenCalledWith(expect.stringContaining('page=1'))
+  })
+
   it('renders visible columns in preference order and hides hidden columns', () => {
     render(
       <LeadsTableControls

@@ -55,20 +55,23 @@ describe('ViewerAnalyticsTable (non-gated)', () => {
     render(<ViewerAnalyticsTable gated={false} devices={devices} />)
 
     expect(screen.getAllByRole('button', { name: /view per-page breakdown/i })).toHaveLength(5)
-    expect(screen.getByText('1–5 of 7')).toBeTruthy()
+    expect(screen.getByText('7 devices')).toBeTruthy()
+    expect(screen.getByText('Page 1 of 2')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: /next/i }))
     expect(screen.getAllByRole('button', { name: /view per-page breakdown/i })).toHaveLength(2)
-    expect(screen.getByText('6–7 of 7')).toBeTruthy()
+    expect(screen.getByText('Page 2 of 2')).toBeTruthy()
   })
 
   it('changes rows per page', () => {
     const devices = Array.from({ length: 7 }, (_, i) => device({ sessionId: `s${i}`, ip: `203.0.113.${i}` }))
     render(<ViewerAnalyticsTable gated={false} devices={devices} />)
 
-    fireEvent.change(screen.getByRole('combobox', { name: /rows per page/i }), { target: { value: '10' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Page size' }), { target: { value: '10' } })
+    expect(screen.getAllByRole('button', { name: /view per-page breakdown/i })).toHaveLength(5)
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
     expect(screen.getAllByRole('button', { name: /view per-page breakdown/i })).toHaveLength(7)
-    expect(screen.getByText('1–7 of 7')).toBeTruthy()
+    expect(screen.getByText('Page 1 of 1')).toBeTruthy()
   })
 })
 

@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { PageHeader, FeedbackState } from '@/components/precision-ui/PrecisionUI'
+import { PaginationBar } from '@/components/pagination/PaginationBar'
 import { requireModule } from '@/lib/guard'
 import { getTrackedQuoteOverview } from '@/modules/quote-tracker/overview-queries'
 import { OVERVIEW_PAGE_SIZES, parseOverviewPaging, type EngagementPreview, type OverviewPaging, type OverviewPageSize } from '@/modules/quote-tracker/overview'
@@ -41,25 +42,26 @@ function overviewHref(paging: OverviewPaging, kind: ListKind, page: number, peri
 function ListPagination({ kind, label, page, paging, period }: { kind: ListKind; label: string; page: ListPage; paging: OverviewPaging; period: TrackedPeriod }) {
   const otherKind = kind === 'activity' ? 'attention' : 'activity'
   return (
-    <div className={styles.pagination}>
-      <span className={styles.pageTotal}>{page.total} {kind === 'activity' ? 'events' : 'quotes'}</span>
-      <nav aria-label={`${label} pages`} className={styles.pageLinks}>
-        {page.page > 1 ? <Link href={overviewHref(paging, kind, page.page - 1, period)}>Previous</Link> : <span aria-disabled="true">Previous</span>}
-        <span>Page {page.page} of {page.pageCount}</span>
-        {page.page < page.pageCount ? <Link href={overviewHref(paging, kind, page.page + 1, period)}>Next</Link> : <span aria-disabled="true">Next</span>}
-      </nav>
-      <form action="/quote-tracker/overview" method="get" className={styles.pageSizeForm}>
+    <PaginationBar
+      count={`${page.total} ${kind === 'activity' ? 'events' : 'quotes'}`}
+      page={page.page}
+      pageCount={page.pageCount}
+      label={`${label} pages`}
+      className={styles.pagination}
+      previous={page.page > 1 ? <Link href={overviewHref(paging, kind, page.page - 1, period)}>Previous</Link> : <span aria-disabled="true">Previous</span>}
+      next={page.page < page.pageCount ? <Link href={overviewHref(paging, kind, page.page + 1, period)}>Next</Link> : <span aria-disabled="true">Next</span>}
+      pageSize={<form action="/quote-tracker/overview" method="get">
         <input type="hidden" name="trackedIn" value={period} />
         <input type="hidden" name={`${kind}Page`} value="1" />
         <input type="hidden" name={`${otherKind}Page`} value={paging[otherKind].page} />
         <input type="hidden" name={`${otherKind}Size`} value={paging[otherKind].size} />
-        <label htmlFor={`${kind}-page-size`}>{label} rows per page</label>
+        <label htmlFor={`${kind}-page-size`}>Page size</label>
         <select id={`${kind}-page-size`} name={`${kind}Size`} defaultValue={page.size}>
           {OVERVIEW_PAGE_SIZES.map((size) => <option key={size} value={size}>{size}</option>)}
         </select>
         <button type="submit">Apply</button>
-      </form>
-    </div>
+      </form>}
+    />
   )
 }
 

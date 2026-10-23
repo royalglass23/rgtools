@@ -129,6 +129,7 @@ test.describe('quote tracker', () => {
     await expect(page.getByRole('combobox', { name: 'Quotes tracked in' })).toHaveValue('14')
     await expect(page).toHaveURL(/outcome=open/)
     await page.getByRole('combobox', { name: 'Page size' }).selectOption('10')
+    await page.getByRole('combobox', { name: 'Page size' }).locator('xpath=ancestor::form').getByRole('button', { name: 'Apply' }).click()
     await expect(page).toHaveURL(/size=10/)
     await expect(page.getByRole('combobox', { name: 'Page size' })).toHaveValue('10')
     await expect(page.getByRole('combobox', { name: 'Quotes tracked in' })).toHaveValue('14')
@@ -231,6 +232,7 @@ test.describe('quote tracker', () => {
     await page.waitForLoadState('networkidle')
 
     await page.getByLabel('Page size').selectOption('10')
+    await page.getByLabel('Page size').locator('xpath=ancestor::form').getByRole('button', { name: 'Apply' }).click()
     await expect(page).toHaveURL(/size=10/)
     await expect(page.getByRole('table')).toBeVisible()
   })

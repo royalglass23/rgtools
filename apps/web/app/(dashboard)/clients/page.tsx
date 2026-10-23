@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { PaginationBar } from '@/components/pagination/PaginationBar'
 import {
   CLIENT_LIST_PAGE_SIZE_OPTIONS,
   DEFAULT_CLIENT_LIST_PAGE_SIZE,
@@ -132,10 +133,12 @@ export default async function ClientsPage({ searchParams }: ClientsPageProps) {
         </table>
       </div>
 
-      <div className="grid gap-3 text-sm text-gray-600 sm:grid-cols-3 sm:items-center">
-        <span>{clientPage.total} clients</span>
-        <div className="flex items-center justify-center gap-2">
-          <PaginationLink
+      <PaginationBar
+        count={`${clientPage.total} clients`}
+        page={clientPage.page}
+        pageCount={clientPage.pageCount}
+        label="Client pages"
+        previous={<PaginationLink
             href={buildClientsHref({
               search,
               cleanupFilter,
@@ -143,11 +146,8 @@ export default async function ClientsPage({ searchParams }: ClientsPageProps) {
               pageSize: clientPage.pageSize,
             })}
             disabled={clientPage.page <= 1}
-          >
-            Previous
-          </PaginationLink>
-          <span>Page {clientPage.page} of {clientPage.pageCount}</span>
-          <PaginationLink
+          >Previous</PaginationLink>}
+        next={<PaginationLink
             href={buildClientsHref({
               search,
               cleanupFilter,
@@ -155,11 +155,8 @@ export default async function ClientsPage({ searchParams }: ClientsPageProps) {
               pageSize: clientPage.pageSize,
             })}
             disabled={clientPage.page >= clientPage.pageCount}
-          >
-            Next
-          </PaginationLink>
-        </div>
-        <form action="/clients" className="flex items-center justify-start gap-2 sm:justify-end">
+          >Next</PaginationLink>}
+        pageSize={<form action="/clients">
           {search && <input type="hidden" name="search" value={search} />}
           {cleanupFilter !== 'all' && <input type="hidden" name="filter" value={cleanupFilter} />}
           <input type="hidden" name="page" value="1" />
@@ -179,8 +176,8 @@ export default async function ClientsPage({ searchParams }: ClientsPageProps) {
           <button type="submit" className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
             Apply
           </button>
-        </form>
-      </div>
+        </form>}
+      />
     </div>
   )
 }

@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { PaginationBar } from '@/components/pagination/PaginationBar'
 import { useSearchParams } from 'next/navigation'
 import { useMemo, useState } from 'react'
 import { batchDeleteWorkOrdersAction } from './actions'
@@ -128,17 +129,15 @@ export function WorkOrdersTableControls({
         onToggleAllVisible={toggleAllVisible}
       />
 
-      <div className="grid grid-cols-1 items-center gap-3 text-sm text-gray-600 md:grid-cols-3">
-        <span>{total} work orders</span>
-        <div className="flex items-center justify-center gap-2">
-          <PageLink filters={filters} page={Math.max(1, filters.page - 1)} disabled={filters.page <= 1} basePath={basePath} paramPrefix={paramPrefix}>Previous</PageLink>
-          <span>Page {filters.page} of {pageCount}</span>
-          <PageLink filters={filters} page={Math.min(pageCount, filters.page + 1)} disabled={filters.page >= pageCount} basePath={basePath} paramPrefix={paramPrefix}>Next</PageLink>
-        </div>
-        <div className="flex justify-end">
-          <PageSizeSelect filters={filters} basePath={basePath} paramPrefix={paramPrefix} />
-        </div>
-      </div>
+      <PaginationBar
+        count={`${total} work orders`}
+        page={filters.page}
+        pageCount={pageCount}
+        label="Work order pages"
+        previous={<PageLink filters={filters} page={Math.max(1, filters.page - 1)} disabled={filters.page <= 1} basePath={basePath} paramPrefix={paramPrefix}>Previous</PageLink>}
+        next={<PageLink filters={filters} page={Math.min(pageCount, filters.page + 1)} disabled={filters.page >= pageCount} basePath={basePath} paramPrefix={paramPrefix}>Next</PageLink>}
+        pageSize={<PageSizeSelect filters={filters} basePath={basePath} paramPrefix={paramPrefix} />}
+      />
     </>
   )
 }
@@ -499,12 +498,12 @@ function PageSizeSelect({ filters, basePath, paramPrefix }: { filters: WorkOrder
           aria-label="Page size"
           name={`${paramPrefix}size`}
           defaultValue={String(filters.size)}
-          onChange={(event) => event.currentTarget.form?.requestSubmit()}
           className="rounded border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-950"
         >
           {(['5', '10', '20', '50'] as const).map((n) => <option key={n} value={n}>{n}</option>)}
         </select>
       </label>
+      <button type="submit">Apply</button>
     </form>
   )
 }
