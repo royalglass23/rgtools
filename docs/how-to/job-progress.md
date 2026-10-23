@@ -1,6 +1,6 @@
 # Job Progress
 
-Admins can open **Job Progress** by expanding **Admin** in the sidebar and choosing **Job Progress**. The register shows one row for each job returned by the configured ServiceM8 connection. Search by job number, customer, or site address, and switch between all jobs in the period, review candidates, and jobs without an upcoming booking.
+Admins can open **Job Progress** by clicking **Admin** in the sidebar. The arrow beside Admin opens its submenu for Administration and other settings. The register shows one row for each job returned by the configured ServiceM8 connection. Search by job number, customer, or site address, and switch between all jobs in the period, review candidates, and jobs without an upcoming booking.
 
 The default period is **7 days**. Choose **14 days**, **30 days**, or **All dates** to change which jobs appear. The periods use the ServiceM8 job record's **Last Update** edit date, measured back from the time shown above the register. Jobs with no valid edit date appear under All dates. Search and view choices stay in place when you change periods.
 
