@@ -26,6 +26,7 @@ flow.
 | Area | What it does |
 | --- | --- |
 | **Dashboard** | Shows operational attention queues, next actions, business performance, and configurable live-data tables. |
+| **Job Progress** | Admin-only ServiceM8 job register with 7, 14, and 30 day job-edit views (default 7), next bookings, and an All dates option. Diary-based activity and follow-up are not verified. |
 | **Lead Intake** | Captures and scores enquiries, then synchronises eligible lead records with ServiceM8. |
 | **Leads** | Searches leads, shows tier and follow-up context, and links to ServiceM8 jobs. |
 | **Clients** | Maintains canonical RG Tools client records, linked context, and merge review. |

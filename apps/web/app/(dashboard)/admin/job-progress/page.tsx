@@ -1,6 +1,7 @@
 import { auth } from '@/lib/auth'
 import { requireModule } from '@/lib/guard'
 import { getJobProgressSnapshot, type JobProgressRow } from '@/modules/job-progress/registry'
+import { parseJobProgressDays, updatedWithinDays, type JobProgressDays } from '@/modules/job-progress/period'
 import { redirect } from 'next/navigation'
 
 export const dynamic = 'force-dynamic'
@@ -13,10 +14,11 @@ function param(value: string | string[] | undefined): string {
   return typeof value === 'string' ? value : ''
 }
 
-function href(view: View, q: string, page = 1): string {
+function href(view: View, q: string, days: JobProgressDays, page = 1): string {
   const query = new URLSearchParams()
   if (view !== 'all') query.set('view', view)
   if (q) query.set('q', q)
+  if (days !== 7) query.set('days', String(days))
   if (page > 1) query.set('page', String(page))
   const suffix = query.toString()
   return `/admin/job-progress${suffix ? `?${suffix}` : ''}`
@@ -53,6 +55,7 @@ export default async function JobProgressPage({
   const params = await searchParams
   const rawView = param(params.view)
   const view: View = rawView === 'review' || rawView === 'no-booking' ? rawView : 'all'
+  const days = parseJobProgressDays(param(params.days))
   const q = param(params.q).trim().slice(0, 100)
   const requestedPage = Number(param(params.page))
   const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1
@@ -70,10 +73,11 @@ export default async function JobProgressPage({
     )
   }
 
-  const reviewCount = snapshot.rows.filter((row) => row.reviewCandidate).length
-  const noBookingCount = snapshot.rows.filter((row) => !row.nextBooking).length
+  const periodRows = snapshot.rows.filter((row) => updatedWithinDays(row.lastUpdate, snapshot.asOf, days))
+  const reviewCount = periodRows.filter((row) => row.reviewCandidate).length
+  const noBookingCount = periodRows.filter((row) => !row.nextBooking).length
   const needle = q.toLocaleLowerCase('en-NZ')
-  const filtered = snapshot.rows.filter((row) => {
+  const filtered = periodRows.filter((row) => {
     if (view === 'review' && !row.reviewCandidate) return false
     if (view === 'no-booking' && row.nextBooking) return false
     return !needle || [row.jobNumber, row.customer, row.address, row.status]
@@ -96,7 +100,7 @@ export default async function JobProgressPage({
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <Metric value={snapshot.rows.length} label="Jobs returned" />
+        <Metric value={periodRows.length} label={days === 'all' ? 'Jobs returned' : `Jobs updated in ${days} days`} />
         <Metric value={reviewCount} label="Review candidates" />
         <Metric value={noBookingCount} label="No upcoming booking" />
       </div>
@@ -105,20 +109,29 @@ export default async function JobProgressPage({
         <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-200 p-4">
           <div>
             <h2 id="register-title" className="text-lg font-semibold text-slate-950">Job register</h2>
-            <p className="text-xs text-slate-600">As at {new Date(snapshot.asOf).toLocaleString('en-NZ', { timeZone: 'Pacific/Auckland' })} NZ time · {filtered.length} matching jobs · one row per ServiceM8 job</p>
+            <p className="text-xs text-slate-600">As at {new Date(snapshot.asOf).toLocaleString('en-NZ', { timeZone: 'Pacific/Auckland' })} NZ time · {filtered.length} matching jobs of {snapshot.rows.length} returned · one row per ServiceM8 job</p>
           </div>
           <form className="flex flex-wrap items-end gap-2" action="/admin/job-progress" method="get">
             {view !== 'all' && <input type="hidden" name="view" value={view} />}
+            {days !== 7 && <input type="hidden" name="days" value={days} />}
             <div><label htmlFor="job-progress-search" className="mb-1 block text-xs font-semibold text-slate-700">Find a job</label><input id="job-progress-search" name="q" type="search" defaultValue={q} placeholder="Number, customer or site" className="min-h-11 w-60 max-w-full rounded border border-slate-300 px-3 text-sm" /></div>
             <button type="submit" className="min-h-11 rounded bg-slate-900 px-4 text-sm font-semibold text-white">Search</button>
           </form>
         </div>
-        <nav aria-label="Job views" className="flex flex-wrap gap-2 border-b border-slate-200 p-4 text-sm font-semibold">
-          <ViewLink active={view === 'all'} href={href('all', q)}>All jobs</ViewLink>
-          <ViewLink active={view === 'review'} href={href('review', q)}>Review candidates</ViewLink>
-          <ViewLink active={view === 'no-booking'} href={href('no-booking', q)}>No upcoming booking</ViewLink>
+        <nav aria-label="Update period" className="flex flex-wrap items-center gap-2 border-b border-slate-200 p-4 text-sm font-semibold">
+          <span className="mr-1 text-slate-600">Updated within</span>
+          <ViewLink active={days === 7} href={href(view, q, 7)}>7 days</ViewLink>
+          <ViewLink active={days === 14} href={href(view, q, 14)}>14 days</ViewLink>
+          <ViewLink active={days === 30} href={href(view, q, 30)}>30 days</ViewLink>
+          <ViewLink active={days === 'all'} href={href(view, q, 'all')}>All dates</ViewLink>
+          <span className="w-full text-xs font-normal text-slate-600">Uses the job record edit date. Diary activity is not included.</span>
         </nav>
-        {rows.length === 0 ? <p className="p-6 text-sm text-slate-600">No jobs match this view. Clear the search or choose All jobs.</p> : (
+        <nav aria-label="Job views" className="flex flex-wrap gap-2 border-b border-slate-200 p-4 text-sm font-semibold">
+          <ViewLink active={view === 'all'} href={href('all', q, days)}>All jobs in period</ViewLink>
+          <ViewLink active={view === 'review'} href={href('review', q, days)}>Review candidates</ViewLink>
+          <ViewLink active={view === 'no-booking'} href={href('no-booking', q, days)}>No upcoming booking</ViewLink>
+        </nav>
+        {rows.length === 0 ? <p className="p-6 text-sm text-slate-600">No jobs match this view. Clear the search, choose All jobs in period, or select All dates.</p> : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1100px] table-fixed text-left text-sm">
               <thead className="bg-slate-100 text-xs uppercase tracking-wide text-slate-600"><tr>
@@ -138,7 +151,7 @@ export default async function JobProgressPage({
         )}
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 p-4 text-xs text-slate-600">
           <span>Page {currentPage} of {pageCount}. {snapshot.unnumberedJobs} jobs lack a number; {snapshot.duplicateNumberJobs} share a duplicate number; {snapshot.missingCustomer} lack a customer; {snapshot.missingAddress} lack a site address; {snapshot.missingValue} lack a positive value.</span>
-          <div className="flex gap-3">{currentPage > 1 && <a className="font-semibold text-teal-800 underline" href={href(view, q, currentPage - 1)}>Previous</a>}{currentPage < pageCount && <a className="font-semibold text-teal-800 underline" href={href(view, q, currentPage + 1)}>Next</a>}</div>
+          <div className="flex gap-3">{currentPage > 1 && <a className="font-semibold text-teal-800 underline" href={href(view, q, days, currentPage - 1)}>Previous</a>}{currentPage < pageCount && <a className="font-semibold text-teal-800 underline" href={href(view, q, days, currentPage + 1)}>Next</a>}</div>
         </div>
       </section>
     </div>

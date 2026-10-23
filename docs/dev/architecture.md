@@ -24,6 +24,9 @@ Worker commands are scoped to the individual Worker package.
 The authenticated web app groups business logic under `apps/web/modules`:
 
 - `dashboard` provides the operations overview, action queues, charts, and configurable tables.
+- `job-progress` reads ServiceM8 jobs and future bookings for an admin-only register. Its period
+  selector filters by job record edit date, while the next booking remains the earliest scheduled
+  future activity. It does not read complete Diary history or verify follow-up ownership.
 - `lead-intake` captures and scores enquiries and synchronises eligible records with ServiceM8.
 - `leads` provides lead search, details, ServiceM8 status, and follow-up context.
 - `clients` provides canonical RG Tools client records, links, and merge review.
