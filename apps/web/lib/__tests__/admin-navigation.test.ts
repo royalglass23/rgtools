@@ -94,6 +94,14 @@ describe('buildDashboardNavigation', () => {
     expect(nav.adminItems).not.toContainEqual(expect.objectContaining({ slug: 'admin/job-progress' }))
   })
 
+  it('keeps the Job Progress link admin-only even if an admin module is supplied', () => {
+    const nav = buildDashboardNavigation([
+      moduleRow('admin', 'admin', 'Administration', 99, true),
+    ], { isAdmin: false })
+
+    expect(nav.adminItems).not.toContainEqual(expect.objectContaining({ slug: 'admin/job-progress' }))
+  })
+
   it('groups Quote Tracker and Clients with their staff-facing guide links', () => {
     const nav = buildDashboardNavigation([
       moduleRow('clients', 'clients', 'Clients', 2),

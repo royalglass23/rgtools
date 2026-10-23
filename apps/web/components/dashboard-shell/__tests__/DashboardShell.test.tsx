@@ -115,6 +115,30 @@ describe("DashboardShell", () => {
     );
   });
 
+  it("shows Job Progress when an admin expands Admin", async () => {
+    const user = userEvent.setup();
+    render(
+      <DashboardShell
+        navigation={[...navigation, {
+          kind: "group",
+          id: "admin",
+          label: "Admin",
+          items: [
+            { id: "administration", name: "Administration", href: "/admin/administration" },
+            { id: "admin-job-progress", name: "Job Progress", href: "/admin/job-progress" },
+          ],
+        }]}
+        user={{ role: "admin" }}
+        signOutControl={<button type="button">Sign out</button>}
+      >
+        <h1>Dashboard content</h1>
+      </DashboardShell>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Admin" }));
+    expect(screen.getByRole("link", { name: "Job Progress" })).toHaveAttribute("href", "/admin/job-progress");
+  });
+
   it("opens the Quotes dashboard from its label while retaining an independent submenu toggle", async () => {
     const user = userEvent.setup();
     render(
