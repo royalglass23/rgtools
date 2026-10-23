@@ -7,18 +7,21 @@ import { redirect } from 'next/navigation'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
-type View = 'all' | 'review' | 'no-booking'
-const PAGE_SIZE = 50
+type View = 'all' | 'review' | 'upcoming'
+type PageSize = 5 | 10 | 20 | 50
+const DEFAULT_PAGE_SIZE: PageSize = 5
+const PAGE_SIZES: readonly PageSize[] = [5, 10, 20, 50]
 
 function param(value: string | string[] | undefined): string {
   return typeof value === 'string' ? value : ''
 }
 
-function href(view: View, q: string, days: JobProgressDays, page = 1): string {
+function href(view: View, q: string, days: JobProgressDays, pageSize: PageSize, page = 1): string {
   const query = new URLSearchParams()
   if (view !== 'all') query.set('view', view)
   if (q) query.set('q', q)
   if (days !== 7) query.set('days', String(days))
+  if (pageSize !== DEFAULT_PAGE_SIZE) query.set('size', String(pageSize))
   if (page > 1) query.set('page', String(page))
   const suffix = query.toString()
   return `/admin/job-progress${suffix ? `?${suffix}` : ''}`
@@ -54,9 +57,11 @@ export default async function JobProgressPage({
 
   const params = await searchParams
   const rawView = param(params.view)
-  const view: View = rawView === 'review' || rawView === 'no-booking' ? rawView : 'all'
+  const view: View = rawView === 'review' || rawView === 'upcoming' ? rawView : 'all'
   const days = parseJobProgressDays(param(params.days))
   const q = param(params.q).trim().slice(0, 100)
+  const requestedSize = Number(param(params.size))
+  const pageSize: PageSize = PAGE_SIZES.includes(requestedSize as PageSize) ? requestedSize as PageSize : DEFAULT_PAGE_SIZE
   const requestedPage = Number(param(params.page))
   const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1
 
@@ -75,17 +80,21 @@ export default async function JobProgressPage({
 
   const periodRows = snapshot.rows.filter((row) => updatedWithinDays(row.lastUpdate, snapshot.asOf, days))
   const reviewCount = periodRows.filter((row) => row.reviewCandidate).length
-  const noBookingCount = periodRows.filter((row) => !row.nextBooking).length
+  const upcomingCount = periodRows.filter((row) => row.nextBooking).length
   const needle = q.toLocaleLowerCase('en-NZ')
   const filtered = periodRows.filter((row) => {
     if (view === 'review' && !row.reviewCandidate) return false
-    if (view === 'no-booking' && row.nextBooking) return false
+    if (view === 'upcoming' && !row.nextBooking) return false
     return !needle || [row.jobNumber, row.customer, row.address, row.status]
       .some((value) => value?.toLocaleLowerCase('en-NZ').includes(needle))
   })
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  if (view === 'upcoming') {
+    filtered.sort((a, b) => a.nextBooking!.start.localeCompare(b.nextBooking!.start) ||
+      (a.jobNumber ?? '').localeCompare(b.jobNumber ?? '', 'en', { numeric: true }))
+  }
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize))
   const currentPage = Math.min(page, pageCount)
-  const rows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+  const rows = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize)
 
   return (
     <div className="space-y-5">
@@ -95,14 +104,10 @@ export default async function JobProgressPage({
         <p className="mt-1 text-sm text-slate-600">Jobs returned by the configured ServiceM8 connection, with recorded details and the next booking.</p>
       </header>
 
-      <div className="border-l-4 border-amber-500 bg-amber-50 px-4 py-3 text-sm text-amber-950" role="note">
-        <strong>Coverage limit:</strong> This register exhausts the configured connection’s job and future booking pages; account scope has not been reconciled against the supplied workbook. Last Update is the job record edit date, not a complete Diary read. Job Summary uses status and description; the actual next action and active follow-up are not verified. Review candidates are active Quote or Work Order jobs without a future booking, not a complete attention queue.
-      </div>
-
       <div className="grid gap-3 sm:grid-cols-3">
         <Metric value={periodRows.length} label={days === 'all' ? 'Jobs returned' : `Jobs updated in ${days} days`} />
         <Metric value={reviewCount} label="Review candidates" />
-        <Metric value={noBookingCount} label="No upcoming booking" />
+        <Metric value={upcomingCount} label="Upcoming bookings" />
       </div>
 
       <section aria-labelledby="register-title" className="rounded border border-slate-200 bg-white">
@@ -114,22 +119,23 @@ export default async function JobProgressPage({
           <form className="flex flex-wrap items-end gap-2" action="/admin/job-progress" method="get">
             {view !== 'all' && <input type="hidden" name="view" value={view} />}
             {days !== 7 && <input type="hidden" name="days" value={days} />}
+            {pageSize !== DEFAULT_PAGE_SIZE && <input type="hidden" name="size" value={pageSize} />}
             <div><label htmlFor="job-progress-search" className="mb-1 block text-xs font-semibold text-slate-700">Find a job</label><input id="job-progress-search" name="q" type="search" defaultValue={q} placeholder="Number, customer or site" className="min-h-11 w-60 max-w-full rounded border border-slate-300 px-3 text-sm" /></div>
             <button type="submit" className="min-h-11 rounded bg-slate-900 px-4 text-sm font-semibold text-white">Search</button>
           </form>
         </div>
         <nav aria-label="Update period" className="flex flex-wrap items-center gap-2 border-b border-slate-200 p-4 text-sm font-semibold">
           <span className="mr-1 text-slate-600">Updated within</span>
-          <ViewLink active={days === 7} href={href(view, q, 7)}>7 days</ViewLink>
-          <ViewLink active={days === 14} href={href(view, q, 14)}>14 days</ViewLink>
-          <ViewLink active={days === 30} href={href(view, q, 30)}>30 days</ViewLink>
-          <ViewLink active={days === 'all'} href={href(view, q, 'all')}>All dates</ViewLink>
+          <ViewLink active={days === 7} href={href(view, q, 7, pageSize)}>7 days</ViewLink>
+          <ViewLink active={days === 14} href={href(view, q, 14, pageSize)}>14 days</ViewLink>
+          <ViewLink active={days === 30} href={href(view, q, 30, pageSize)}>30 days</ViewLink>
+          <ViewLink active={days === 'all'} href={href(view, q, 'all', pageSize)}>All dates</ViewLink>
           <span className="w-full text-xs font-normal text-slate-600">Uses the job record edit date. Diary activity is not included.</span>
         </nav>
         <nav aria-label="Job views" className="flex flex-wrap gap-2 border-b border-slate-200 p-4 text-sm font-semibold">
-          <ViewLink active={view === 'all'} href={href('all', q, days)}>All jobs in period</ViewLink>
-          <ViewLink active={view === 'review'} href={href('review', q, days)}>Review candidates</ViewLink>
-          <ViewLink active={view === 'no-booking'} href={href('no-booking', q, days)}>No upcoming booking</ViewLink>
+          <ViewLink active={view === 'all'} href={href('all', q, days, pageSize)}>All jobs in period</ViewLink>
+          <ViewLink active={view === 'review'} href={href('review', q, days, pageSize)}>Review candidates</ViewLink>
+          <ViewLink active={view === 'upcoming'} href={href('upcoming', q, days, pageSize)}>Upcoming bookings</ViewLink>
         </nav>
         {rows.length === 0 ? <p className="p-6 text-sm text-slate-600">No jobs match this view. Clear the search, choose All jobs in period, or select All dates.</p> : (
           <div className="overflow-x-auto">
@@ -149,9 +155,21 @@ export default async function JobProgressPage({
             </table>
           </div>
         )}
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 p-4 text-xs text-slate-600">
-          <span>Page {currentPage} of {pageCount}. {snapshot.unnumberedJobs} jobs lack a number; {snapshot.duplicateNumberJobs} share a duplicate number; {snapshot.missingCustomer} lack a customer; {snapshot.missingAddress} lack a site address; {snapshot.missingValue} lack a positive value.</span>
-          <div className="flex gap-3">{currentPage > 1 && <a className="font-semibold text-teal-800 underline" href={href(view, q, days, currentPage - 1)}>Previous</a>}{currentPage < pageCount && <a className="font-semibold text-teal-800 underline" href={href(view, q, days, currentPage + 1)}>Next</a>}</div>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 p-4 text-xs text-slate-600">
+          <span>Page {currentPage} of {pageCount} · {filtered.length} matching jobs. {snapshot.unnumberedJobs} jobs lack a number; {snapshot.duplicateNumberJobs} share a duplicate number; {snapshot.missingCustomer} lack a customer; {snapshot.missingAddress} lack a site address; {snapshot.missingValue} lack a positive value.</span>
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex gap-3">{currentPage > 1 && <a className="font-semibold text-teal-800 underline" href={href(view, q, days, pageSize, currentPage - 1)}>Previous</a>}{currentPage < pageCount && <a className="font-semibold text-teal-800 underline" href={href(view, q, days, pageSize, currentPage + 1)}>Next</a>}</div>
+            <form action="/admin/job-progress" method="get" className="flex items-center gap-2">
+              {view !== 'all' && <input type="hidden" name="view" value={view} />}
+              {q && <input type="hidden" name="q" value={q} />}
+              {days !== 7 && <input type="hidden" name="days" value={days} />}
+              <label htmlFor="job-progress-size" className="font-semibold text-slate-700">Jobs per page</label>
+              <select id="job-progress-size" name="size" defaultValue={String(pageSize)} className="min-h-9 rounded border border-slate-300 bg-white px-2 text-sm text-slate-900">
+                {PAGE_SIZES.map((size) => <option key={size} value={size}>{size}</option>)}
+              </select>
+              <button type="submit" className="min-h-9 rounded border border-slate-300 px-3 font-semibold text-slate-800">Apply</button>
+            </form>
+          </div>
         </div>
       </section>
     </div>
