@@ -112,7 +112,7 @@ export default async function JobProgressPage({
       </div>
 
       <section aria-labelledby="register-title" className="rounded border border-slate-200 bg-white">
-        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-200 p-4">
+        <div className="flex flex-col items-start gap-3 border-b border-slate-200 p-4">
           <div>
             <h2 id="register-title" className="text-lg font-semibold text-slate-950">Job register</h2>
             <p className="text-xs text-slate-600">As at {new Date(snapshot.asOf).toLocaleString('en-NZ', { timeZone: 'Pacific/Auckland' })} NZ time · {filtered.length} matching jobs of {snapshot.rows.length} returned · one row per ServiceM8 job</p>
