@@ -115,7 +115,7 @@ describe("DashboardShell", () => {
     );
   });
 
-  it("shows Job Progress when an admin expands Admin", async () => {
+  it("opens Job Progress from Admin and keeps a separate submenu toggle", async () => {
     const user = userEvent.setup();
     render(
       <DashboardShell
@@ -123,6 +123,7 @@ describe("DashboardShell", () => {
           kind: "group",
           id: "admin",
           label: "Admin",
+          href: "/admin/job-progress",
           items: [
             { id: "administration", name: "Administration", href: "/admin/administration" },
             { id: "admin-job-progress", name: "Job Progress", href: "/admin/job-progress" },
@@ -135,7 +136,8 @@ describe("DashboardShell", () => {
       </DashboardShell>,
     );
 
-    await user.click(screen.getByRole("button", { name: "Admin" }));
+    expect(screen.getByRole("link", { name: "Admin" })).toHaveAttribute("href", "/admin/job-progress");
+    await user.click(screen.getByRole("button", { name: "Expand Admin submenu" }));
     expect(screen.getByRole("link", { name: "Job Progress" })).toHaveAttribute("href", "/admin/job-progress");
   });
 

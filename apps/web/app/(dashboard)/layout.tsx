@@ -47,7 +47,7 @@ export default async function DashboardLayout({
     ...navigationGroup("work-order", "Work Orders", workOrderItems),
     ...navigationGroup("clients", "Clients", clientsItems),
     ...navigationGroup("ps-generator", "PS Generator", psGeneratorItems),
-    ...navigationGroup("admin", "Admin", adminItems),
+    ...navigationGroup("admin", "Admin", adminItems, "/admin/job-progress"),
   ];
 
   return (
