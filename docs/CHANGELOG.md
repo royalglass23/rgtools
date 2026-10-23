@@ -8,6 +8,8 @@ All notable changes to rgtools are recorded here, grouped by release.
 
 ### Added
 
+- **Job Progress register controls** — default to 5 jobs per page with 10, 20, and 50 options; replace the no-booking view with upcoming bookings sorted earliest first; remove the coverage notice above the metrics.
+
 - **Admin navigation** — clicking Admin opens Job Progress; a separate arrow expands Administration and settings without repeating Job Progress in the submenu.
 
 - **Job Progress period views** — admins can open the register from Admin and view jobs updated within 7, 14, or 30 days (default 7), or choose All dates to retain access to older and undated jobs. Periods use the ServiceM8 job record edit date, not Diary activity.
