@@ -39,12 +39,6 @@ const mockDelete = vi.hoisted(() => vi.fn(() => ({ where: mockDeleteWhere })))
 // db.query.users.findFirst
 const mockFindFirstUsers = vi.hoisted(() => vi.fn())
 
-// db.query.modules.findFirst
-const mockFindFirstModules = vi.hoisted(() => vi.fn())
-
-// db.query.userModuleAccess.findFirst
-const mockFindFirstUserModuleAccess = vi.hoisted(() => vi.fn())
-
 /**
  * db.transaction(callback) — calls the callback with a tx object that shares
  * the same mock insert/update/delete so existing call assertions still work.
@@ -68,8 +62,6 @@ vi.mock('@/lib/db', () => ({
     transaction: mockTransaction,
     query: {
       users: { findFirst: mockFindFirstUsers },
-      modules: { findFirst: mockFindFirstModules },
-      userModuleAccess: { findFirst: mockFindFirstUserModuleAccess },
     },
   },
 }))
@@ -89,12 +81,11 @@ vi.mock('@/lib/auth', () => ({ auth: mockAuth }))
 
 // ── Import actions under test (after mocks are registered) ────────────────────
 
-import { users, userModuleAccess, auditLog } from '@rgtools/db/schema'
+import { users, auditLog } from '@rgtools/db/schema'
 import {
   createUser,
   updateUserRole,
   deleteUser,
-  setModuleAccess,
 } from '@/modules/admin/actions'
 
 // ── Fixtures ───────────────────────────────────────────────────────────────────
@@ -116,15 +107,6 @@ const adminTarget = {
 const protectedTarget = {
   id: 'protected-id', username: 'superadmin', role: 'admin' as const, isProtected: true,
   passwordHash: 'hash', createdAt: new Date(), updatedAt: new Date(),
-}
-
-const normalModule = {
-  id: 'module-id', slug: 'quotes', name: 'Quotes', adminOnly: false,
-  isActive: true, description: null, sortOrder: 0, createdAt: new Date(), updatedAt: new Date(),
-}
-const adminOnlyModule = {
-  id: 'mod-admin-id', slug: 'admin-panel', name: 'Admin Panel', adminOnly: true,
-  isActive: true, description: null, sortOrder: 1, createdAt: new Date(), updatedAt: new Date(),
 }
 
 // ── Mock setup helper ─────────────────────────────────────────────────────────
@@ -369,148 +351,5 @@ describe('deleteUser', () => {
 
     expect(mockDelete).not.toHaveBeenCalled()
     expect(mockInsert).not.toHaveBeenCalled()
-  })
-})
-
-// ── setModuleAccess ────────────────────────────────────────────────────────────
-
-describe('setModuleAccess', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    mockAuth.mockResolvedValue(adminSession)
-    buildInsertChain()
-    mockDelete.mockReturnValue({ where: mockDeleteWhere })
-    mockDeleteWhere.mockResolvedValue([])
-    mockFindFirstModules.mockResolvedValue(normalModule)
-    // Default: a grant row exists (for revoke tests)
-    mockFindFirstUserModuleAccess.mockResolvedValue({ userId: 'target-id', moduleId: 'module-id' })
-    // Reset transaction mock after clearAllMocks
-    mockTransaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => {
-      const tx = { insert: mockInsert, update: mockUpdate, delete: mockDelete }
-      return callback(tx)
-    })
-  })
-
-  it('grants access: inserts grant row AND writes ACCESS_GRANT audit', async () => {
-    mockFindFirstUsers
-      .mockResolvedValueOnce(adminActor)
-      .mockResolvedValueOnce(staffTarget)
-
-    const result = await setModuleAccess('target-id', 'module-id', true)
-
-    expect(result).toEqual({ success: true })
-
-    // grant insert happened
-    const grantCall = mockInsert.mock.calls.find((call) => call[0] === userModuleAccess)
-    expect(grantCall).toBeDefined()
-
-    // audit happened with access.grant
-    const auditCallIndex = mockInsert.mock.calls.findIndex((call) => call[0] === auditLog)
-    expect(auditCallIndex).toBeGreaterThanOrEqual(0)
-    const auditArg = mockInsertValues.mock.calls[auditCallIndex]?.[0]
-    expect(auditArg).toMatchObject({ action: 'access.grant' })
-  })
-
-  it('revokes access: deletes grant row AND writes ACCESS_REVOKE audit', async () => {
-    mockFindFirstUsers
-      .mockResolvedValueOnce(adminActor)
-      .mockResolvedValueOnce(staffTarget)
-
-    const result = await setModuleAccess('target-id', 'module-id', false)
-
-    expect(result).toEqual({ success: true })
-    expect(mockDelete).toHaveBeenCalledWith(userModuleAccess)
-
-    const auditCallIndex = mockInsert.mock.calls.findIndex((call) => call[0] === auditLog)
-    expect(auditCallIndex).toBeGreaterThanOrEqual(0)
-    const auditArg = mockInsertValues.mock.calls[auditCallIndex]?.[0]
-    expect(auditArg).toMatchObject({ action: 'access.revoke' })
-  })
-
-  it('revokes access: no-op when grant row does not exist', async () => {
-    mockFindFirstUsers
-      .mockResolvedValueOnce(adminActor)
-      .mockResolvedValueOnce(staffTarget)
-    mockFindFirstUserModuleAccess.mockResolvedValue(undefined)
-
-    const result = await setModuleAccess('target-id', 'module-id', false)
-
-    expect(result).toEqual({ success: true })
-    expect(mockDelete).not.toHaveBeenCalled()
-    expect(mockInsert).not.toHaveBeenCalledWith(auditLog)
-  })
-
-  it('blocked on adminOnly module → no mutation, no audit', async () => {
-    mockFindFirstUsers
-      .mockResolvedValueOnce(adminActor)
-      .mockResolvedValueOnce(staffTarget)
-    mockFindFirstModules.mockResolvedValue(adminOnlyModule)
-
-    const result = await setModuleAccess('target-id', 'mod-admin-id', true)
-
-    expect(result).toEqual({ error: expect.stringContaining('admin') })
-    expect(mockInsert).not.toHaveBeenCalledWith(userModuleAccess)
-    expect(mockInsert).not.toHaveBeenCalledWith(auditLog)
-    expect(mockDelete).not.toHaveBeenCalled()
-  })
-
-  it('blocked when module not found → returns error', async () => {
-    mockFindFirstUsers
-      .mockResolvedValueOnce(adminActor)
-      .mockResolvedValueOnce(staffTarget)
-    mockFindFirstModules.mockResolvedValue(undefined)
-
-    const result = await setModuleAccess('target-id', 'bad-module-id', true)
-
-    expect(result).toEqual({ error: expect.any(String) })
-    expect(mockInsert).not.toHaveBeenCalledWith(userModuleAccess)
-    expect(mockInsert).not.toHaveBeenCalledWith(auditLog)
-  })
-
-  it('blocked when target user not found → returns error', async () => {
-    mockFindFirstUsers
-      .mockResolvedValueOnce(adminActor)
-      .mockResolvedValueOnce(undefined)
-
-    const result = await setModuleAccess('unknown-id', 'module-id', true)
-
-    expect(result).toEqual({ error: expect.any(String) })
-    expect(mockInsert).not.toHaveBeenCalledWith(userModuleAccess)
-    expect(mockInsert).not.toHaveBeenCalledWith(auditLog)
-  })
-
-  it('blocked when session is not admin', async () => {
-    mockAuth.mockResolvedValue(staffSession)
-
-    await expect(setModuleAccess('target-id', 'module-id', true)).resolves.toEqual({ error: 'Forbidden' })
-
-    expect(mockInsert).not.toHaveBeenCalled()
-    expect(mockDelete).not.toHaveBeenCalled()
-  })
-
-  it('admin blocked from setModuleAccess on a protected user → returns error', async () => {
-    mockFindFirstUsers
-      .mockResolvedValueOnce(adminActor)
-      .mockResolvedValueOnce(protectedTarget)
-
-    const result = await setModuleAccess('protected-id', 'module-id', true)
-
-    expect(result).toEqual({ error: expect.stringContaining('protected') })
-    expect(mockInsert).not.toHaveBeenCalledWith(userModuleAccess)
-    expect(mockInsert).not.toHaveBeenCalledWith(auditLog)
-    expect(mockDelete).not.toHaveBeenCalled()
-  })
-
-  it('admin blocked from setModuleAccess on another admin → returns error', async () => {
-    mockFindFirstUsers
-      .mockResolvedValueOnce(adminActor)
-      .mockResolvedValueOnce(adminTarget)
-
-    const result = await setModuleAccess('target-id', 'module-id', true)
-
-    expect(result).toEqual({ error: expect.any(String) })
-    expect(mockInsert).not.toHaveBeenCalledWith(userModuleAccess)
-    expect(mockInsert).not.toHaveBeenCalledWith(auditLog)
-    expect(mockDelete).not.toHaveBeenCalled()
   })
 })

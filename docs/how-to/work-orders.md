@@ -18,7 +18,7 @@ proof that a job has disappeared.
 
 ## Manage operational details
 
-Users with Work Orders manage access can update RG-owned fields such as installer, stage, hardware
+Users whose role has Work Orders access can update RG-owned fields such as installer, stage, hardware
 status, install date, completion date, risk, importance, and internal notes. Changes are audited in
 the Work Order timeline.
 
@@ -41,5 +41,6 @@ make the AI result automatically authoritative.
 | Work Orders manage | Edit operational fields and allowed item labels |
 | Work Order configuration | Configure option lists, summary fields, and production-spec filters |
 
-Ask an administrator for the missing grant when a control is unavailable. Do not bypass the module
-permission boundary by editing ServiceM8 or the database directly.
+Ask an administrator to check Role Access when Work Orders is unavailable. Staff can manage Work
+Orders when the Work Orders role setting is enabled; configuration requires Admin. Do not bypass
+the permission boundary by editing ServiceM8 or the database directly.

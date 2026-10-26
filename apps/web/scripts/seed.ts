@@ -6,7 +6,7 @@ config({ path: '.env.local' })
 async function seed() {
   const bcrypt = await import('bcryptjs')
   const { db } = await import('../lib/db')
-  const { users, modules, userModuleAccess } = await import('@rgtools/db/schema')
+  const { users, modules } = await import('@rgtools/db/schema')
   const { eq } = await import('drizzle-orm')
 
   const username = 'rgadmin'
@@ -39,8 +39,8 @@ async function seed() {
     { slug: 'clients', name: 'Clients', adminOnly: false, sortOrder: 3, isActive: true },
     { slug: 'ps-generator', name: 'PS Generator', adminOnly: false, sortOrder: 4, isActive: true },
     { slug: 'ps-generator/history', name: 'PS History', adminOnly: false, sortOrder: 5, isActive: true },
-    { slug: 'ps-generator/configuration', name: 'PS Configuration', adminOnly: false, sortOrder: 6, isActive: true },
-    { slug: 'ps-generator/configuration/publish', name: 'PS Configuration Publisher', adminOnly: false, sortOrder: 7, isActive: true },
+    { slug: 'ps-generator/configuration', name: 'PS Configuration', adminOnly: true, sortOrder: 6, isActive: true },
+    { slug: 'ps-generator/configuration/publish', name: 'PS Configuration Publisher', adminOnly: true, sortOrder: 7, isActive: true },
     { slug: 'work-orders', name: 'Work Orders', adminOnly: false, sortOrder: 8, isActive: true },
     { slug: 'work-orders/manage', name: 'Work Orders Manage', adminOnly: false, sortOrder: 9, isActive: true },
     { slug: 'admin', name: 'Administration', adminOnly: true, sortOrder: 99, isActive: true },
@@ -62,40 +62,6 @@ async function seed() {
     } else {
       await db.insert(modules).values(moduleSeed)
       console.log(`Created module: ${moduleSeed.slug}`)
-    }
-  }
-
-  const staffDefaultModuleSlugs = [
-    ...PRODUCTION_ACCESS_MODULES.map((moduleRow) => moduleRow.slug),
-    'clients',
-    'ps-generator',
-    'ps-generator/history',
-    'dashboard',
-    'work-orders',
-  ]
-  const staffDefaultModules = await db
-    .select({ id: modules.id, slug: modules.slug })
-    .from(modules)
-    .where(eq(modules.adminOnly, false))
-  const staffDefaultModuleRows = staffDefaultModules.filter((moduleRow) => staffDefaultModuleSlugs.includes(moduleRow.slug))
-
-  if (staffDefaultModuleRows.length > 0) {
-    const staffUsers = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.role, 'staff'))
-
-    for (const staffUser of staffUsers) {
-      for (const moduleRow of staffDefaultModuleRows) {
-        await db
-          .insert(userModuleAccess)
-          .values({
-            userId: staffUser.id,
-            moduleId: moduleRow.id,
-            grantedBy: null,
-          })
-          .onConflictDoNothing()
-      }
     }
   }
 

@@ -68,9 +68,9 @@ Your choice is saved in this browser. It does not change another browser or devi
 | Role | Access |
 |------|--------|
 | **Admin** | All active tools, including configuration and user management |
-| **Staff** | Tools granted by an admin |
+| **Staff** | Tools enabled for the Staff role in Admin → Administration → Role Access |
 
-If you try to access a tool you have not been granted, rgtools redirects you back to the dashboard with an access-denied message.
+If you try to access a tool disabled for your role, rgtools redirects you back to the dashboard with an access-denied message.
 
 ## Common tools
 

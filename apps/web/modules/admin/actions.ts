@@ -2,11 +2,11 @@
 
 import bcrypt from 'bcryptjs'
 import { revalidatePath } from 'next/cache'
-import { and, eq, inArray } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { type Session } from 'next-auth'
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { users, modules, userModuleAccess, settings } from '@rgtools/db/schema'
+import { users, settings } from '@rgtools/db/schema'
 import { assertCanManageUser } from '@/lib/access'
 import type { AccessUser } from '@/lib/access'
 import { AUDIT_ACTIONS } from '@/lib/audit'
@@ -14,7 +14,6 @@ import { logAudit } from '@/lib/audit-db'
 import { logError } from '@/lib/logger'
 import {
   DEFAULT_MENU_AVAILABILITY,
-  MENU_DEFINITIONS,
   MENU_AVAILABILITY_SETTING_KEY,
   MENU_KEYS,
   serializeMenuAvailability,
@@ -286,93 +285,6 @@ export async function deleteUser(
   }
 }
 
-// ── setModuleAccess ───────────────────────────────────────────────────────────
-
-/**
- * Grant or revoke a module access for a user.
- * Refuses to alter adminOnly modules (those are role-driven, not granted).
- */
-export async function setModuleAccess(
-  userId: string,
-  moduleId: string,
-  grant: boolean,
-): Promise<{ success: true } | { error: string }> {
-  let actorId: string | null = null
-
-  try {
-    const { session, actor } = await getActorOrThrow()
-    actorId = session.user.id as string
-
-    const targetRow = await db.query.users.findFirst({ where: eq(users.id, userId) })
-    if (!targetRow) return { error: 'User not found' }
-
-    const target: AccessUser = {
-      id: targetRow.id,
-      username: targetRow.username,
-      role: targetRow.role,
-      isProtected: targetRow.isProtected,
-    }
-
-    assertCanManageUser(actor, target)
-
-    const moduleRow = await db.query.modules.findFirst({ where: eq(modules.id, moduleId) })
-    if (!moduleRow) return { error: 'Module not found' }
-
-    if (moduleRow.adminOnly) {
-      return { error: 'Cannot alter access for admin-only modules — access is role-driven' }
-    }
-
-    if (grant) {
-      await db.transaction(async (tx) => {
-        await tx
-          .insert(userModuleAccess)
-          .values({ userId, moduleId, grantedBy: session.user.id as string })
-          .onConflictDoNothing()
-
-        await logAudit({
-          actorId: session.user.id as string,
-          entityType: 'access',
-          action: AUDIT_ACTIONS.ACCESS_GRANT,
-          targetId: userId,
-          before: null,
-          after: { username: targetRow.username, moduleSlug: moduleRow.slug },
-        }, tx)
-      })
-    } else {
-      const existingGrant = await db.query.userModuleAccess.findFirst({
-        where: and(eq(userModuleAccess.userId, userId), eq(userModuleAccess.moduleId, moduleId)),
-      })
-
-      if (!existingGrant) return { success: true }
-
-      await db.transaction(async (tx) => {
-        await tx
-          .delete(userModuleAccess)
-          .where(and(eq(userModuleAccess.userId, userId), eq(userModuleAccess.moduleId, moduleId)))
-
-        await logAudit({
-          actorId: session.user.id as string,
-          entityType: 'access',
-          action: AUDIT_ACTIONS.ACCESS_REVOKE,
-          targetId: userId,
-          before: { username: targetRow.username, moduleSlug: moduleRow.slug },
-          after: null,
-        }, tx)
-      })
-    }
-
-    return { success: true }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    if (msg.includes('Forbidden')) return { error: msg }
-    const errorId = await logError('admin.setModuleAccess', err, {
-      userId: actorId,
-      metadata: { targetUserId: userId, moduleId, grant },
-    })
-    return { error: `Failed to update access. Please try again. Ref: ${errorId}` }
-  }
-}
-
 export async function updateMenuAvailability(
   formData: FormData,
 ): Promise<{ success: true } | { error: string }> {
@@ -415,8 +327,6 @@ export async function updateMenuAvailability(
           },
         })
 
-      await syncStaffMenuGrants(tx, nextAvailability, session.user.id as string)
-
       await logAudit({
         actorId: session.user.id as string,
         entityType: 'access',
@@ -438,58 +348,6 @@ export async function updateMenuAvailability(
       userId: actorId,
     })
     return { error: `Failed to update menu availability. Please try again. Ref: ${errorId}` }
-  }
-}
-
-async function syncStaffMenuGrants(
-  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
-  availability: MenuAvailability,
-  actorId: string,
-) {
-  const [staffUsers, activeModules] = await Promise.all([
-    tx
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.role, 'staff')),
-    tx
-      .select({
-        id: modules.id,
-        slug: modules.slug,
-        adminOnly: modules.adminOnly,
-      })
-      .from(modules)
-      .where(eq(modules.isActive, true)),
-  ])
-
-  if (staffUsers.length === 0) return
-
-  const staffUserIds = staffUsers.map((user) => user.id)
-
-  for (const menu of MENU_DEFINITIONS) {
-    const moduleIds = activeModules
-      .filter((moduleRow) => !moduleRow.adminOnly && menu.slugs.includes(moduleRow.slug))
-      .map((moduleRow) => moduleRow.id)
-
-    if (moduleIds.length === 0) continue
-
-    if (availability.staff[menu.key]) {
-      for (const userId of staffUserIds) {
-        for (const moduleId of moduleIds) {
-          await tx
-            .insert(userModuleAccess)
-            .values({ userId, moduleId, grantedBy: actorId })
-            .onConflictDoNothing()
-        }
-      }
-      continue
-    }
-
-    await tx
-      .delete(userModuleAccess)
-      .where(and(
-        inArray(userModuleAccess.userId, staffUserIds),
-        inArray(userModuleAccess.moduleId, moduleIds),
-      ))
   }
 }
 

@@ -4,9 +4,9 @@ Use **PS Generator** to generate PS1 and PS3 Producer Statement PDF packages fro
 
 ## Who can use it
 
-- Staff with access to the `ps-generator` module can open **PS Generator -> Generate PS**.
+- Staff can open **PS Generator -> Generate PS** when PS Generator is enabled for Staff in Role Access.
 - Admin users also see **PS Generator -> Configuration**.
-- Access is controlled by the same module grant system as Lead Intake, Leads, and Quote Tracker.
+- Role Access controls access to the tool. Configuration and publishing require Admin.
 
 ## Generate a package
 

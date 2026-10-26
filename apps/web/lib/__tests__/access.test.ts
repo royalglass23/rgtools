@@ -19,58 +19,49 @@ const clientsModule = { id: 'm5', slug: 'clients', adminOnly: false, isActive: t
 // ── canAccessModule ────────────────────────────────────────────────────────────
 
 describe('canAccessModule', () => {
-  it('admin + adminOnly module → true', () => {
-    expect(canAccessModule(admin, adminOnlyModule, new Set())).toBe(true)
+  const availability = {
+    staff: { ...DEFAULT_MENU_AVAILABILITY.staff, clients: true, 'ps-generator': true, 'work-orders': true },
+    admin: { ...DEFAULT_MENU_AVAILABILITY.admin, clients: true, 'ps-generator': true, 'work-orders': true },
+  }
+
+  it('gives new and existing staff the same enabled tool access', () => {
+    expect(canAccessModule(staff, clientsModule, availability)).toBe(true)
+    expect(canAccessModule({ ...staff, id: 'new-user' }, clientsModule, availability)).toBe(true)
   })
 
-  it('staff + adminOnly module → false', () => {
-    expect(canAccessModule(staff, adminOnlyModule, new Set())).toBe(false)
+  it('denies a tool when disabled for the role', () => {
+    expect(canAccessModule(staff, clientsModule, DEFAULT_MENU_AVAILABILITY)).toBe(false)
+    expect(canAccessModule(admin, menuLockedModule, DEFAULT_MENU_AVAILABILITY)).toBe(false)
   })
 
-  it('admin + normal module → true (no grant needed)', () => {
-    expect(canAccessModule(admin, normalModule, new Set())).toBe(true)
+  it('blocks admin-only and sensitive operations for staff', () => {
+    expect(canAccessModule(staff, adminOnlyModule, availability)).toBe(false)
+    for (const slug of [
+      'ps-generator/configuration',
+      'ps-generator/configuration/publish',
+      'lead-intake/configuration',
+      'clients/configuration',
+      'admin/work-orders',
+    ]) {
+      expect(canAccessModule(staff, { id: slug, slug, adminOnly: false, isActive: true }, availability)).toBe(false)
+      expect(canAccessModule(admin, { id: slug, slug, adminOnly: false, isActive: true }, availability)).toBe(true)
+    }
   })
 
-  it('staff + normal module WITH grant → true', () => {
-    const grantSet = new Set([normalModule.id])
-    expect(canAccessModule(staff, normalModule, grantSet)).toBe(true)
+  it('keeps history and ordinary tool routes available with the parent role setting', () => {
+    expect(canAccessModule(staff, menuLockedSubmodule, availability)).toBe(true)
+    expect(canAccessModule(staff, menuLockedModule, availability)).toBe(true)
+    expect(canAccessModule(staff, { id: 'manage', slug: 'work-orders/manage', adminOnly: false, isActive: true }, availability)).toBe(true)
   })
 
-  it('staff + normal module WITHOUT grant → false', () => {
-    expect(canAccessModule(staff, normalModule, new Set())).toBe(false)
+  it('denies inactive and unknown staff modules', () => {
+    expect(canAccessModule(staff, { ...clientsModule, isActive: false }, availability)).toBe(false)
+    expect(canAccessModule(staff, normalModule, availability)).toBe(false)
   })
 
-  it('staff + menu disabled module WITH grant -> false', () => {
-    const grantSet = new Set([menuLockedModule.id])
-    expect(canAccessModule(staff, menuLockedModule, grantSet, DEFAULT_MENU_AVAILABILITY)).toBe(false)
-  })
-
-  it('regular admin + menu disabled module -> false', () => {
-    expect(canAccessModule(admin, menuLockedModule, new Set(), DEFAULT_MENU_AVAILABILITY)).toBe(false)
-  })
-
-  it('menu disabled parent blocks submenu access', () => {
-    const grantSet = new Set([menuLockedSubmodule.id])
-    expect(canAccessModule(staff, menuLockedSubmodule, grantSet, DEFAULT_MENU_AVAILABILITY)).toBe(false)
-  })
-
-  it('protected admin + menu disabled module -> true', () => {
-    expect(canAccessModule(superAdmin, menuLockedModule, new Set(), DEFAULT_MENU_AVAILABILITY)).toBe(true)
-  })
-
-  it('admin + Clients enabled for admin -> true', () => {
-    expect(canAccessModule(admin, clientsModule, new Set(), {
-      ...DEFAULT_MENU_AVAILABILITY,
-      admin: { ...DEFAULT_MENU_AVAILABILITY.admin, clients: true },
-    })).toBe(true)
-  })
-
-  it('staff + Clients disabled for staff -> false even with grant', () => {
-    expect(canAccessModule(staff, clientsModule, new Set([clientsModule.id]), {
-      ...DEFAULT_MENU_AVAILABILITY,
-      admin: { ...DEFAULT_MENU_AVAILABILITY.admin, clients: true },
-      staff: { ...DEFAULT_MENU_AVAILABILITY.staff, clients: false },
-    })).toBe(false)
+  it('lets protected admin bypass role settings but not inactive modules', () => {
+    expect(canAccessModule(superAdmin, menuLockedModule, DEFAULT_MENU_AVAILABILITY)).toBe(true)
+    expect(canAccessModule(superAdmin, { ...menuLockedModule, isActive: false }, DEFAULT_MENU_AVAILABILITY)).toBe(false)
   })
 })
 

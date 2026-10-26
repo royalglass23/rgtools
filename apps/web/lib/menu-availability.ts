@@ -117,7 +117,7 @@ export function roleCanSeeMenu(
   availability: MenuAvailability,
 ) {
   const menuKey = menuKeyForSlug(slug)
-  if (!menuKey) return true
+  if (!menuKey) return role === 'admin'
 
   return availability[role][menuKey]
 }

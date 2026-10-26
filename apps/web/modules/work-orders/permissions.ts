@@ -18,7 +18,7 @@ export async function getCurrentWorkOrderPermissions(): Promise<WorkOrderPermiss
     return { canView: false, canManage: false, canConfigure: false }
   }
 
-  const [canView, hasManageGrant, hasConfigGrant] = await Promise.all([
+  const [canView, canManage, canConfigure] = await Promise.all([
     userCanAccessSlug(userId, WORK_ORDER_VIEW_SLUG),
     userCanAccessSlug(userId, WORK_ORDER_MANAGE_SLUG),
     userCanAccessSlug(userId, WORK_ORDER_CONFIG_SLUG),
@@ -26,8 +26,8 @@ export async function getCurrentWorkOrderPermissions(): Promise<WorkOrderPermiss
 
   return {
     canView,
-    canManage: hasManageGrant,
-    canConfigure: hasConfigGrant,
+    canManage,
+    canConfigure,
   }
 }
 

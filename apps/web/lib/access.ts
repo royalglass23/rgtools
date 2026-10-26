@@ -27,19 +27,16 @@ export interface AccessModule {
  * Determine whether `user` may access `module`.
  *
  * Rules:
- *   - If module.adminOnly  → only admins are allowed
- *   - Otherwise            → admin always allowed; staff allowed only when
- *                            module.id is present in grantSet
+ *   - Role access controls the ordinary tools for all users of that role.
+ *   - Sensitive configuration modules require an admin role.
  *
  * @param user      The user requesting access
  * @param module    The module being checked
- * @param grantSet  Set of moduleIds explicitly granted to this user
  */
 export function canAccessModule(
   user: AccessUser,
   module: AccessModule,
-  grantSet: Set<string>,
-  menuAvailability?: MenuAvailability,
+  menuAvailability: MenuAvailability,
 ): boolean {
   if (!module.isActive) return false
 
@@ -47,20 +44,21 @@ export function canAccessModule(
     return true
   }
 
-  if (menuAvailability && !roleCanSeeMenu(user.role, module.slug, menuAvailability)) {
+  if (!roleCanSeeMenu(user.role, module.slug, menuAvailability)) {
     return false
   }
 
-  if (module.adminOnly) {
+  if (module.adminOnly || isAdminOperation(module.slug)) {
     return user.role === 'admin'
   }
 
-  if (user.role === 'admin') {
-    return true
-  }
+  return true
+}
 
-  // staff: must have an explicit grant
-  return grantSet.has(module.id)
+// Existing databases may still mark configuration modules as staff-capable.
+// Enforce the Admin boundary without requiring a production migration.
+function isAdminOperation(slug: string): boolean {
+  return slug === 'admin' || slug.startsWith('admin/') || slug.includes('/configuration')
 }
 
 // ── assertCanManageUser ───────────────────────────────────────────────────────

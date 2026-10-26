@@ -4,7 +4,7 @@ The lead intake form is at `/lead-intake`. Use it to record new enquiries from p
 
 ## Opening the Form
 
-Click **Lead Intake** in the navigation. If you do not see it, ask an admin to grant module access.
+Click **Lead Intake** in the navigation. If you do not see it, ask an admin to check Role Access for your role.
 
 ## Score Panel
 

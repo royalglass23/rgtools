@@ -34,12 +34,15 @@ export function MenuAvailabilityForm({ menuAvailability }: MenuAvailabilityFormP
         return
       }
 
-      setStatus({ kind: 'success', message: 'Menu availability saved.' })
+      setStatus({ kind: 'success', message: 'Role access saved.' })
     })
   }
 
   return (
     <>
+      <p className="mb-3 text-sm text-gray-600">
+        These settings apply to everyone in each role, including new users. Configuration remains Admin only.
+      </p>
       {status && (
         <div className="mb-4">
           <DismissibleNotice tone={status.kind} noticeKey={status.message}>
@@ -56,7 +59,7 @@ export function MenuAvailabilityForm({ menuAvailability }: MenuAvailabilityFormP
           <thead className="border-b border-gray-200 bg-gray-50">
             <tr>
               <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
-                Menu
+                Tool
               </th>
               <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
                 Staff
@@ -95,7 +98,7 @@ export function MenuAvailabilityForm({ menuAvailability }: MenuAvailabilityFormP
             disabled={isPending}
             className="rounded bg-[#142B3A] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#1d3d52] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isPending ? 'Saving...' : 'Save menu availability'}
+            {isPending ? 'Saving...' : 'Save role access'}
           </button>
         </div>
       </form>
@@ -121,7 +124,7 @@ function MenuAvailabilityCheckbox({
       id={id}
       name={`menu:${role}:${menuKey}`}
       type="checkbox"
-      aria-label={`${role} ${menuKey} menu`}
+      aria-label={`${role} ${menuKey} access`}
       defaultChecked={checked}
       disabled={disabled}
       className="h-4 w-4 rounded border-gray-300 text-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
