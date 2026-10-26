@@ -14,14 +14,10 @@ export interface ProductionAccessStore {
   ensureActiveModule(
     definition: ProductionModuleDefinition,
   ): Promise<ProductionAccessModule>
-  listStaffUserIds(): Promise<string[]>
-  ensureUserModuleAccess(userId: string, moduleId: string): Promise<boolean>
 }
 
 export interface ProductionAccessResult {
-  staffUserCount: number
   ensuredModuleSlugs: string[]
-  insertedGrantCount: number
 }
 
 export const PRODUCTION_ACCESS_MODULES: ProductionModuleDefinition[] = [
@@ -53,20 +49,7 @@ export async function ensureProductionAccess(
       store.ensureActiveModule(definition),
     ),
   )
-  const staffUserIds = await store.listStaffUserIds()
-
-  let insertedGrantCount = 0
-  for (const userId of staffUserIds) {
-    for (const moduleRow of productionModules) {
-      if (await store.ensureUserModuleAccess(userId, moduleRow.id)) {
-        insertedGrantCount += 1
-      }
-    }
-  }
-
   return {
-    staffUserCount: staffUserIds.length,
     ensuredModuleSlugs: productionModules.map((moduleRow) => moduleRow.slug),
-    insertedGrantCount,
   }
 }

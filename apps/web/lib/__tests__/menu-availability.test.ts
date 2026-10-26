@@ -52,7 +52,7 @@ describe('menu availability', () => {
     expect(roleCanSeeMenu('admin', 'admin/dashboard-settings', availability)).toBe(true)
   })
 
-  it('allows unknown slugs unless another guard blocks them', () => {
-    expect(roleCanSeeMenu('staff', 'future-module', DEFAULT_MENU_AVAILABILITY)).toBe(true)
+  it('denies unknown staff modules until they are assigned to a role group', () => {
+    expect(roleCanSeeMenu('staff', 'future-module', DEFAULT_MENU_AVAILABILITY)).toBe(false)
   })
 })

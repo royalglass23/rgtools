@@ -79,7 +79,7 @@ Open a converted job through its normal Quote Movement link to keep reviewing th
 
 ### Quote Movement V1 boundaries and limitations
 
-- Access uses the existing Quote Tracker permission. There is no separate Quote Movement grant in V1.
+- Quote Movement follows the Quotes role setting; it has no separate access switch.
 - ServiceM8 is read-only from Quote Movement. Complexity selections and cached summaries stay in rgtools and are never written back.
 - Retained source history is intentionally one-way: a source missing or deleted later in ServiceM8 is not deleted from rgtools.
 - Incomplete Source Coverage means staff must inspect ServiceM8 manually; What Matters Now cannot claim to represent unread or unsupported evidence.
@@ -290,9 +290,9 @@ If the snapshot is partial or stale, the panel shows that context so you know ho
 ### Quotes menu is missing
 
 First refresh the dashboard. If **Quotes** is still absent, ask an admin to confirm that
-your staff account has Quote Tracker access.
+Quotes is enabled for your role in Role Access.
 
-For an operator repairing a missing production module row or grant, confirm that
+For an operator repairing a missing production module row, confirm that
 `DATABASE_URL` targets the intended database, then run this command from the repository
 root:
 
@@ -301,8 +301,7 @@ pnpm seed:production-access
 ```
 
 The command safely recreates or reactivates the canonical Lead Intake, Leads, and Quote
-Tracker module rows and inserts only missing staff grants. It can be run repeatedly and
-does not remove unrelated modules or grants.
+Tracker module rows. It can be run repeatedly and does not remove unrelated modules.
 
 ### "Generate the quote in ServiceM8 first"
 

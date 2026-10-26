@@ -5,7 +5,7 @@
 
 import { eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
-import { users, modules, userModuleAccess } from '@rgtools/db/schema'
+import { users, modules } from '@rgtools/db/schema'
 import { canAccessModule } from '@/lib/access'
 import { getMenuAvailability } from '@/lib/menu-availability-db'
 import type { AccessUser, AccessModule } from '@/lib/access'
@@ -16,7 +16,7 @@ type ModuleRow = typeof modules.$inferSelect
  * Returns all active modules the user is allowed to access.
  *
  * - Admin  → active modules allowed by the shared access rules
- * - Staff  → active, non-adminOnly modules where a grant row exists
+ * - Staff  → active modules enabled for the staff role
  */
 export async function getAccessibleModules(userId: string): Promise<ModuleRow[]> {
   const user = await db.query.users.findFirst({
@@ -30,18 +30,6 @@ export async function getAccessibleModules(userId: string): Promise<ModuleRow[]>
     username: user.username,
     role: user.role,
     isProtected: user.isProtected,
-  }
-
-  const grantSet = new Set<string>()
-  if (accessUser.role !== 'admin') {
-    const grants = await db
-      .select()
-      .from(userModuleAccess)
-      .where(eq(userModuleAccess.userId, userId))
-
-    for (const grant of grants) {
-      grantSet.add(grant.moduleId)
-    }
   }
 
   const [activeModules, menuAvailability] = await Promise.all([
@@ -58,7 +46,7 @@ export async function getAccessibleModules(userId: string): Promise<ModuleRow[]>
       adminOnly: mod.adminOnly,
       isActive: mod.isActive,
     }
-    return canAccessModule(accessUser, accessModule, grantSet, menuAvailability)
+    return canAccessModule(accessUser, accessModule, menuAvailability)
   })
 }
 

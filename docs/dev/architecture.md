@@ -35,10 +35,10 @@ The authenticated web app groups business logic under `apps/web/modules`:
 - `work-orders` reconciles active ServiceM8 Work Order jobs and stores RG-owned operational
   enrichment, item labels, production specifications, and timeline events.
 - `ps-generator` generates PS1/PS3 packages from published configuration and stored templates.
-- `admin` controls users, module grants, settings, table configuration, pricing, and audit exports.
+- `admin` controls users, role access, settings, table configuration, pricing, and audit exports.
 
 The main routes are grouped under `apps/web/app/(dashboard)`. Route protection is applied by the
-dashboard layout and module guards; a signed-in user still needs the relevant module grant.
+dashboard layout and module guards; a signed-in user still needs access enabled for their role.
 
 ## Data ownership
 
@@ -59,9 +59,11 @@ configured secrets.
 ## Authentication and authorization
 
 NextAuth v5 uses credential login, JWT sessions, and a four-hour session lifetime. Users have an
-`admin` or `staff` role. Administrators can access active modules and manage configuration; staff
-receive explicit grants in `user_module_access`. Some operations have narrower grants, such as
-Work Orders manage/configuration access and PS Generator configuration/publish access.
+`admin` or `staff` role. Role Access controls which active tool groups each role can use. New staff
+inherit the Staff settings immediately. PS Generator configuration/publishing and Work Order
+configuration require Admin; Work Order operational management follows Work Orders role access.
+Historical `user_module_access` rows are retained for compatibility but are no longer consulted or
+written.
 
 Server actions and API routes are expected to enforce both authentication and the relevant module
 or operation permission. Audit records are retained for sensitive administrative, access, lead,
@@ -72,7 +74,7 @@ client-merge, quote, and Work Order changes.
 - The Quotes navigation label opens the tracked quote activity dashboard. It reads bounded event
   and engagement summaries from `quotes`, `quote_events`, and `quote_engagement`; the separate
   submenu retains Quote Movement and Track Quotes. The overview is protected by the existing
-  `quote-tracker` module grant and displays no raw viewer identity.
+  Quotes role access and displays no raw viewer identity.
   Progress counts and values use one aggregate query with shared `quoteProgressWhere` predicates
   for the overview and Track Quotes activity filters. Each nonarchived quote in the creation
   period belongs to one bucket: active/unresolved by lifetime opens and three-day age, or Won/Lost

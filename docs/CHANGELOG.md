@@ -6,6 +6,10 @@ All notable changes to rgtools are recorded here, grouped by release.
 
 ## [Unreleased]
 
+### Changed
+
+- Tool access now follows the Staff/Admin Role Access settings for every user. Removed per-user module controls and staff-grant syncing; PS configuration/publishing and Work Order configuration require Admin.
+
 ### Added
 
 - **Consistent list pagination** — Clients, Leads, Track Quotes, Work Orders, Job Progress, PS History, Quotes overview lists, viewer analytics, and Admin logs now place the item count left, page navigation center, and Page size with Apply right. Existing list defaults and filters remain in place.

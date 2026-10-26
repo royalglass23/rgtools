@@ -1,7 +1,7 @@
 import { requireModule } from '@/lib/guard'
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { users, modules, userModuleAccess, auditLog, errorLog } from '@rgtools/db/schema'
+import { users, auditLog, errorLog } from '@rgtools/db/schema'
 import { and, count, desc, eq, gte, isNull, like, lte, or } from 'drizzle-orm'
 import { deriveAuditEntityType, formatAuditDetail } from '@/lib/audit'
 import Link from 'next/link'
@@ -185,10 +185,8 @@ export default async function AdminPage({
   ].filter(Boolean)
 
   // Fetch all data server-side
-  const [allUsers, allModules, allGrants, menuAvailability, auditRows, auditCountRows] = await Promise.all([
+  const [allUsers, menuAvailability, auditRows, auditCountRows] = await Promise.all([
     db.select().from(users).orderBy(users.createdAt),
-    db.select().from(modules).orderBy(modules.sortOrder),
-    db.select().from(userModuleAccess),
     getMenuAvailability(),
     db
       .select()
@@ -212,15 +210,6 @@ export default async function AdminPage({
     errorTotalRows = countRows[0]?.value ?? 0
   } catch (err) {
     console.error('[admin.errorLog.read]', err)
-  }
-
-  // Build a map of userId → Set<moduleId> for quick grant lookups
-  const grantsByUser = new Map<string, Set<string>>()
-  for (const grant of allGrants) {
-    if (!grantsByUser.has(grant.userId)) {
-      grantsByUser.set(grant.userId, new Set())
-    }
-    grantsByUser.get(grant.userId)!.add(grant.moduleId)
   }
 
   // Identify the current actor
@@ -267,9 +256,6 @@ export default async function AdminPage({
                   ServiceM8 Staff UUID
                 </th>
                 <th className="py-2 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
-                  Access
-                </th>
-                <th className="py-2 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
                   Actions
                 </th>
               </tr>
@@ -287,14 +273,6 @@ export default async function AdminPage({
                   }}
                   isCurrentUser={user.id === session?.user?.id}
                   isProtectedActor={isProtectedActor}
-                  modules={allModules.map((m) => ({
-                    id: m.id,
-                    slug: m.slug,
-                    name: m.name,
-                    adminOnly: m.adminOnly,
-                    isActive: m.isActive,
-                  }))}
-                  grantedModuleIds={grantsByUser.get(user.id) ?? new Set()}
                 />
               ))}
             </tbody>
@@ -304,7 +282,7 @@ export default async function AdminPage({
 
       {isProtectedActor && (
         <details className="order-20">
-          <summary className="mb-4 cursor-pointer text-lg font-semibold text-gray-800">Menu Availability</summary>
+          <summary className="mb-4 cursor-pointer text-lg font-semibold text-gray-800">Role Access</summary>
           <MenuAvailabilityForm menuAvailability={menuAvailability} />
         </details>
       )}
