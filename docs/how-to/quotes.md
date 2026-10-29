@@ -186,7 +186,7 @@ You don't have to keep checking the dashboard — rgtools can email the team aut
 - **Quote opened** — sent the first time a client (not internal staff) opens a quote.
 - **High interest** — sent when a quote crosses the high-intent threshold (3+ opens, a return visit on another day, a CTA click, forwarding suspected, or deep reading).
 
-Internal-only opens (you previewing your own link) are skipped, and each email is sent at most once per quote so you won't get spammed. Notifications are checked every few minutes, so allow a short delay after an open.
+Internal-only opens (you previewing your own link) are skipped, and each email is sent at most once per quote so you won't get spammed. Notifications are checked every 15 minutes, so an alert can take up to about 15 minutes to arrive after an open.
 
 Turn this on and choose who receives the emails at **Quote Tracker -> Configuration -> Open notifications** (see [Tracking settings](#tracking-settings) below).
 
@@ -259,7 +259,7 @@ The same **Quote Tracker -> Configuration** page controls the email alerts (see 
 | `notifications.enabled` | Master on/off for "Quote opened" and "High interest" emails                                         |
 | `notifications.to`      | Who receives them — one or more addresses, comma-separated (defaults to `support@royalglass.co.nz`) |
 
-Notifications are sent by the `rg-notifier` worker on a schedule (every ~10 minutes) via Resend, so there is a short delay between an open and the email.
+Notifications are sent by the `rg-notifier` worker every 15 minutes via Resend. An alert can take up to about 15 minutes to arrive after a quote is opened. Turning off notifications stops emails, but the scheduled worker still checks the setting every 15 minutes.
 
 ---
 
