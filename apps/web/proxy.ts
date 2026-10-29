@@ -7,6 +7,7 @@ export const proxy = auth((req) => {
     req.nextUrl.pathname === '/api/pricing' ||
     req.nextUrl.pathname === '/api/servicem8/attachment' ||
     req.nextUrl.pathname === '/api/servicem8/job'
+    || req.nextUrl.pathname === '/knowledge-response'
   ) {
     return NextResponse.next()
   }
@@ -19,5 +20,5 @@ export const proxy = auth((req) => {
 })
 
 export const config = {
-  matcher: ['/((?!login|api/auth|api/lead-intake/calculator-submit|api/pricing|api/servicem8/attachment|api/servicem8/job|q/|_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!login|knowledge-response(?:/|$)|api/auth|api/lead-intake/calculator-submit|api/pricing|api/servicem8/attachment|api/servicem8/job|q/|_next/static|_next/image|favicon.ico).*)'],
 }

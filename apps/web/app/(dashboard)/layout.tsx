@@ -8,6 +8,7 @@ import {
   type DashboardNavItem,
 } from "@/lib/admin-navigation";
 import { auth } from "@/lib/auth";
+import { knowledgeInboxAccess } from "@/modules/knowledge-inbox/access";
 import { redirect } from "next/navigation";
 import { signOutAction } from "./actions";
 
@@ -48,6 +49,9 @@ export default async function DashboardLayout({
     ...navigationGroup("clients", "Clients", clientsItems),
     ...navigationGroup("ps-generator", "PS Generator", psGeneratorItems),
     ...navigationGroup("admin", "Admin", adminItems, "/admin/job-progress"),
+    ...(process.env.RG_BRAIN_INBOX_DATABASE_URL && knowledgeInboxAccess(session.user, process.env.RG_BRAIN_INBOX_RESPONDER_USER_IDS).respondent
+      ? [{ kind: "link" as const, id: "knowledge-inbox", label: "Knowledge Inbox", href: "/knowledge-inbox" }]
+      : []),
   ];
 
   return (

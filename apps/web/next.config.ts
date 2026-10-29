@@ -9,6 +9,12 @@ loadEnvConfig(path.resolve(__dirname, '../..'))
 const workspaceRoot = realpathSync.native(path.resolve(__dirname, '../..'))
 
 const nextConfig: NextConfig = {
+  async headers() {
+    return [{ source: '/knowledge-response', headers: [
+      { key: 'Referrer-Policy', value: 'no-referrer' },
+      { key: 'Cache-Control', value: 'no-store' },
+    ] }]
+  },
   transpilePackages: ['@rgtools/db'],
   serverExternalPackages: ['@neondatabase/serverless', 'bcryptjs', 'drizzle-orm'],
   outputFileTracingRoot: workspaceRoot,

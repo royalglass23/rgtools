@@ -2,12 +2,18 @@ import { describe, it, expect } from 'vitest'
 
 function matchesMiddleware(pathname: string): boolean {
   // Mirrors the Next.js matcher.
-  return !/^\/(login|api\/auth|api\/lead-intake\/calculator-submit|api\/pricing|api\/servicem8\/attachment|api\/servicem8\/job|q\/|_next\/static|_next\/image|favicon\.ico)/.test(pathname)
+  return !/^\/(login|knowledge-response(?:\/|$)|api\/auth|api\/lead-intake\/calculator-submit|api\/pricing|api\/servicem8\/attachment|api\/servicem8\/job|q\/|_next\/static|_next\/image|favicon\.ico)/.test(pathname)
 }
 
 describe('middleware route matching', () => {
   it('skips login page', () => {
     expect(matchesMiddleware('/login')).toBe(false)
+  })
+
+  it('allows the signed response-link page without login but protects similar paths', () => {
+    expect(matchesMiddleware('/knowledge-response')).toBe(false)
+    expect(matchesMiddleware('/knowledge-response/extra')).toBe(false)
+    expect(matchesMiddleware('/knowledge-response-admin')).toBe(true)
   })
 
   it('skips NextAuth API routes', () => {
