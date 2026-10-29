@@ -8,6 +8,8 @@ All notable changes to rgtools are recorded here, grouped by release.
 
 ### Changed
 
+- Quote open and high-interest notification checks are configured every 15 minutes, reducing scheduled database wakes compared with the previously deployed 10-minute trigger; alerts may arrive up to about 15 minutes after an event.
+
 - Tool access now follows the Staff/Admin Role Access settings for every user. Removed per-user module controls and staff-grant syncing; PS configuration/publishing and Work Order configuration require Admin.
 
 ### Added
