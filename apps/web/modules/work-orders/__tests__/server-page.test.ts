@@ -111,6 +111,5 @@ describe('work orders server page', () => {
     expect(source).toContain('aria-label="Work Order filter utilities"')
     expect(source).toContain('role="group"')
     expect(source).not.toContain('min-w-[1280px]')
-    expect(source).not.toContain('Apply')
   })
 })

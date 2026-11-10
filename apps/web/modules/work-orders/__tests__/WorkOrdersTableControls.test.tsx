@@ -53,6 +53,9 @@ describe('WorkOrdersTableControls', () => {
 
     expect(screen.getByRole('textbox', { name: 'Search' })).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: 'Stage' })).toBeInTheDocument()
+    const filterForm = screen.getByRole('combobox', { name: 'Stage' }).closest('form')
+    expect(filterForm).not.toBeNull()
+    expect(within(filterForm!).queryByRole('button', { name: 'Apply' })).not.toBeInTheDocument()
     expect(screen.queryByRole('combobox', { name: 'Risk' })).not.toBeInTheDocument()
     expect(screen.queryByRole('combobox', { name: 'Importance' })).not.toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: 'Sort' })).toBeInTheDocument()

@@ -48,6 +48,9 @@ yarn-error.log*
 next-env.d.ts
 
 # Tooling and planning artifacts
+.impeccable/
+docs/research/
+docs/mockups/
 .claude/
 .codex/
 .superpowers/
