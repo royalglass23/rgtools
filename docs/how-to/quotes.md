@@ -166,18 +166,24 @@ Open the quote in the dashboard (**Quote Tracker → [quote name]**).
 
 **Event Timeline** shows every tracked event in order: opens, page views, scroll milestones, downloads, and close events.
 
+You do not need to open an individual quote to update its score or status. The Quotes overview,
+Track Quotes list and detail pages refresh every 30 seconds while visible, and when you return
+to the browser tab. Refresh pauses while a form field is focused. These refreshes show recorded
+events; cumulative active reading time is reported when the customer leaves the viewer.
+
 ### 6. Understand the status badge
 
 Each quote is automatically tagged based on engagement. Manual overrides are available on the quote detail page.
 
 | Status   | Computed when…                                                               |
 | -------- | ---------------------------------------------------------------------------- |
-| **Hot**  | 3+ opens, return visit on a different day, CTA click, or >5 min reading time |
-| **Warm** | 1–2 opens with >50% scroll depth                                             |
+| **Hot**  | 30+ seconds with 75%+ scroll; 45+ seconds with 50%+ scroll; 2+ opens with 30+ seconds or 30%+ scroll; or a return visit on another UTC day, CTA/download, possible forwarding or 2+ device types |
+| **Warm** | Opened with 20+ seconds active time or 30%+ scroll, without a Hot signal       |
 | **Cold** | Opened but engagement is still low                                           |
 | **Dead** | Never opened after 3+ days since creation                                    |
 
-The KPI cards at the top of the Quote Tracker list summarise counts across all quotes.
+Manual overrides take precedence over computed status. Summary counts live on the Quotes overview
+and follow its selected period and active/unresolved scope.
 
 ### 7. Get notified by email (optional)
 

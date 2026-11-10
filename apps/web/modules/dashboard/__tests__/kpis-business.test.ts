@@ -27,7 +27,7 @@ vi.mock('drizzle-orm', () => ({
   lte: vi.fn((column: { name?: string }, value: unknown) => ({ type: 'lte', column: column.name, value })),
   ne: vi.fn((column: { name?: string }, value: unknown) => ({ type: 'ne', column: column.name, value })),
   or: vi.fn((...conditions: unknown[]) => ({ type: 'or', conditions })),
-  sql: vi.fn(() => ({ type: 'sql' })),
+  sql: vi.fn(() => ({ type: 'sql', mapWith() { return this } })),
   sum: vi.fn((column: { name?: string }) => ({ type: 'sum', column: column.name })),
 }))
 
@@ -172,8 +172,8 @@ describe('getDashboardKpis – pipeline WHERE', () => {
           expect.objectContaining({
             type: 'or',
             conditions: expect.arrayContaining([
-              { type: 'eq', column: 'status_tag', value: 'hot' },
-              { type: 'eq', column: 'status_tag', value: 'warm' },
+              { type: 'eq', column: undefined, value: 'hot' },
+              { type: 'eq', column: undefined, value: 'warm' },
             ]),
           }),
           { type: 'isNull', column: 'archived_at' },

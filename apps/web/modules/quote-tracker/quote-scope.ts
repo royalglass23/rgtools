@@ -1,5 +1,6 @@
+import { currentQuoteStats } from './current-stats'
 import { and, eq, gt, gte, isNull, lte, or, sql } from 'drizzle-orm'
-import { quotes, quoteEngagement, quoteEvents } from '@rgtools/db/schema'
+import { quotes, quoteEvents } from '@rgtools/db/schema'
 import { DAY_MS, trackedSince, type TrackedPeriod } from './quote-period'
 import type { QuoteProgressGroup } from './quote-progress'
 
@@ -13,21 +14,23 @@ export function activeQuoteWhere(now: Date) {
 }
 
 export function unopenedAfterThreeDaysWhere(now: Date) {
+  const opens = currentQuoteStats(now).totalOpens
   return and(
     lte(quotes.createdAt, new Date(now.getTime() - 3 * DAY_MS)),
-    or(isNull(quoteEngagement.totalOpens), eq(quoteEngagement.totalOpens, 0)),
+    or(isNull(opens), eq(opens, 0)),
   )!
 }
 
 // Shared by overview aggregates and their Track Quotes destinations.
 export function quoteProgressWhere(group: QuoteProgressGroup, now: Date) {
+  const opens = currentQuoteStats(now).totalOpens
   if (group === 'won' || group === 'lost') return and(isNull(quotes.archivedAt), eq(quotes.outcome, group))!
-  const unopened = or(isNull(quoteEngagement.totalOpens), eq(quoteEngagement.totalOpens, 0))
+  const unopened = or(isNull(opens), eq(opens, 0))
   const activity = group === 'waiting'
     ? and(unopened, gt(quotes.createdAt, new Date(now.getTime() - 3 * DAY_MS)))
     : group === 'overdue' ? unopenedAfterThreeDaysWhere(now)
-    : group === 'once' ? eq(quoteEngagement.totalOpens, 1)
-    : gte(quoteEngagement.totalOpens, 2)
+    : group === 'once' ? eq(opens, 1)
+    : gte(opens, 2)
   return and(activeQuoteWhere(now), isNull(quotes.outcome), activity)!
 }
 
