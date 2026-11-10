@@ -1,4 +1,5 @@
 import { requireModule } from '@/lib/guard'
+import { StatsRefresh } from '@/modules/quote-tracker/StatsRefresh'
 
 export default async function QuoteTrackerLayout({
   children,
@@ -6,5 +7,5 @@ export default async function QuoteTrackerLayout({
   children: React.ReactNode
 }) {
   await requireModule('quote-tracker')
-  return <>{children}</>
+  return <><StatsRefresh />{children}</>
 }

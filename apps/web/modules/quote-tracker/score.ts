@@ -30,6 +30,13 @@ const HOT_REPEAT_OPEN_SCROLL_DEPTH = 30
 const WARM_MIN_TIME_MS = 20 * SECOND_MS
 const WARM_MIN_SCROLL_DEPTH = 30
 
+export const ENGAGEMENT_THRESHOLDS = {
+  quickTime: HOT_QUICK_REVIEW_TIME_MS, quickScroll: HOT_QUICK_REVIEW_SCROLL_DEPTH,
+  steadyTime: HOT_STEADY_REVIEW_TIME_MS, steadyScroll: HOT_STEADY_REVIEW_SCROLL_DEPTH,
+  repeatTime: HOT_REPEAT_OPEN_TIME_MS, repeatScroll: HOT_REPEAT_OPEN_SCROLL_DEPTH,
+  warmTime: WARM_MIN_TIME_MS, warmScroll: WARM_MIN_SCROLL_DEPTH,
+} as const
+
 export function computeScore(e: EngagementData): number {
   const raw =
     e.totalOpens * 10 +

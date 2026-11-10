@@ -1,3 +1,4 @@
+import { currentQuoteStats } from '@/modules/quote-tracker/current-stats'
 import { and, count, eq, gt, gte, isNotNull, isNull, lt, lte, ne, or, sql, sum } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { leads } from '@rgtools/db/schema-leads'
@@ -22,7 +23,7 @@ export async function getDashboardChartData() {
       .from(leads)
       .where(and(isNull(leads.archivedAt), gte(leads.createdAt, cutoff))),
     db
-      .select({ statusTag: quotes.statusTag, createdAt: quotes.createdAt })
+      .select({ statusTag: currentQuoteStats().statusTag, createdAt: quotes.createdAt })
       .from(quotes)
       .where(and(isNull(quotes.archivedAt), gte(quotes.createdAt, cutoff))),
   ])
@@ -92,7 +93,7 @@ export async function getDashboardKpis() {
         and(
           isNull(quotes.archivedAt),
           gt(quotes.expiresAt, sql`now()`),
-          or(eq(quotes.statusTag, 'hot'), eq(quotes.statusTag, 'warm')),
+          or(eq(currentQuoteStats().statusTag, 'hot'), eq(currentQuoteStats().statusTag, 'warm')),
         ),
       ),
     db
@@ -125,7 +126,7 @@ export async function getDashboardKpis() {
         and(
           isNull(quotes.archivedAt),
           gt(quotes.expiresAt, sql`now()`),
-          or(eq(quotes.statusTag, 'hot'), eq(quotes.statusTag, 'warm')),
+          or(eq(currentQuoteStats().statusTag, 'hot'), eq(currentQuoteStats().statusTag, 'warm')),
           gte(quotes.createdAt, cutoff30),
         ),
       ),
@@ -226,7 +227,7 @@ export async function getDashboardActionCounts() {
       .leftJoin(quoteEngagement, eq(quoteEngagement.quoteId, quotes.id))
       .where(and(
         isNull(quotes.archivedAt),
-        or(eq(quotes.statusTag, 'hot'), eq(quotes.statusTag, 'warm')),
+        or(eq(currentQuoteStats().statusTag, 'hot'), eq(currentQuoteStats().statusTag, 'warm')),
         gt(quotes.expiresAt, sql`now()`),
         lte(quotes.expiresAt, expiryCutoff),
       )),
@@ -251,7 +252,7 @@ export async function getDashboardActionCounts() {
       .where(and(
         isNull(quotes.archivedAt),
         or(isNull(quotes.expiresAt), gt(quotes.expiresAt, sql`now()`)),
-        or(eq(quotes.statusTag, 'hot'), eq(quotes.statusTag, 'warm')),
+        or(eq(currentQuoteStats().statusTag, 'hot'), eq(currentQuoteStats().statusTag, 'warm')),
         or(isNull(quoteEngagement.lastOpenedAt), lte(quoteEngagement.lastOpenedAt, coldCutoff)),
       )),
   ])

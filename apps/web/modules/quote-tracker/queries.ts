@@ -1,10 +1,11 @@
-import { and, asc, count, desc, eq, gt, ilike, isNotNull, isNull, lte, or, sql, sum, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, getTableColumns, gt, ilike, isNotNull, isNull, lte, or, sql, sum, type SQL } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { quoteEngagement, quoteEvents, quoteNotifiedViewers, quoteRecipients, quoteViewerEmails, quotes, tagOverrides } from '@rgtools/db/schema'
 import type { QuoteListFilters } from './list-filters'
 import { validateEmailGateSettings } from './email-gate'
 import { rollupDeviceSessions, rollupGatedEmails } from './viewer-analytics'
 import type { StatusTag } from './score'
+import { currentQuoteStats } from './current-stats'
 import { getLatestQuoteAiGuidance } from './ai-guidance'
 import { activeQuoteWhere, quoteProgressWhere, trackedPeriodWhere, unopenedAfterThreeDaysWhere, viewedInPeriodWhere } from './quote-scope'
 
@@ -14,6 +15,7 @@ export const GONE_COLD_DAYS = 14
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export async function listQuotes(filters: QuoteListFilters) {
+  const stats = currentQuoteStats()
   const where = listWhere(filters)
   const offset = (filters.page - 1) * filters.size
   const [totalRow] = await db
@@ -23,13 +25,13 @@ export async function listQuotes(filters: QuoteListFilters) {
     .where(where)
   const [kpis] = await db
     .select({
-      coldCount: count(sql`case when ${quotes.statusTag} = 'cold' then 1 end`),
-      hotCount: count(sql`case when ${quotes.statusTag} = 'hot' then 1 end`),
-      warmCount: count(sql`case when ${quotes.statusTag} = 'warm' then 1 end`),
-      deadCount: count(sql`case when ${quotes.statusTag} = 'dead' then 1 end`),
+      coldCount: count(sql`case when ${stats.statusTag} = 'cold' then 1 end`),
+      hotCount: count(sql`case when ${stats.statusTag} = 'hot' then 1 end`),
+      warmCount: count(sql`case when ${stats.statusTag} = 'warm' then 1 end`),
+      deadCount: count(sql`case when ${stats.statusTag} = 'dead' then 1 end`),
       forwardingCount: count(sql`case when ${quoteEngagement.forwardingSuspected} = true then 1 end`),
       totalValue: sum(quotes.quoteValue),
-      averageScore: sql<number>`coalesce(round(avg(${quotes.aiScore})), 0)`,
+      averageScore: sql<number>`coalesce(round(avg(${stats.aiScore})), 0)`,
     })
     .from(quotes)
     .leftJoin(quoteEngagement, eq(quoteEngagement.quoteId, quotes.id))
@@ -44,9 +46,9 @@ export async function listQuotes(filters: QuoteListFilters) {
       jobDescription: quotes.jobDescription,
       jobAddress: quotes.jobAddress,
       quoteValue: quotes.quoteValue,
-      statusTag: quotes.statusTag,
-      aiScore: quotes.aiScore,
-      totalOpens: quoteEngagement.totalOpens,
+      statusTag: stats.statusTag,
+      aiScore: stats.aiScore,
+      totalOpens: stats.totalOpens,
       lastOpenedAt: quoteEngagement.lastOpenedAt,
       forwardingSuspected: quoteEngagement.forwardingSuspected,
       expiresAt: quotes.expiresAt,
@@ -80,8 +82,9 @@ export async function listQuotes(filters: QuoteListFilters) {
 export async function getQuoteDetail(id: string) {
   if (!UUID_RE.test(id)) return null
 
+  const stats = currentQuoteStats()
   const [quote] = await db
-    .select()
+    .select({ ...getTableColumns(quotes), statusTag: stats.statusTag, aiScore: stats.aiScore })
     .from(quotes)
     .where(eq(quotes.id, id))
     .limit(1)
@@ -104,7 +107,7 @@ export async function getQuoteDetail(id: string) {
       .select()
       .from(tagOverrides)
       .where(eq(tagOverrides.quoteId, id))
-      .orderBy(desc(tagOverrides.createdAt)),
+      .orderBy(desc(tagOverrides.createdAt), desc(tagOverrides.id)),
     getViewerSessions(id),
     getLatestQuoteAiGuidance(id),
   ])
@@ -208,7 +211,7 @@ export async function setManualTag(quoteId: string, tag: StatusTag, actorId: str
   if (!UUID_RE.test(quoteId) || !UUID_RE.test(actorId)) return
 
   const [quote] = await db
-    .select({ statusTag: quotes.statusTag })
+    .select({ statusTag: currentQuoteStats().statusTag })
     .from(quotes)
     .where(eq(quotes.id, quoteId))
     .limit(1)
@@ -277,6 +280,7 @@ export async function updateQuoteEmailGate(
 
 function listWhere(filters: QuoteListFilters) {
   const now = new Date()
+  const stats = currentQuoteStats(now)
   const conditions: (SQL | undefined)[] = [trackedPeriodWhere(filters.trackedIn, now)]
   if (filters.outcome === 'open') conditions.push(isNull(quotes.outcome))
   if (filters.outcome === 'won' || filters.outcome === 'lost') {
@@ -284,7 +288,7 @@ function listWhere(filters: QuoteListFilters) {
   }
 
   if (filters.status !== 'all') {
-    conditions.push(eq(quotes.statusTag, filters.status))
+    conditions.push(eq(stats.statusTag, filters.status))
   }
 
   if (filters.linkStatus === 'active') {
@@ -299,7 +303,7 @@ function listWhere(filters: QuoteListFilters) {
     const cutoff = new Date()
     cutoff.setDate(cutoff.getDate() + EXPIRING_SOON_DAYS)
     conditions.push(isNull(quotes.archivedAt))
-    conditions.push(or(eq(quotes.statusTag, 'hot'), eq(quotes.statusTag, 'warm')))
+    conditions.push(or(eq(stats.statusTag, 'hot'), eq(stats.statusTag, 'warm')))
     conditions.push(gt(quotes.expiresAt, sql`now()`))
     conditions.push(lte(quotes.expiresAt, cutoff))
   } else if (filters.activity === 'unopened_3_days') {
@@ -314,13 +318,13 @@ function listWhere(filters: QuoteListFilters) {
     conditions.push(viewedInPeriodWhere(filters.trackedIn, now))
   } else if (filters.activity === 'never_opened') {
     conditions.push(isNull(quotes.archivedAt))
-    conditions.push(or(isNull(quoteEngagement.totalOpens), eq(quoteEngagement.totalOpens, 0)))
+    conditions.push(or(isNull(stats.totalOpens), eq(stats.totalOpens, 0)))
   } else if (filters.activity === 'forwarding') {
     conditions.push(eq(quoteEngagement.forwardingSuspected, true))
   } else if (filters.activity === 'gone_cold') {
     const cutoff = new Date()
     cutoff.setDate(cutoff.getDate() - GONE_COLD_DAYS)
-    conditions.push(or(eq(quotes.statusTag, 'hot'), eq(quotes.statusTag, 'warm')))
+    conditions.push(or(eq(stats.statusTag, 'hot'), eq(stats.statusTag, 'warm')))
     conditions.push(or(isNull(quoteEngagement.lastOpenedAt), lte(quoteEngagement.lastOpenedAt, cutoff)))
   }
 
@@ -339,12 +343,13 @@ function listWhere(filters: QuoteListFilters) {
 }
 
 function listOrderBy(filters: QuoteListFilters) {
+  const stats = currentQuoteStats()
   if (filters.sort === 'client_asc') return [asc(quotes.clientName), desc(quotes.createdAt)]
   if (filters.sort === 'client_desc') return [desc(quotes.clientName), desc(quotes.createdAt)]
   if (filters.sort === 'value_asc') return [asc(sql<number>`cast(${quotes.quoteValue} as numeric)`), desc(quotes.createdAt)]
   if (filters.sort === 'value_desc') return [desc(sql<number>`cast(${quotes.quoteValue} as numeric)`), desc(quotes.createdAt)]
-  if (filters.sort === 'interest_asc') return [asc(sql<number>`coalesce(${quotes.aiScore}, 0)`), desc(quotes.createdAt)]
-  if (filters.sort === 'interest_desc') return [desc(sql<number>`coalesce(${quotes.aiScore}, 0)`), desc(quotes.createdAt)]
+  if (filters.sort === 'interest_asc') return [asc(sql<number>`coalesce(${stats.aiScore}, 0)`), desc(quotes.createdAt)]
+  if (filters.sort === 'interest_desc') return [desc(sql<number>`coalesce(${stats.aiScore}, 0)`), desc(quotes.createdAt)]
 
   return [sql`${quoteEngagement.lastOpenedAt} desc nulls last`, desc(quotes.createdAt)]
 }
