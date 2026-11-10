@@ -1,3 +1,4 @@
+import { currentQuoteStats } from '@/modules/quote-tracker/current-stats'
 import { and, asc, desc, eq, isNull } from 'drizzle-orm'
 
 import { db } from '@/lib/db'
@@ -346,8 +347,8 @@ async function findQuoteContextForServiceM8Job(servicem8JobUuid: string): Promis
       jobDescription: quotes.jobDescription,
       jobAddress: quotes.jobAddress,
       quoteValue: quotes.quoteValue,
-      statusTag: quotes.statusTag,
-      aiScore: quotes.aiScore,
+      statusTag: currentQuoteStats().statusTag,
+      aiScore: currentQuoteStats().aiScore,
       pipelineStage: quotes.pipelineStage,
       createdAt: quotes.createdAt,
       updatedAt: quotes.updatedAt,

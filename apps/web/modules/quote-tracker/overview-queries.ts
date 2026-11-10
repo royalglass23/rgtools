@@ -1,3 +1,4 @@
+import { currentQuoteStats } from './current-stats'
 import { and, count, countDistinct, desc, eq, gt, gte, inArray, isNull, lte, or, sql, type SQL } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { quoteEngagement, quoteEvents, quotes } from '@rgtools/db/schema'
@@ -7,13 +8,14 @@ import { activeQuoteWhere, quoteProgressWhere, trackedPeriodWhere, unopenedAfter
 import { QUOTE_PROGRESS_GROUPS, type QuoteProgressGroup } from './quote-progress'
 
 export async function getTrackedQuoteOverview(paging: OverviewPaging, period: TrackedPeriod = '30', now = new Date()) {
+  const stats = currentQuoteStats(now)
   const active = and(activeQuoteWhere(now), isNull(quotes.outcome), trackedPeriodWhere(period, now))!
   const since = trackedSince(period, now)
   const expiryCutoff = new Date(now.getTime() + 7 * DAY_MS)
   const activityWhere = and(active, inArray(quoteEvents.eventType, ['open', 'download', 'cta']), lte(quoteEvents.createdAt, now), since ? gte(quoteEvents.createdAt, since) : undefined)!
   const attentionWhere = and(active, or(
-    eq(quotes.statusTag, 'hot'),
-    gte(quoteEngagement.totalOpens, 2),
+    eq(stats.statusTag, 'hot'),
+    gte(stats.totalOpens, 2),
     eq(quoteEngagement.forwardingSuspected, true),
     and(gt(quotes.expiresAt, now), lte(quotes.expiresAt, expiryCutoff)),
     unopenedAfterThreeDaysWhere(now),
@@ -31,9 +33,9 @@ export async function getTrackedQuoteOverview(paging: OverviewPaging, period: Tr
     db.select({
       activeLinks: count(),
       totalValue: sql<string>`coalesce(sum(${quotes.quoteValue}), 0)`,
-      hotCount: sql<number>`count(*) filter (where ${quotes.statusTag} = 'hot')`,
-      warmCount: sql<number>`count(*) filter (where ${quotes.statusTag} = 'warm')`,
-      coldCount: sql<number>`count(*) filter (where ${quotes.statusTag} = 'cold')`,
+      hotCount: sql<number>`count(*) filter (where ${stats.statusTag} = 'hot')`,
+      warmCount: sql<number>`count(*) filter (where ${stats.statusTag} = 'warm')`,
+      coldCount: sql<number>`count(*) filter (where ${stats.statusTag} = 'cold')`,
       unopenedAfterThreeDays: sql<number>`count(*) filter (where ${unopenedAfterThreeDaysWhere(now)})`,
       forwardingCount: sql<number>`count(*) filter (where ${quoteEngagement.forwardingSuspected} = true)`,
       viewedCount: sql<number>`count(*) filter (where ${viewedInPeriodWhere(period, now)})`,
@@ -88,8 +90,8 @@ export async function getTrackedQuoteOverview(paging: OverviewPaging, period: Tr
       clientName: quotes.clientName,
       workOrderId: quotes.workOrderId,
       jobAddress: quotes.jobAddress,
-      statusTag: quotes.statusTag,
-      totalOpens: quoteEngagement.totalOpens,
+      statusTag: stats.statusTag,
+      totalOpens: stats.totalOpens,
       uniqueSessions: quoteEngagement.uniqueSessions,
       totalTimeMs: quoteEngagement.totalTimeMs,
       maxScrollDepth: quoteEngagement.maxScrollDepth,
@@ -103,7 +105,7 @@ export async function getTrackedQuoteOverview(paging: OverviewPaging, period: Tr
       .where(attentionWhere)
       .orderBy(
         sql`case
-          when ${quotes.statusTag} = 'hot' or coalesce(${quoteEngagement.totalOpens}, 0) >= 2 then 0
+          when ${stats.statusTag} = 'hot' or ${stats.totalOpens} >= 2 then 0
           when ${quoteEngagement.forwardingSuspected} = true then 1
           when ${quotes.expiresAt} > ${now} and ${quotes.expiresAt} <= ${expiryCutoff} then 2
           else 3
@@ -142,8 +144,10 @@ export async function getTrackedQuoteOverview(paging: OverviewPaging, period: Tr
   }]))
 
   function previewFor(row: typeof activityRows[number] | typeof attentionRows[number], quoteId: string) {
-    const engagement = row.totalOpens === null ? null : {
-      totalOpens: row.totalOpens,
+    // unique_sessions is non-null in a stored summary. Derived totalOpens can
+    // be present without that summary, so it cannot identify a missing join.
+    const engagement = row.uniqueSessions === null ? null : {
+      totalOpens: row.totalOpens ?? 0,
       uniqueSessions: row.uniqueSessions ?? 0,
       totalTimeMs: row.totalTimeMs ?? 0,
       maxScrollDepth: row.maxScrollDepth ?? 0,

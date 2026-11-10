@@ -56,6 +56,22 @@ Quote PDFs and generated Producer Statement PDFs use the storage adapter in
 Cloudflare R2. The public viewer and tracker Workers read only the data they need through their
 configured secrets.
 
+## Quote engagement freshness
+
+`quote-tracker/current-stats.ts` derives scores and effective status in SQL from engagement and
+event evidence, with the newest manual override taking precedence. List filtering, sorting,
+counts, overview attention, detail, dashboard, client-history and AI-context reads use these
+expressions rather than the legacy saved `quotes.ai_score` / `status_tag` cache. Three-day
+unopened status is evaluated at read time. Reading a detail page does not write derived values.
+`StatsRefresh` refreshes the authenticated tracker subtree every 30 seconds while visible and
+on tab return, suppressing duplicate requests, pending refreshes and refreshes during form edits.
+No migration or Worker deployment is required. Active reading totals still arrive on viewer exit.
+
+The isolated SQL regression tests in `stats-freshness.test.ts` use Node 24's built-in SQLite
+with a small PostgreSQL syntax adapter; they skip on older Node versions. They exercise query
+results, filters, sorting and aggregates without a live database, but do not establish PostgreSQL
+driver compatibility or deployed query performance.
+
 ## Authentication and authorization
 
 NextAuth v5 uses credential login, JWT sessions, and a four-hour session lifetime. Users have an

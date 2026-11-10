@@ -1,3 +1,4 @@
+import { currentQuoteStats } from '@/modules/quote-tracker/current-stats'
 import { and, desc, eq } from 'drizzle-orm'
 
 import { db } from '@/lib/db'
@@ -323,8 +324,8 @@ export const realAiSuggestionDeps: AiSuggestionDeps = {
       .select({
         id: quotes.id,
         quoteValue: quotes.quoteValue,
-        statusTag: quotes.statusTag,
-        interestScore: quotes.aiScore,
+        statusTag: currentQuoteStats().statusTag,
+        interestScore: currentQuoteStats().aiScore,
         createdAt: quotes.createdAt,
         expiresAt: quotes.expiresAt,
         archivedAt: quotes.archivedAt,

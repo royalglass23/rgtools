@@ -9,7 +9,7 @@ import { CopyLinkButton } from '@/modules/quote-tracker/CopyLinkButton'
 import { EmailGateSettingsForm } from '@/modules/quote-tracker/EmailGateSettingsForm'
 import { ExpireLinkButton } from '@/modules/quote-tracker/ExpireLinkButton'
 import { isActiveLink, isExpired } from '@/modules/quote-tracker/expiry'
-import { getQuoteDetail, setManualTag, updateQuoteEmailGate, updateQuoteScore } from '@/modules/quote-tracker/queries'
+import { getQuoteDetail, setManualTag, updateQuoteEmailGate } from '@/modules/quote-tracker/queries'
 import {
   formatCurrency,
   formatDateTime,
@@ -17,7 +17,7 @@ import {
   StatusBadge,
 } from '@/modules/quote-tracker/presentation'
 import { ViewerAnalyticsTable } from '@/modules/quote-tracker/ViewerAnalyticsTable'
-import { computeScore, computeStatusTag, type EngagementData, type StatusTag } from '@/modules/quote-tracker/score'
+import { type EngagementData, type StatusTag } from '@/modules/quote-tracker/score'
 import { DismissibleNotice } from '@/modules/ui/DismissibleNotice'
 
 export default async function QuoteDetailPage({
@@ -39,14 +39,9 @@ export default async function QuoteDetailPage({
     ? `https://quotes.royalglass.co.nz/q/${detail.quote.shortCode}`
     : ''
   const engagementData = buildEngagementData(detail)
-  const computedScore = computeScore(engagementData)
-  const computedTag = computeStatusTag(engagementData)
+  const computedScore = detail.quote.aiScore
   const overrideTag = detail.overrides[0]?.newTag ?? null
-  const effectiveTag = overrideTag ?? computedTag
-
-  if (detail.quote.aiScore !== computedScore || detail.quote.statusTag !== effectiveTag) {
-    await updateQuoteScore(detail.quote.id, computedScore, effectiveTag)
-  }
+  const effectiveTag = detail.quote.statusTag
 
   async function saveManualTag(formData: FormData) {
     'use server'

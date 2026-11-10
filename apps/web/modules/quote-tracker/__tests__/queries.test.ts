@@ -17,7 +17,7 @@ vi.mock('drizzle-orm', () => ({
   isNull: vi.fn((column: { name?: string }) => ({ type: 'isNull', column: column.name })),
   lte: vi.fn((column: { name?: string }, value: unknown) => ({ type: 'lte', column: column.name, value })),
   or: vi.fn((...conditions: unknown[]) => ({ type: 'or', conditions })),
-  sql: vi.fn(() => ({ type: 'sql' })),
+  sql: vi.fn(() => ({ type: 'sql', mapWith() { return this } })),
   sum: vi.fn(() => 'sum'),
 }))
 
@@ -145,7 +145,7 @@ describe('dashboard scope in Track Quotes', () => {
     const scope = (whereCalls[0] as { conditions: unknown[] }).conditions[1]
     expect(scope).toEqual(expect.objectContaining({ type: 'and', conditions: expect.arrayContaining([
       { type: 'isNull', column: 'outcome' },
-      { type, column: 'total_opens', value },
+      { type, column: undefined, value },
     ]) }))
   })
 
@@ -201,7 +201,7 @@ describe('listQuotes – activity=expiring WHERE clause', () => {
 })
 
 describe('listQuotes – activity=never_opened WHERE clause', () => {
-  it('includes or with isNull on total_opens when activity is never_opened', async () => {
+  it('includes or with isNull on derived opens when activity is never_opened', async () => {
     await listQuotes({ ...filters, activity: 'never_opened' })
 
     expect(whereCalls[0]).toEqual(expect.objectContaining({
@@ -210,7 +210,7 @@ describe('listQuotes – activity=never_opened WHERE clause', () => {
         expect.objectContaining({
           type: 'or',
           conditions: expect.arrayContaining([
-            { type: 'isNull', column: 'total_opens' },
+            { type: 'isNull', column: undefined },
           ]),
         }),
       ]),
