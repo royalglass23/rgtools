@@ -40,6 +40,10 @@ Paginated lists use the same count, centered Previous/Page/Next controls, and Pa
 
 Track Quotes opens directly to its management table with Search first; summary cards remain on the Quotes overview.
 
+Quote Tracker scores, status filters and overview counts use current engagement without requiring
+a detail-page visit. Its pages refresh every 30 seconds while visible and on tab return, pausing
+during form edits. Manual status overrides remain authoritative.
+
 Calculator enquiries with email and phone matches on different provisional clients are retained as separate leads with a visible contact-review reason. Customer estimate email and ServiceM8 handling continue after the lead is saved.
 
 ### Workflow boundaries

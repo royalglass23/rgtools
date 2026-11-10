@@ -10,7 +10,7 @@ vi.mock('drizzle-orm', () => ({
   desc: vi.fn((column: { name?: string }) => ({ direction: 'desc', column: column.name })),
   eq: vi.fn((column: { name?: string }, value: unknown) => ({ type: 'eq', column: column.name, value })),
   isNull: vi.fn((column: { name?: string }) => ({ type: 'isNull', column: column.name })),
-  sql: vi.fn(() => ({ type: 'sql' })),
+  sql: vi.fn(() => ({ type: 'sql', mapWith() { return this } })),
 }))
 
 vi.mock('@rgtools/db/schema', () => ({

@@ -1,3 +1,4 @@
+import { currentQuoteStats } from '@/modules/quote-tracker/current-stats'
 import { and, desc, eq, isNull, sql } from 'drizzle-orm'
 import { quotes } from '@rgtools/db/schema'
 import { clientAliases, clientContacts, clients, leads } from '@rgtools/db/schema-leads'
@@ -364,7 +365,7 @@ export async function getClientDetail(clientId: string): Promise<ClientDetail | 
         jobDescription: quotes.jobDescription,
         jobAddress: quotes.jobAddress,
         quoteValue: quotes.quoteValue,
-        statusTag: sql<string | null>`${quotes.statusTag}`,
+        statusTag: sql<string | null>`${currentQuoteStats().statusTag}`,
         createdAt: quotes.createdAt,
         updatedAt: quotes.updatedAt,
       })
