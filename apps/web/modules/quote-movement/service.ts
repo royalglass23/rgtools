@@ -141,7 +141,6 @@ export async function requestQuoteMovementRefresh({
   if (!request.accepted) return { status: "already_pending" };
 
   schedule(async () => {
-    let completed = false;
     try {
       await refresh({
         actorId,
