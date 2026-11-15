@@ -262,3 +262,20 @@ the app, then sign out and back in to refresh the session.
 **PDF generation reports a missing template**: the PS Generator configuration is seeded, but the
 configured R2/local storage object is not present. Upload or configure the template before testing
 generation.
+# Work Orders dashboard rollout
+
+Migration `0072_work_order_dashboard_fields.sql` adds separate JSON manual state and a revision to existing Work Order items.
+Apply it through the normal reviewed database migration workflow before enabling the new dashboard in an environment.
+Source reconciliation does not update these columns; installer and install date remain canonical existing item fields.
+
+`ROXY_DASHBOARD_USER_ID` may identify a verified individual Staff account by `users.id`. Admins are always allowed.
+If it is unset, access is Admin-only; never substitute the generic Staff login or a display-name match.
+The Roxy Dashboard reuses the existing `/admin/job-progress` screen at `/dashboard/roxy`.
+
+Use `scripts/kanban-import.ts --dry-run --input-dir <folder>` from `apps/web` for a preview.
+Set `RGTOOLS_PYTHON` to a Python 3 executable if needed. Extraction uses only Python's standard library.
+`--offline` skips database matching. The report is written to the repository's ignored `tmp/rg406-import-preview.json`.
+There is deliberately no apply mode; accepting and reconciling the preview is required before any import is implemented/run.
+
+The optional `DATABASE_WS_PROXY` is accepted only for a `DATABASE_URL` on `127.0.0.1` and a loopback proxy address.
+It exists for disposable local PostgreSQL acceptance tests. Do not use a production/shared database for mutating tests or builds.

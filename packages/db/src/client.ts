@@ -33,6 +33,16 @@ if (!process.env.DATABASE_URL) {
 
 neonConfig.webSocketConstructor = ws
 
+// Optional loopback-only proxy for disposable local PostgreSQL acceptance tests.
+// Production/remote database connections always retain Neon's secure defaults.
+if (process.env.DATABASE_WS_PROXY && process.env.DATABASE_URL &&
+    new URL(process.env.DATABASE_URL).hostname === '127.0.0.1' &&
+    /^127\.0\.0\.1:\d+$/.test(process.env.DATABASE_WS_PROXY)) {
+  neonConfig.wsProxy = () => process.env.DATABASE_WS_PROXY!
+  neonConfig.useSecureWebSocket = false
+  neonConfig.pipelineConnect = false
+}
+
 const pool = new Pool({ connectionString: process.env.DATABASE_URL! })
 
 export const db = drizzle(pool, {

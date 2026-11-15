@@ -11,6 +11,10 @@ import { auth } from "@/lib/auth";
 import { knowledgeInboxAccess } from "@/modules/knowledge-inbox/access";
 import { redirect } from "next/navigation";
 import { signOutAction } from "./actions";
+import { getDashboardUser } from '@/lib/dashboard-access';
+import { canViewRoxyDashboard } from '@/lib/dashboard-policy';
+import { sharedDashboardItems } from '@/lib/dashboard-navigation';
+import { ProductDrafts } from '@/modules/kanban/ProductDrafts';
 
 export default async function DashboardLayout({
   children,
@@ -21,6 +25,8 @@ export default async function DashboardLayout({
   if (!session?.user?.id) redirect("/login");
 
   const accessibleModules = await getAccessibleModules(session.user.id);
+  const currentUser = await getDashboardUser();
+  const dashboardItems = sharedDashboardItems(canViewRoxyDashboard(currentUser, process.env.ROXY_DASHBOARD_USER_ID), accessibleModules.some(module => module.slug === 'quote-tracker'));
   const {
     primaryModules,
     leadIntakeItems,
@@ -34,7 +40,7 @@ export default async function DashboardLayout({
     showWorkOrderNavigation: true,
   });
   const navigation: DashboardNavigationEntry[] = [
-    { kind: "link", id: "dashboard", label: "Dashboard", href: "/" },
+    ...navigationGroup('dashboard', 'Dashboard', dashboardItems, '/'),
     ...navigationGroup("lead-intake", "Lead Intake", leadIntakeItems),
     ...primaryModules
       .filter((module) => module.slug !== "leads")
@@ -44,11 +50,11 @@ export default async function DashboardLayout({
         label: module.name,
         href: `/${module.slug}`,
       })),
-    ...navigationGroup("quote-tracker", "Quotes", quoteTrackerItems, "/quote-tracker/overview"),
+    ...navigationGroup("quote-tracker", "Quotes", quoteTrackerItems, "/quote-tracker"),
     ...navigationGroup("work-order", "Work Orders", workOrderItems),
     ...navigationGroup("clients", "Clients", clientsItems),
     ...navigationGroup("ps-generator", "PS Generator", psGeneratorItems),
-    ...navigationGroup("admin", "Admin", adminItems, "/admin/job-progress"),
+    ...navigationGroup("admin", "Admin", adminItems, "/admin/administration"),
     ...(process.env.RG_BRAIN_INBOX_DATABASE_URL && knowledgeInboxAccess(session.user, process.env.RG_BRAIN_INBOX_RESPONDER_USER_IDS).respondent
       ? [{ kind: "link" as const, id: "knowledge-inbox", label: "Knowledge Inbox", href: "/knowledge-inbox" }]
       : []),
@@ -64,7 +70,7 @@ export default async function DashboardLayout({
         </form>
       }
     >
-      {children}
+      <ProductDrafts key={session.user.id}>{children}</ProductDrafts>
     </DashboardShell>
   );
 }

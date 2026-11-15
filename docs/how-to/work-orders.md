@@ -1,5 +1,9 @@
 # Work Orders
 
+For shared product readiness and three-week planning, open **Dashboard -> Work Orders**.
+All signed-in staff can use that dashboard and its manual fields. See [Work Orders dashboard](work-order-dashboard.md).
+The operational Work Orders tools described below retain their existing role permissions.
+
 Use **Work Orders** for active jobs after the ServiceM8 job has moved to `Work Order` status.
 ServiceM8 remains the source of truth for the job status and source details; RG Tools stores the
 internal operational context used by the team.

@@ -4,6 +4,8 @@ import { and, eq, inArray, notInArray, or, sql } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { auth } from '@/lib/auth'
+import { requireDashboardUser } from '@/lib/dashboard-access'
+import { dashboardSourceRequest, verifyDashboardVendor } from '@/modules/kanban/source'
 import { logAudit } from '@/lib/audit-db'
 import { db } from '@/lib/db'
 import { createServiceM8RequestFromEnv, type ServiceM8FetchRequest } from '@/lib/servicem8/client'
@@ -232,11 +234,26 @@ export async function refreshWorkOrderByJobNumberFromServiceM8(
   ))
 }
 
+export async function refreshDashboardWorkOrdersAction(): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireDashboardUser()
+  try {
+    if (!(await acquireWorkOrderRateLimit('dashboard-refresh', user.id))) return { ok: false, error: 'A refresh was requested recently. Wait a minute before trying again.' }
+    const request = dashboardSourceRequest()
+    await verifyDashboardVendor(request)
+    await withWorkOrderRefreshLock(() => performWorkOrderRefresh(request, async () => 0, user.id, { kind: 'all' }, false))
+    // The dashboard client coordinates refresh after checking all dirty forms.
+    return { ok: true }
+  } catch {
+    return { ok: false, error: 'ServiceM8 refresh could not finish. The previous saved records are kept. Try again.' }
+  }
+}
+
 async function performWorkOrderRefresh(
   request: ServiceM8FetchRequest,
   enqueueEnrichments: WorkOrderItemEnrichmentEnqueuer,
   actorId: string | null,
   scope: WorkOrderRefreshScope,
+  enableEnrichment = true,
 ): Promise<WorkOrderRefreshResult> {
 
   let jobRows: ServiceM8WorkOrderJob[]
@@ -539,7 +556,7 @@ async function performWorkOrderRefresh(
     throw error
   }
 
-  try {
+  if (enableEnrichment) try {
     const queueResult = await enqueueEnrichments(enrichmentHandoffInputs.map((item) => ({
       servicem8ItemUuid: item.servicem8ItemUuid,
       originalDescription: item.originalDescription,
