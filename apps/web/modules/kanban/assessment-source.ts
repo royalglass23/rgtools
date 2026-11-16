@@ -7,6 +7,9 @@ import type { AssessmentContext, AssessmentJob, AssessmentSource, SourceKind } f
 export function assessmentSnapshotHash(job: string | null, item: string) { return createHash('sha256').update(JSON.stringify([job, item])).digest('hex') }
 export function assessmentContextHash(context: AssessmentContext) { return createHash('sha256').update(JSON.stringify(context)).digest('hex') }
 const text = (value: unknown) => typeof value === 'string' ? value.trim() : ''
+export class AssessmentContextLimitError extends Error {
+  constructor(readonly size: number) { super('Evidence requires a larger-context review; nothing was truncated.') }
+}
 async function completeRows(request: ServiceM8FetchRequest, path: string) {
   const rows: Record<string, unknown>[] = [], seen = new Set<string>()
   let cursor: string | null = '-1'
@@ -52,6 +55,7 @@ export async function loadAssessmentContext(job: AssessmentJob, request: Service
     }
   }
   const context = { items, sources }
-  if (JSON.stringify(context).length > 60000) throw new Error('Evidence requires a larger-context review; nothing was truncated.')
+  const size = JSON.stringify(context).length
+  if (size > 160000 || sources.length > 900) throw new AssessmentContextLimitError(size)
   return context
 }

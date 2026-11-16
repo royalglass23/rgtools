@@ -283,4 +283,76 @@ test.describe('RG-406 isolated dashboard acceptance', () => {
       for (const file of [noteFile, failFile]) if (existsSync(file)) unlinkSync(file)
     }
   })
+  test('a dated email without a year produces an automatic due row and failures stay visible', async ({ page, request }) => {
+    const emailFile = path.join(root, 'assessment-email.txt'), dateFile = path.join(root, 'assessment-date.txt'), failFile = path.join(root, 'assessment-fail')
+    const planned = new Date(Date.now() + 4 * 86400000)
+    const iso = new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland', year: 'numeric', month: '2-digit', day: '2-digit' }).format(planned)
+    const wording = new Intl.DateTimeFormat('en-NZ', { timeZone: 'Pacific/Auckland', weekday: 'long', month: 'long', day: 'numeric' }).format(planned)
+    const quote = `We plan to install the shower on ${wording}.`
+    try {
+      localSql(`UPDATE work_order_items SET install_date=NULL, dashboard_state='{}', dashboard_assessment='{}', dashboard_revision=dashboard_revision+1 WHERE id IN ('${shower}', '${balustrade}')`)
+      writeFileSync(emailFile, quote); writeFileSync(dateFile, iso)
+      await login(page, 'rg406-staff')
+      await page.goto('/dashboard/work-orders?focus=upcoming')
+      await clearRefreshLimit()
+      await page.getByRole('button', { name: 'Refresh from ServiceM8' }).click()
+      await expect(page.getByText('ServiceM8 records refreshed.')).toBeVisible()
+      const item = page.locator(`#product-${shower}`)
+      await expect(item).toBeVisible()
+      await expect(page.locator(`#product-${balustrade}`)).toHaveCount(0)
+      await expect(page.getByText(/^Target:.*AI-suggested installation/)).toBeVisible()
+      await item.locator(':scope > summary').click()
+      await item.getByText('Detected planning evidence', { exact: true }).click()
+      await expect(item.locator('blockquote')).toContainText(quote)
+      await expect(item.getByLabel('Target install date')).toHaveValue('')
+      writeFileSync(emailFile, quote + ' Updated evidence.'); writeFileSync(failFile, 'synthetic provider failure')
+      await clearRefreshLimit()
+      await page.getByRole('button', { name: 'Refresh from ServiceM8' }).click()
+      await expect(page.getByRole('alert').filter({ hasText: 'Due-date assessment failed' })).toContainText('Due-date assessment failed for 2 products')
+      await expect(item).toHaveCount(0)
+      expect((await (await request.get('http://127.0.0.1:55442/__metrics')).json()).writes).toBe(0)
+    } finally { for (const file of [emailFile, dateFile, failFile]) if (existsSync(file)) unlinkSync(file) }
+  })
+  test('Master flags retain TBC products while per-product overrides and history stay independent', async ({ page }) => {
+    const workspace = path.resolve(process.cwd(), '../..'), file = path.join(root, 'synthetic-master-flags.json')
+    const key = 'kanban.master-flags.v1'
+    const previous = execFileSync(process.env.RG406_PSQL ?? 'psql', ['-h','127.0.0.1','-p','55440','-U','rg406','-d','rg406','-At','-c',`SELECT row_to_json(settings) FROM settings WHERE key='${key}'`], {encoding:'utf8'}).trim()
+    const runImport = (extra: string[] = []) => {
+      const output = execFileSync(process.execPath, [path.join(workspace,'node_modules/tsx/dist/cli.mjs'),'--tsconfig',path.join(workspace,'apps/web/tsconfig.json'),path.join(workspace,'apps/web/scripts/kanban-flags.ts'),'--target','local','--input',file,...extra],
+        {cwd:workspace,encoding:'utf8',timeout:60000,env:{...process.env,DATABASE_URL:'postgresql://rg406@127.0.0.1:55440/rg406?sslmode=disable',DATABASE_WS_PROXY:'127.0.0.1:55441'}})
+      return JSON.parse(output.trim().split('\n').at(-1)!)
+    }
+    try {
+      writeFileSync(file,JSON.stringify({version:1,source:{spreadsheetId:'synthetic-sheet-id-123456',sheetId:1,sheet:'Master',modifiedAt:'2026-11-16T00:00:00Z',retrievedAt:'2026-11-17T00:00:00Z',ranges:['A1:B1000','AR1:AR1000']},rows:[{row:5,jobNumber:'TEST406',flag:'Y',cell:'AR5'}]}))
+      localSql(`UPDATE work_order_items SET install_date=NULL,dashboard_assessment='{}',dashboard_state='{}',dashboard_revision=dashboard_revision+1 WHERE id IN ('${shower}','${balustrade}')`)
+      localSql(`UPDATE work_order_items SET dashboard_state='{"focus":"exclude","siteReady":"yes","notes":"Preserve product override"}' WHERE id='${shower}'`)
+      const plan=runImport(); expect(plan.matchedJobs).toBe(1); expect(plan.productOverrides).toBe(1)
+      expect(runImport(['--apply','--expected-plan',plan.planHash]).applied).toBe(1)
+      await login(page,'rg406-staff')
+      await page.goto('/dashboard/work-orders?focus=upcoming')
+      const included=page.locator(`#product-${balustrade}`)
+      await expect(included).toBeVisible(); await expect(page.locator(`#product-${shower}`)).toHaveCount(0)
+      await expect(page.getByText('Master flag: Y · Inherited')).toBeVisible()
+      await included.locator(':scope > summary').click()
+      await expect(included.getByLabel('Target install date')).toHaveValue('')
+      await included.getByText('Change history',{exact:true}).click()
+      await expect(included.getByText('Imported Master flag',{exact:true})).toBeVisible()
+      await page.getByRole('link',{name:'All products',exact:true}).click()
+      const excluded=page.locator(`#product-${shower}`)
+      await excluded.locator(':scope > summary').click()
+      await expect(excluded.getByLabel('Site ready',{exact:true})).toHaveValue('yes')
+      await expect(excluded.getByLabel('Notes',{exact:true})).toHaveValue('Preserve product override')
+      await expect(excluded.getByLabel('Focus selection')).toHaveValue('exclude')
+      await excluded.getByLabel('Focus selection').selectOption('auto')
+      await excluded.getByRole('button',{name:'Save product'}).click()
+      await expect(excluded.getByRole('status')).toHaveText('Saved. Change history updated.')
+      await page.getByRole('link',{name:'Due within 3 weeks',exact:true}).click()
+      await expect(page.locator(`#product-${shower}`)).toBeVisible(); await expect(included).toBeVisible()
+      const again=runImport(); expect(runImport(['--apply','--expected-plan',again.planHash]).applied).toBe(0)
+    } finally {
+      if(previous) {const saved=JSON.parse(previous),literal=(value:string)=>value.replaceAll("'","''");localSql(`UPDATE settings SET value='${literal(saved.value)}',updated_by=${saved.updated_by?`'${literal(saved.updated_by)}'`:'NULL'},updated_at='${literal(saved.updated_at)}' WHERE key='${key}'`)}
+      else localSql(`DELETE FROM settings WHERE key='${key}'`)
+      if(existsSync(file))unlinkSync(file)
+    }
+  })
 })

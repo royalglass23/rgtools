@@ -33,7 +33,7 @@ export const assessmentStore: AssessmentStore = {
         if (!next) throw new Error('Missing assessment product.')
         const before = readStoredAssessment(item.dashboardAssessment)
         await tx.update(workOrderItems).set({ dashboardAssessment: { ...next } }).where(eq(workOrderItems.id, item.id))
-        if (!before || before.sourceHash !== next.sourceHash || before.state !== next.state || before.rules !== next.rules || before.model !== next.model || JSON.stringify(before.result) !== JSON.stringify(next.result)) {
+        if (!before || before.sourceHash !== next.sourceHash || before.state !== next.state || before.rules !== next.rules || before.model !== next.model || before.error !== next.error || JSON.stringify(before.result) !== JSON.stringify(next.result)) {
           await tx.insert(workOrderEvents).values({ workOrderId: job.id, workOrderItemId: item.id, actorId, fieldName: 'dashboard_evidence_assessed',
             previousValue: before, newValue: next, isClientVisibleCandidate: false })
         }
@@ -41,11 +41,11 @@ export const assessmentStore: AssessmentStore = {
       return true
     })
   },
-  async fail(job, checkedAt, actorId) {
+  async fail(job, checkedAt, actorId, message) {
     const values: Record<string, StoredAssessment> = {}
     for (const item of job.items) values[item.id] = { state: 'failed', sourceHash: item.stored?.sourceHash ?? '', snapshotHash: item.stored?.snapshotHash ?? '',
       rules: ASSESSMENT_RULES, model: item.stored?.model ?? '', checkedAt, assessedAt: item.stored?.assessedAt ?? null, result: item.stored?.result ?? null,
-      error: 'Evidence assessment could not finish. Previous suggestions are retained for review; manual values are unchanged.' }
+      error: message ?? 'Evidence assessment could not finish. Previous suggestions are retained for review; manual values are unchanged.' }
     await this.save(job, values, actorId)
   },
 }

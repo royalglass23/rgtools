@@ -23,18 +23,26 @@ describe('complete bounded planning evidence', () => {
     await expect(loadAssessmentContext(job, async () => new Response(JSON.stringify([{ related_object_uuid: 'other', note: 'Install shower on 20/11/2026' }])))).rejects.toThrow(/another job/)
     await expect(loadAssessmentContext({ ...job, description: 'x'.repeat(12001) }, async () => new Response('[]'))).rejects.toThrow(/too long/)
   })
+  it('accepts complete larger histories seen in the failed batch and still rejects oversized evidence', async () => {
+    const history = (count: number) => async (url: string) => new Response(JSON.stringify(url.startsWith('/note') ? Array.from({ length: count }, (_, i) => ({ uuid: `synthetic-${i}`, related_object_uuid: 'source', active: 1, note: `Synthetic note ${i}. ` + 'Fictional glass product context. '.repeat(250) })) : []))
+    const context = await loadAssessmentContext(job, history(12))
+    expect(JSON.stringify(context).length).toBeGreaterThan(60000)
+    expect(context.sources.filter(source => source.kind === 'note')).toHaveLength(12)
+    await expect(loadAssessmentContext(job, history(24))).rejects.toThrow(/larger-context/)
+  })
 })
 describe('planning provider boundary', () => {
   it('sends strict structured output with source text as data and disables provider storage', async () => {
     vi.stubEnv('OPENAI_API_KEY', 'synthetic-key')
     try {
-      const request = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ output: [{ content: [{ type: 'output_text', text: '{"results":[]}' }] }] })))
-      expect(await generateDueAssessment({ items: [], sources: [] }, request)).toEqual({ results: [] })
+      const request = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ output: [{ content: [{ type: 'output_text', text: '{"results":{"p0":{"status":"unknown"}}}' }] }] })))
+      const context = { items: [{ token: 'p0', text: 'Synthetic panel' }], sources: [] }
+      expect(await generateDueAssessment(context, request)).toEqual({ results: [{ item: 'p0', status: 'unknown' }] })
       const body = JSON.parse(request.mock.calls[0][1]!.body as string)
       expect(body.store).toBe(false); expect(body.text.format.strict).toBe(true)
       expect(body.instructions).toMatch(/untrusted data/); expect(body.instructions).toMatch(/Never use calendar/)
-      expect(JSON.parse(body.input)).toEqual({ items: [], sources: [] })
-      await expect(generateDueAssessment({ items: [], sources: [] }, async () => new Response('{}', { status: 503 }))).rejects.toThrow(/could not complete/)
+      expect(JSON.parse(body.input)).toEqual(context)
+      await expect(generateDueAssessment(context, async () => new Response('{}', { status: 503 }))).rejects.toThrow(/could not complete/)
     } finally { vi.unstubAllEnvs() }
   })
 })

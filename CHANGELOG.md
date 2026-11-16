@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Match Kanban Master Y/N/? flags with an audited, exact-match import; products inherit job flags while keeping independent overrides and readiness. Repair AI product identity responses and complete-history limits behind failed assessments.
+
+- Fix three-week assessment rejecting yearless dates in dated notes/emails; validate nearby source-year dates and year rollover, invalidate old rule caches, and surface assessment failures with safe retry details.
+
 - Assess installation/delivery evidence on each Work Orders source refresh, cache unchanged results, and show per-product AI suggestions with source quotes. Preserve staff dates and manual inclusion priority; add migration 0073 for separate assessment metadata.
 
 - Explain products missing three-week planning dates and show compact Materials descriptions with full hover, keyboard and tap previews.

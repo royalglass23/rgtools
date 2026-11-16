@@ -14,9 +14,10 @@ Both tables use the standard RG Tools pagination: matching count, Previous / cur
 
 **Product planning** has All products, Due within 3 weeks, Overdue, Unknown and Review conflicts views.
 Due within 3 weeks includes today through 21 days ahead in Auckland time. A booking does not establish an installation date.
-This view uses a saved staff target date first, otherwise an evidence-backed **AI-suggested** installation or delivery date. Suggestions are unconfirmed. Open **Detected planning evidence** inside Edit product to read the reason, source quotes and assessment time. Ambiguous dates stay in Review conflicts or Unknown. Products without a usable date or manual inclusion stay in Unknown; the empty view links to them. Legacy spreadsheet dates and flags are not imported automatically.
+Membership follows this order: a product's **Include manually / Exclude manually / Needs review** choice, then the imported Master **Y / N / ?** job flag, then the automatic 21-day date calculation where no flag exists. A Y flag includes TBC or overdue work; N excludes it; ? keeps it for review. Each product inherits the job flag independently and can override it without changing the other products.
+The displayed date uses a saved staff target first, otherwise an evidence-backed **AI-suggested** installation or delivery date. Suggestions are unconfirmed and never overwrite staff dates. Open **Detected planning evidence** inside Edit product to read the reason, source quotes and assessment time. Imported flag provenance appears above the editor and in **Change history**. Spreadsheet dates and other manual fields are not transferred by the flag import.
 Manual include/exclude choices that disagree with a target date appear under Review conflicts; dates are not silently changed.
-Following the Kanban bot's rules, **Include manually** keeps a product in Due within 3 weeks even when its date is overdue or outside the window. **Exclude manually** and **Needs review** prevent automatic inclusion. Clearing a staff date leaves it blank and returns to suggestions when **Automatic assessment** is selected.
+Following the Kanban bot's rules, **Include manually** keeps a product in Due within 3 weeks even when its date is overdue or outside the window. **Exclude manually** and **Needs review** override the imported flag. **Use Kanban flag / automatic date** clears the product override and restores inheritance. Clearing a staff date leaves it blank; it does not clear the job flag.
 An unknown readiness state is different from No or N/A. PS1/PS3 needed is separate from issued. Bottle strut and BC are editable product fields and are included in change history.
 
 ## Edit a product
@@ -44,9 +45,10 @@ Expand that draft to copy its values, or return to All products to continue edit
 If a refresh fails, the previous saved records remain and the failure is shown. The displayed source time is the last successful reconciliation,
 not the time of a staff readiness edit or proof of complete Diary history.
 Assessment failures or work left pending are shown in the refresh result. Retry on the next refresh. Stale or failed suggestions do not drive automatic inclusion; saved staff fields still apply. Large evidence histories stay pending/reviewable rather than being silently truncated. AI must be configured by an administrator before suggestions are available.
+An email such as “install on 1 December” can now supply a planning date when its own timestamp establishes a nearby year. Old emails keep their original year. If assessment fails, a banner above the tables shows how many products failed; open **All products → Edit product → Detected planning evidence** for safe retry details. An empty due view can therefore mean an assessment failed, rather than that no work is due.
 
 ## Legacy workbook values
 
-Existing spreadsheets and backups need an import preview and product mapping review before their values are applied.
-They are not silently imported when opening or refreshing this dashboard. Keep current team copies until the reviewed cutover.
+The approved Master **Within 3 weeks?** snapshot is transferred through an exact job-match preview and recorded with its source cells. This is a one-time bridge; later Sheet changes need another explicit import. Normal ServiceM8 refresh preserves imported flags and product edits.
+Other spreadsheet fields and backups need their own import review. Keep team copies until the reviewed cutover.
 AI follow-up drafting and sending are outside this release.

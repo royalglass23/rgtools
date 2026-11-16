@@ -15,7 +15,7 @@ const product: DashboardProduct = {
   jobNumber: 'TEST406', customer: 'Fixture', address: 'Test site', jobUuid: null, syncedAt: null,
   jobInstallDate: null, itemUuid: 'fixture', label: 'Shower', generatedLabel: null, description: 'Source shower',
   quantity: '1', installDate: null, installerId: null, installer: null, manual: parseManualState({}), revision: 0, focus: 'unknown',
-  assessment: null, assessmentCurrent: false, planningDate: null, detectedDate: null, inDueWindow: false, dateSource: 'unknown',
+  assessment: null, assessmentCurrent: false, planningDate: null, detectedDate: null, inDueWindow: false, dateSource: 'unknown', kanbanFlag: null,
 }
 beforeEach(() => { vi.clearAllMocks(); mocks.save.mockResolvedValue({ ok: true, revision: 1 }) })
 describe('staff product editor', () => {

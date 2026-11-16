@@ -1,10 +1,11 @@
-import { and, asc, desc, eq, ilike, or } from 'drizzle-orm'
+import { and, asc, desc, eq, ilike, isNull, or } from 'drizzle-orm'
 import { db } from '@/lib/db'
-import { users } from '@rgtools/db/schema'
+import { settings, users } from '@rgtools/db/schema'
 import { workOrderEvents, workOrderInstallers, workOrderItems, workOrders } from '@rgtools/db/schema-workorders'
 import { aucklandToday, parseManualState, type ItemSave } from './work-orders'
 import { assessmentIsCurrent, readStoredAssessment, resolveProductPlanning } from './assessment'
 import { assessmentSnapshotHash } from './assessment-source'
+import { importedFlagForJob, KANBAN_FLAGS_SETTING, readImportedFlags } from './kanban-flags'
 
 export async function readWorkOrderDashboard(q = '') {
   const found = await db.select({
@@ -24,17 +25,21 @@ export async function readWorkOrderDashboard(q = '') {
     .orderBy(asc(workOrders.jobNumber), asc(workOrderItems.sortOrder), asc(workOrderItems.id)).limit(10001)
   if (found.length > 10000) throw new Error('Too many products. Narrow the search to load the dashboard.')
   const today = aucklandToday()
+  const [savedFlags] = await db.select({ value: settings.value }).from(settings).where(eq(settings.key, KANBAN_FLAGS_SETTING))
+  let imported = readImportedFlags(), flagsUnavailable = false
+  try { imported = readImportedFlags(savedFlags?.value) } catch { flagsUnavailable = true }
   const rows = found.map(({ jobDescription, ...row }) => {
     const assessment = readStoredAssessment(row.assessment), manual = parseManualState(row.manual)
     const assessmentCurrent = Boolean(row.description && assessmentIsCurrent(assessment, assessmentSnapshotHash(jobDescription, row.description), row.syncedAt))
+    const kanbanFlag = importedFlagForJob(imported, { id: row.jobId, jobNumber: row.jobNumber, jobUuid: row.jobUuid })
     return { ...row, revision: row.revision ?? 0, syncedAt: row.syncedAt?.toISOString() ?? null,
       label: row.label ?? row.generatedLabel ?? row.description ?? 'No product recorded', manual, assessment, assessmentCurrent,
-      ...resolveProductPlanning(row.installDate, manual, assessment, assessmentCurrent, today),
+      kanbanFlag, ...resolveProductPlanning(row.installDate, manual, assessment, assessmentCurrent, today, flagsUnavailable ? '?' : kanbanFlag?.flag ?? null),
     }
   })
   const installers = await db.select({ id: workOrderInstallers.id, name: workOrderInstallers.displayName })
     .from(workOrderInstallers).where(eq(workOrderInstallers.isActive, true)).orderBy(asc(workOrderInstallers.displayName))
-  return { rows, installers, today }
+  return { rows, installers, today, flagsUnavailable }
 }
 export type DashboardProduct = Awaited<ReturnType<typeof readWorkOrderDashboard>>['rows'][number]
 
@@ -69,9 +74,10 @@ export async function persistProductOperations(input: ItemSave, actorId: string,
 }
 
 export async function readProductHistory(itemId: string, page = 1) {
+  const [item] = await db.select({ jobId: workOrderItems.workOrderId }).from(workOrderItems).where(eq(workOrderItems.id, itemId)).limit(1)
   return db.select({ id: workOrderEvents.id, actor: users.username, field: workOrderEvents.fieldName,
     previous: workOrderEvents.previousValue, next: workOrderEvents.newValue, createdAt: workOrderEvents.createdAt })
     .from(workOrderEvents).leftJoin(users, eq(users.id, workOrderEvents.actorId))
-    .where(eq(workOrderEvents.workOrderItemId, itemId)).orderBy(desc(workOrderEvents.createdAt), desc(workOrderEvents.id))
+    .where(or(eq(workOrderEvents.workOrderItemId, itemId), item ? and(eq(workOrderEvents.workOrderId, item.jobId), isNull(workOrderEvents.workOrderItemId), eq(workOrderEvents.fieldName, 'dashboard_kanban_flag_imported')) : undefined)).orderBy(desc(workOrderEvents.createdAt), desc(workOrderEvents.id))
     .limit(21).offset((page - 1) * 20)
 }

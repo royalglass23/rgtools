@@ -1,7 +1,8 @@
 import { classifyFocus, validDate, type ManualState } from './work-orders'
 import { supportedEvidenceDates } from './temporal-evidence'
+import type { KanbanFlag } from './kanban-flags'
 
-export const ASSESSMENT_RULES = 'kanban-due-v1-20261116'
+export const ASSESSMENT_RULES = 'kanban-due-v3-20261117'
 export type SourceKind = 'description' | 'item' | 'note' | 'email'
 export type AssessmentSource = { token: string; kind: SourceKind; item: string | null; observedAt: string | null; text: string; reference: string | null }
 export type AssessmentContext = { items: Array<{ token: string; text: string }>; sources: AssessmentSource[] }
@@ -19,7 +20,7 @@ export type AssessmentJob = { id: string; sourceId: string; customer: string; ad
 export type AssessmentStore = {
   list(): Promise<AssessmentJob[]>;
   save(job: AssessmentJob, values: Record<string, StoredAssessment>, actorId: string): Promise<boolean>;
-  fail(job: AssessmentJob, checkedAt: string, actorId: string): Promise<void>;
+  fail(job: AssessmentJob, checkedAt: string, actorId: string, message?: string): Promise<void>;
 }
 const normalized = (text: string) => text.replace(/\s+/g, ' ').trim().toLowerCase()
 const object = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === 'object' && !Array.isArray(value))
@@ -70,14 +71,15 @@ export function readStoredAssessment(raw: unknown): StoredAssessment | null {
   return raw as StoredAssessment
 }
 
-export function resolveProductPlanning(date: string | null, manual: ManualState, assessment: StoredAssessment | null, sourceCurrent: boolean, today: string) {
+export function resolveProductPlanning(date: string | null, manual: ManualState, assessment: StoredAssessment | null, sourceCurrent: boolean, today: string, inheritedFlag: KanbanFlag | null = null) {
   const usable = sourceCurrent && assessment?.state === 'complete' && assessment.rules === ASSESSMENT_RULES
   const detectedDate = usable && assessment.result?.status === 'dated' ? assessment.result.date : null
   const planningDate = date ?? detectedDate
-  const focus = !date && manual.focus === 'auto' && usable && assessment.result?.status === 'review'
-    ? 'conflict' as const : classifyFocus(planningDate, manual.focus, today)
+  const choice = manual.focus !== 'auto' ? manual.focus : inheritedFlag === 'Y' ? 'include' : inheritedFlag === 'N' ? 'exclude' : inheritedFlag === '?' ? 'unknown' : 'auto'
+  const focus = !date && choice === 'auto' && usable && assessment.result?.status === 'review'
+    ? 'conflict' as const : classifyFocus(planningDate, choice, today)
   // Bot rule: the team's explicit Y/N/? wins; an explicit Y can retain overdue work.
-  const inDueWindow = manual.focus === 'include' || (manual.focus === 'auto' && focus === 'upcoming')
+  const inDueWindow = choice === 'include' || (choice === 'auto' && focus === 'upcoming')
   return { planningDate, detectedDate, focus, inDueWindow, dateSource: date ? 'staff' as const : detectedDate ? 'detected' as const : 'unknown' as const }
 }
 

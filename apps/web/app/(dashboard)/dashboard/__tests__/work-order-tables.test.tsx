@@ -85,4 +85,10 @@ describe('prototype Work Orders tables and shared pagination', () => {
     expect(within(jobRows[0]).getAllByRole('cell').at(-1)).toHaveTextContent('Review')
     expect(within(jobRows[1]).getAllByRole('cell').at(-1)).toHaveTextContent('N')
   })
+  it('explains assessment failures above an empty due view instead of presenting them only as unknown dates', async () => {
+    mocks.read.mockResolvedValue({ rows: rows.slice(0, 2).map(row => ({ ...row, installDate: null, planningDate: null, inDueWindow: false, focus: 'unknown', assessment: { state: 'failed', result: null, error: 'AI date assessment timed out.' } })), installers: [], today: '2026-11-17' })
+    await show()
+    expect(screen.getByRole('alert')).toHaveTextContent('Due-date assessment failed for 2 products')
+    expect(screen.getByRole('alert')).toHaveTextContent('Refresh from ServiceM8')
+  })
 })
