@@ -6,13 +6,16 @@ Quote tracking is grouped in the same submenu. Roxy Dashboard is visible only to
 
 ## Find and plan work
 
-Search by job number, customer, site or product. **All work orders** lists the matching active saved ServiceM8 Work Orders.
-Select a product name to open its planning details. Source quantity and description are read-only.
+Search by job number, customer, site or product. **Table A - All Work Orders** lists WO, Customer, Short address, Approx install date and Within 3 weeks?, following the prototype.
+**Table B - Due within 3 weeks** follows the prototype's eleven columns: WO/client/address, Materials per product, Client waiting for, Site ready, Glass ready, Hardware ready, Design, PS1/PS3, Bottle strut, BC and Minor variation.
+Each Table B row represents one product. Expand **Edit product** below a row, or select its material name, to open the planning details. Source quantity and description are read-only.
+
+Both tables use the standard RG Tools pagination: matching count, Previous / current page / Next, then Page size and Apply. Each starts with 5 rows; choose 5, 10, 20 or 50. Changing one table's page or size preserves the other table and the current search/focus. Changing size returns that table to page one.
 
 **Product planning** has All products, Next 3 weeks, Overdue, Unknown and Review conflicts views.
 Next 3 weeks includes today through 21 days ahead in Auckland time. A booking does not establish an installation date.
 Manual include/exclude choices that disagree with a target date appear under Review conflicts; dates are not silently changed.
-An unknown readiness state is different from No. PS1/PS3 needed is separate from issued.
+An unknown readiness state is different from No or N/A. PS1/PS3 needed is separate from issued. Bottle strut and BC are editable product fields and are included in change history.
 
 ## Edit a product
 

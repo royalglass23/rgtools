@@ -3,8 +3,12 @@ export const READINESS_FIELDS = {
   designConfirmed: 'Design confirmed', ps1Required: 'PS1 needed', ps3Required: 'PS3 needed',
   minorVariationRequired: 'Minor variation needed', aftercare: 'Aftercare',
   ps1Issued: 'PS1 issued', ps3Issued: 'PS3 issued',
+  bottleStrut: 'Bottle strut', buildingConsent: 'BC?',
 } as const
-export type Readiness = 'unknown' | 'yes' | 'no'
+export type Readiness = 'unknown' | 'yes' | 'no' | 'na'
+export const READINESS_LABELS: Record<Readiness, string> = { unknown: '?', yes: 'Y', no: 'N', na: 'N/A' }
+export const DASHBOARD_PAGE_SIZES = [5, 10, 20, 50] as const
+export function dashboardPageSize(value: string) { return DASHBOARD_PAGE_SIZES.find(size => String(size) === value) ?? 5 }
 export type ManualState = Record<keyof typeof READINESS_FIELDS, Readiness> & {
   clientWaitingFor: string; materialsEta: string | null; estimatedHours: string;
   notes: string; focus: 'auto' | 'include' | 'exclude' | 'unknown';
@@ -13,6 +17,12 @@ export type Focus = 'upcoming' | 'overdue' | 'unknown' | 'later' | 'included' | 
 export const FOCUS_LABELS: Record<Focus, string> = {
   upcoming: 'Within 3 weeks', overdue: 'Overdue', unknown: 'Date / inclusion unknown',
   later: 'Later', included: 'Included manually', excluded: 'Excluded manually', conflict: 'Date / override conflict',
+}
+export function withinThreeWeeks(focuses: Focus[], jobDate: string | null, today = aucklandToday()) {
+  const states = focuses.length ? focuses : [classifyFocus(jobDate, 'auto', today)]
+  if (states.includes('conflict')) return 'Review'
+  if (states.some(state => state === 'upcoming' || state === 'included')) return 'Y'
+  return states.includes('unknown') ? '?' : 'N'
 }
 export function aucklandToday(now = new Date()) {
   const parts = new Intl.DateTimeFormat('en-NZ', { timeZone: 'Pacific/Auckland', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now)
@@ -39,7 +49,7 @@ export function parseManualState(raw: unknown, strict = false): ManualState {
   if (strict && Object.keys(data).some(key => !allowed.includes(key))) throw new Error('Unsupported manual field.')
   for (const key of Object.keys(READINESS_FIELDS) as Array<keyof typeof READINESS_FIELDS>) {
     const v = data[key] ?? 'unknown'
-    if (typeof v !== 'string' || !['unknown', 'yes', 'no'].includes(v)) throw new Error('Readiness must be Yes, No or Unknown.')
+    if (typeof v !== 'string' || !['unknown', 'yes', 'no', 'na'].includes(v)) throw new Error('Readiness must be Yes, No, Unknown or N/A.')
     result[key] = v as Readiness
   }
   for (const key of ['clientWaitingFor', 'estimatedHours', 'notes'] as const) {

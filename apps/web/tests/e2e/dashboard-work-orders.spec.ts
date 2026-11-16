@@ -2,6 +2,7 @@ import { test, expect, type Page } from '@playwright/test'
 import { readFileSync, writeFileSync, unlinkSync, existsSync } from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 const fixtureUrl = process.env.RG406_ACCEPTANCE_URL
 const enabled = fixtureUrl === 'http://127.0.0.1:55443'
 const root = path.resolve(process.cwd(), '../../tmp/rg406')
@@ -32,9 +33,14 @@ test.describe('RG-406 isolated dashboard acceptance', () => {
     await group.getByRole('link', { name: 'Work Orders', exact: true }).click()
     await expect(page.getByRole('heading', { name: 'Work Orders dashboard' })).toBeVisible()
     await page.getByRole('link', { name: 'All products', exact: true }).click()
+    await expect(page.getByRole('region', { name: 'All Work Order rows' }).getByRole('columnheader')).toHaveText(['WO', 'Customer', 'Short address', 'Approx install date', 'Within 3 weeks?'])
+    await expect(page.getByRole('region', { name: 'Table B - Product planning' }).getByRole('columnheader')).toHaveText(['WO / client / address', 'Materials (per product)', 'Client waiting for', 'Site ready', 'Glass ready', 'Hardware ready', 'Design Y/N/?', 'PS1 / PS3', 'Bottle strut', 'BC?', 'Minor var?'])
+    await expect(page.getByRole('combobox', { name: 'Page size' })).toHaveCount(2)
     const item = page.locator(`#product-${shower}`)
     await item.locator(':scope > summary').click()
     await item.getByLabel('Site ready', { exact: true }).selectOption('yes')
+    await item.getByLabel('Bottle strut', { exact: true }).selectOption('no')
+    await item.getByLabel('BC?', { exact: true }).selectOption('na')
     await item.getByLabel('Target install date').fill('2026-11-20')
     await item.getByLabel('Installer', { exact: true }).selectOption('40600000-0000-4000-8000-000000000030')
     await item.getByLabel('Notes', { exact: true }).fill('Fixture staff inspection')
@@ -57,6 +63,8 @@ test.describe('RG-406 isolated dashboard acceptance', () => {
     const saved = page.locator(`#product-${shower}`)
     await saved.locator(':scope > summary').click()
     await expect(saved.getByLabel('Site ready', { exact: true })).toHaveValue('yes')
+    await expect(saved.getByLabel('Bottle strut', { exact: true })).toHaveValue('no')
+    await expect(saved.getByLabel('BC?', { exact: true })).toHaveValue('na')
     await expect(saved.getByLabel('Notes', { exact: true })).toHaveValue('Fixture staff inspection')
     await saved.getByLabel('Notes', { exact: true }).fill('')
     await saved.getByRole('button', { name: 'Save product' }).click()
@@ -145,5 +153,34 @@ test.describe('RG-406 isolated dashboard acceptance', () => {
       release()
       await page.unroute('**/dashboard/work-orders?**')
     }
+  })
+  test('both tables use the standard pagination and retain each other’s page and size', async ({ page }) => {
+    const records = Array.from({ length: 12 }, (_, index) => ({ job: randomUUID(), item: randomUUID(), number: String(index + 1).padStart(2, '0') }))
+    const ids = records.map(row => `'${row.job}'`).join(',')
+    try {
+      localSql(`INSERT INTO work_orders (id, identity_kind, identity_value, servicem8_job_uuid, servicem8_status, job_number, client_name) VALUES ${records.map(row => `('${row.job}', 'servicem8_uuid', '${row.job}', '${row.job}', 'Work Order', 'P406${row.number}', 'Pagination406')`).join(',')}`)
+      localSql(`INSERT INTO work_order_items (id, work_order_id, servicem8_job_uuid, servicem8_item_uuid, original_description, quantity, install_date) VALUES ${records.map(row => `('${row.item}', '${row.job}', '${row.job}', '${row.item}', 'Pagination product ${row.number}', '1', (now() AT TIME ZONE 'Pacific/Auckland')::date + 4)`).join(',')}`)
+      await login(page, 'rg406-staff')
+      await page.goto('/dashboard/work-orders?q=Pagination406&focus=all')
+      const jobs = page.getByRole('region', { name: 'Table A - All Work Orders', exact: true })
+      const products = page.getByRole('region', { name: 'Table B - Due within 3 weeks', exact: true })
+      await expect(jobs.getByRole('navigation')).toHaveText('PreviousPage 1 of 3Next')
+      await jobs.getByRole('combobox', { name: 'Page size' }).selectOption('10')
+      await jobs.getByRole('button', { name: 'Apply' }).click()
+      await expect(jobs.getByRole('navigation')).toContainText('Page 1 of 2')
+      await expect(products.getByRole('combobox', { name: 'Page size' })).toHaveValue('5')
+      await products.getByRole('navigation', { name: 'Product pages' }).getByRole('link', { name: 'Next' }).click()
+      await expect(products.getByRole('navigation', { name: 'Product pages' })).toContainText('Page 2 of 3')
+      await expect(products.getByRole('link', { name: 'Pagination product 06', exact: true })).toBeVisible()
+      await jobs.getByRole('navigation').getByRole('link', { name: 'Next' }).click()
+      await expect(jobs.getByRole('navigation')).toContainText('Page 2 of 2')
+      await expect(products.getByRole('navigation', { name: 'Product pages' })).toContainText('Page 2 of 3')
+      await products.getByRole('combobox', { name: 'Page size' }).selectOption('20')
+      await products.getByRole('button', { name: 'Apply' }).click()
+      await expect(products.getByRole('navigation', { name: 'Product pages' })).toContainText('Page 1 of 1')
+      await expect(jobs.getByRole('navigation')).toContainText('Page 2 of 2')
+      await expect(jobs.getByRole('combobox', { name: 'Page size' })).toHaveValue('10')
+      await expect(page.getByRole('searchbox')).toHaveValue('Pagination406')
+    } finally { localSql(`DELETE FROM work_orders WHERE id IN (${ids})`) }
   })
 })

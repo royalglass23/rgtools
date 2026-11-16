@@ -3,7 +3,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { saveDashboardProduct, productHistory } from './actions'
 import type { DashboardProduct } from './persistence'
-import { READINESS_FIELDS, type ManualState } from './work-orders'
+import { READINESS_FIELDS, type ManualState, type Readiness } from './work-orders'
 import { PrecisionButton } from '@/components/precision-ui/PrecisionUI'
 import styles from './WorkOrderDashboard.module.css'
 import { hasPendingProductEdits } from './draft-guard'
@@ -82,8 +82,8 @@ export function ProductEditor({ product, installers }: { product: DashboardProdu
         </select></label>
         <label>Materials ETA<input aria-label="Materials ETA" type="date" value={manual.materialsEta ?? ''} onChange={e => change('materialsEta', e.target.value || null)} /></label>
         {Object.entries(READINESS_FIELDS).map(([key, label]) => <label key={key}>{label}
-          <select aria-label={label} value={manual[key as keyof typeof READINESS_FIELDS]} onChange={e => change(key as keyof typeof READINESS_FIELDS, e.target.value as 'unknown' | 'yes' | 'no')}>
-            <option value="unknown">Unknown</option><option value="yes">Yes</option><option value="no">No</option>
+          <select aria-label={label} value={manual[key as keyof typeof READINESS_FIELDS]} onChange={e => change(key as keyof typeof READINESS_FIELDS, e.target.value as Readiness)}>
+            <option value="unknown">Unknown</option><option value="yes">Yes</option><option value="no">No</option><option value="na">N/A</option>
           </select></label>)}
         <label>Estimated hours<input aria-label="Estimated hours" inputMode="decimal" maxLength={12} value={manual.estimatedHours} onChange={e => change('estimatedHours', e.target.value)} /></label>
         <label className={styles.wide}>Client waiting for<input aria-label="Client waiting for" maxLength={500} value={manual.clientWaitingFor} onChange={e => change('clientWaitingFor', e.target.value)} /></label>
