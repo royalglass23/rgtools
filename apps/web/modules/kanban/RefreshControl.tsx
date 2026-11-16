@@ -20,7 +20,9 @@ export function RefreshControl({ lastSuccessfulAt }: { lastSuccessfulAt: string 
     start(async () => {
       try {
         const result = await refreshDashboardWorkOrdersAction()
-        setMessage(result.ok ? 'ServiceM8 records refreshed.' : result.error ?? 'Refresh could not finish.')
+        const assessmentMessage = result.assessment?.unavailable ? ' Due assessment is unavailable; check AI configuration and evidence access.'
+          : result.assessment ? ` ${result.assessment.assessedProducts} products assessed; ${result.assessment.reusedProducts} unchanged. ${result.assessment.pendingJobs} jobs pending; ${result.assessment.failedJobs} need retry.` : ''
+        setMessage(result.ok ? 'ServiceM8 records refreshed.' + assessmentMessage : result.error ?? 'Refresh could not finish.')
         if (result.ok) {
           if (hasPendingProductEdits()) setMessage('Source refreshed. Save or reload your edits before updating this view.')
           else router.refresh()

@@ -1,0 +1,10 @@
+.trigger { display: inline-block; min-height: 2.5rem; min-width: 2.5rem; max-width: 100%; padding: .125rem 0; border: 0; background: transparent; color: var(--text-primary); text-align: left; font: inherit; text-decoration: underline; text-underline-offset: .2em; cursor: pointer; overflow-wrap: anywhere; }
+.trigger:hover { background: var(--surface-subtle); }
+.trigger:focus-visible, .preview :is(a,button):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+.preview { position: fixed; z-index: 100; visibility: hidden; width: min(32rem, calc(100vw - 1.5rem)); max-height: min(26rem, calc(100dvh - 1.5rem)); overflow-y: auto; padding: 1rem; border: 1px solid var(--border-strong); border-radius: var(--radius-panel); color: var(--text-primary); background: var(--surface-elevated); box-shadow: var(--shadow-raised); font-size: .875rem; line-height: 1.6; }
+.heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.heading h3 { margin: 0; font-size: 1rem; font-weight: 600; }
+.heading button { padding: .375rem .625rem; min-height: 2.5rem; border: 1px solid var(--border-strong); border-radius: var(--radius-control); background: var(--surface-elevated); color: var(--text-primary); font: inherit; cursor: pointer; }
+.heading button:hover { background: var(--surface-subtle); }
+.description { white-space: pre-wrap; overflow-wrap: anywhere; margin: 1rem 0; }
+.preview a { color: var(--text-primary); text-decoration: underline; text-underline-offset: .2em; }

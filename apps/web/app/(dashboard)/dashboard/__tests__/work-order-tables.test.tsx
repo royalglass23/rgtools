@@ -12,6 +12,7 @@ const rows = Array.from({ length: 31 }, (_, index) => ({
   jobId: `job-${index + 1}`, jobNumber: `WO${index + 1}`, customer: `Customer ${index + 1}`, address: `Site ${index + 1}`,
   jobUuid: null, jobInstallDate: null, itemId: `item-${index + 1}`, itemUuid: `source-${index + 1}`, label: `Product ${index + 1}`,
   quantity: '2', installDate: '2026-11-20', focus: 'upcoming',
+  planningDate: '2026-11-20', inDueWindow: true, dateSource: 'staff', assessment: null, assessmentCurrent: false,
   manual: parseManualState({ bottleStrut: 'yes', buildingConsent: 'na', clientWaitingFor: 'Confirm delivery' }),
 }))
 beforeEach(() => { vi.clearAllMocks(); mocks.read.mockResolvedValue({ rows, installers: [], today: '2026-11-16' }) })
@@ -66,5 +67,22 @@ describe('prototype Work Orders tables and shared pagination', () => {
     expect(screen.getAllByText('Page 1 of 1')).toHaveLength(2)
     expect(screen.getAllByRole('combobox', { name: 'Page size' })[0]).toHaveValue('5')
     expect(within(screen.getByRole('navigation', { name: 'Product pages' })).queryByRole('link')).not.toBeInTheDocument()
+  })
+  it('explains an empty due view when saved products have no dates or manual inclusion', async () => {
+    mocks.read.mockResolvedValue({ rows: rows.map(row => ({ ...row, installDate: null, planningDate: null, inDueWindow: false, focus: 'unknown' })), installers: [], today: '2026-11-16' })
+    await show()
+    expect(screen.getByText(/31 products have no target date or confirmed inclusion/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Review products with unknown dates' })).toHaveAttribute('href', expect.stringContaining('focus=unknown'))
+    expect(within(screen.getByRole('navigation', { name: 'Product focus' })).getByRole('link', { name: 'Due within 3 weeks' })).toHaveAttribute('aria-current', 'page')
+  })
+  it('shows Review for unresolved automatic evidence while preserving explicit manual exclusion', async () => {
+    mocks.read.mockResolvedValue({ rows: [
+      { ...rows[0], focus: 'conflict', inDueWindow: false, planningDate: null },
+      { ...rows[1], focus: 'conflict', inDueWindow: false, manual: parseManualState({ focus: 'exclude' }) },
+    ], installers: [], today: '2026-11-16' })
+    await show({ focus: 'all' })
+    const jobRows = within(tableA()).getAllByRole('row').slice(1)
+    expect(within(jobRows[0]).getAllByRole('cell').at(-1)).toHaveTextContent('Review')
+    expect(within(jobRows[1]).getAllByRole('cell').at(-1)).toHaveTextContent('N')
   })
 })

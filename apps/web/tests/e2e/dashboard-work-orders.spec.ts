@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, unlinkSync, existsSync } from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
+import AxeBuilder from '@axe-core/playwright'
 const fixtureUrl = process.env.RG406_ACCEPTANCE_URL
 const enabled = fixtureUrl === 'http://127.0.0.1:55443'
 const root = path.resolve(process.cwd(), '../../tmp/rg406')
@@ -171,7 +172,7 @@ test.describe('RG-406 isolated dashboard acceptance', () => {
       await expect(products.getByRole('combobox', { name: 'Page size' })).toHaveValue('5')
       await products.getByRole('navigation', { name: 'Product pages' }).getByRole('link', { name: 'Next' }).click()
       await expect(products.getByRole('navigation', { name: 'Product pages' })).toContainText('Page 2 of 3')
-      await expect(products.getByRole('link', { name: 'Pagination product 06', exact: true })).toBeVisible()
+      await expect(products.getByRole('button', { name: 'View material description: Pagination product 06', exact: true })).toBeVisible()
       await jobs.getByRole('navigation').getByRole('link', { name: 'Next' }).click()
       await expect(jobs.getByRole('navigation')).toContainText('Page 2 of 2')
       await expect(products.getByRole('navigation', { name: 'Product pages' })).toContainText('Page 2 of 3')
@@ -182,5 +183,104 @@ test.describe('RG-406 isolated dashboard acceptance', () => {
       await expect(jobs.getByRole('combobox', { name: 'Page size' })).toHaveValue('10')
       await expect(page.getByRole('searchbox')).toHaveValue('Pagination406')
     } finally { localSql(`DELETE FROM work_orders WHERE id IN (${ids})`) }
+  })
+  test('explains missing due dates and previews full Materials text on hover, keyboard and touch', async ({ page, browser }) => {
+    const job = randomUUID(), item = randomUUID()
+    const description = 'Frameless shower enclosure with clear toughened glass and brushed hardware for the main bathroom.\nFull specification: custom panel dimensions, wall channel, hinges, handle and seal details. Keep every source line visible in the preview.'
+    try {
+      localSql(`INSERT INTO work_orders (id, identity_kind, identity_value, servicem8_job_uuid, servicem8_status, job_number, client_name) VALUES ('${job}', 'servicem8_uuid', '${job}', '${job}', 'Work Order', 'HOVER406', 'Hover406')`)
+      localSql(`INSERT INTO work_order_items (id, work_order_id, servicem8_job_uuid, servicem8_item_uuid, original_description, quantity) VALUES ('${item}', '${job}', '${job}', '${item}', '${description}', '1')`)
+      await login(page, 'rg406-staff')
+      await page.goto('/dashboard/work-orders?q=Hover406')
+      await expect(page.getByText(/1 product has no target date or confirmed inclusion/)).toBeVisible()
+      expect((await new AxeBuilder({ page }).include('main').withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze()).violations).toEqual([])
+      await page.getByRole('link', { name: 'Review products with unknown dates' }).click()
+      const trigger = page.getByRole('button', { name: /View material description:/ })
+      expect((await trigger.textContent())!.length).toBeLessThanOrEqual(80)
+      await trigger.hover()
+      const preview = page.getByRole('dialog', { name: 'Materials · HOVER406', exact: true })
+      await expect(preview).toBeVisible()
+      await expect(preview).toContainText('Keep every source line visible in the preview.')
+      await preview.hover()
+      await expect(preview).toBeVisible()
+      await page.screenshot({ path: path.join(root, 'materials-preview-desktop.png'), animations: 'disabled' })
+      for (const colorScheme of ['light', 'dark'] as const) {
+        await page.emulateMedia({ colorScheme })
+        expect((await new AxeBuilder({ page }).include('[role="dialog"]').withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze()).violations).toEqual([])
+      }
+      await page.keyboard.press('Escape')
+      await expect(preview).toHaveCount(0)
+      await trigger.focus()
+      await page.keyboard.press('Enter')
+      await expect(preview).toBeFocused()
+      await preview.getByRole('button', { name: 'Close materials preview' }).click()
+      await expect(trigger).toBeFocused()
+      await expect(preview).toHaveCount(0)
+      const mobileContext = await browser.newContext({ baseURL: fixtureUrl, viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, storageState: await page.context().storageState() })
+      try {
+        const mobile = await mobileContext.newPage()
+        await mobile.goto('/dashboard/work-orders?q=Hover406&focus=unknown')
+        await mobile.getByRole('button', { name: /View material description:/ }).tap()
+        const mobilePreview = mobile.getByRole('dialog', { name: 'Materials · HOVER406', exact: true })
+        await expect(mobilePreview).toBeVisible()
+        const bounds = await mobilePreview.boundingBox()
+        expect(bounds!.x).toBeGreaterThanOrEqual(0)
+        expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390)
+        await mobile.screenshot({ path: path.join(root, 'materials-preview-mobile.png'), animations: 'disabled' })
+        await mobilePreview.getByRole('link', { name: 'Edit product', exact: true }).tap()
+        await expect(mobile.locator(`#product-${item}`)).toHaveAttribute('open', '')
+      } finally { await mobileContext.close() }
+    } finally { localSql(`DELETE FROM work_orders WHERE id='${job}'`) }
+  })
+  test('refresh assesses changed evidence, reuses unchanged results and preserves staff overrides on AI failure', async ({ page, request }) => {
+    const noteFile = path.join(root, 'assessment-note.txt'), failFile = path.join(root, 'assessment-fail')
+    const day = (offset: number) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(Date.now() + offset * 86400000))
+    const refresh = async () => {
+      await clearRefreshLimit()
+      await page.getByRole('button', { name: 'Refresh from ServiceM8' }).click()
+      await expect(page.getByText('ServiceM8 records refreshed.')).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Refresh from ServiceM8' })).toBeEnabled()
+    }
+    const calls = async () => (await (await request.get('http://127.0.0.1:55442/__metrics')).json()).aiCalls
+    try {
+      localSql(`UPDATE work_order_items SET install_date=NULL, dashboard_state='{}', dashboard_assessment='{}', dashboard_revision=dashboard_revision+1 WHERE id IN ('${shower}', '${balustrade}')`)
+      writeFileSync(noteFile, `Install the shower on ${day(4)}.`)
+      await login(page, 'rg406-staff')
+      await page.goto('/dashboard/work-orders?focus=all')
+      const before = await calls()
+      await refresh()
+      await expect(page.getByText(/^Target:.*AI-suggested installation/)).toBeVisible()
+      expect(await calls()).toBe(before + 1)
+      await page.reload()
+      const item = page.locator(`#product-${shower}`)
+      await item.locator(':scope > summary').click()
+      await item.getByText('Detected planning evidence', { exact: true }).click()
+      await expect(item.locator('blockquote')).toContainText(`Install the shower on ${day(4)}.`)
+      await refresh(); expect(await calls()).toBe(before + 1)
+      writeFileSync(noteFile, `Install the shower on ${day(5)}.`)
+      await refresh(); expect(await calls()).toBe(before + 2)
+      await page.reload()
+      await item.locator(':scope > summary').click()
+      await item.getByLabel('Target install date').fill(day(40))
+      await item.getByLabel('Focus selection').selectOption('include')
+      await item.getByRole('button', { name: 'Save product' }).click()
+      await expect(item.getByRole('status')).toHaveText('Saved. Change history updated.')
+      await page.goto('/dashboard/work-orders?focus=upcoming')
+      await expect(page.locator(`#product-${shower}`)).toBeVisible()
+      await expect(page.getByText(/^Target:.*Staff target/)).toBeVisible()
+      writeFileSync(noteFile, `Install the shower on ${day(6)}.`); writeFileSync(failFile, 'synthetic failure')
+      await refresh()
+      await expect(page.getByText('Assessment failed; retry refresh')).toBeVisible()
+      await item.locator(':scope > summary').click()
+      await expect(item.getByLabel('Target install date')).toHaveValue(day(40))
+      await expect(item.getByLabel('Focus selection')).toHaveValue('include')
+      await item.getByLabel('Focus selection').selectOption('exclude')
+      await item.getByRole('button', { name: 'Save product' }).click()
+      await expect(item).toHaveCount(0)
+      const metrics = await (await request.get('http://127.0.0.1:55442/__metrics')).json()
+      expect(metrics.writes).toBe(0)
+    } finally {
+      for (const file of [noteFile, failFile]) if (existsSync(file)) unlinkSync(file)
+    }
   })
 })

@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({ save: vi.fn(), refresh: vi.fn() }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: mocks.refresh }) }))
@@ -8,14 +9,21 @@ import { ProductEditor } from '../ProductEditor'
 import { ProductDrafts } from '../ProductDrafts'
 import { parseManualState } from '../work-orders'
 import type { DashboardProduct } from '../persistence'
+import { assessmentIsCurrent, type StoredAssessment } from '../assessment'
 const product: DashboardProduct = {
   jobId: '40600000-0000-4000-8000-000000000010', itemId: '40600000-0000-4000-8000-000000000020',
   jobNumber: 'TEST406', customer: 'Fixture', address: 'Test site', jobUuid: null, syncedAt: null,
   jobInstallDate: null, itemUuid: 'fixture', label: 'Shower', generatedLabel: null, description: 'Source shower',
   quantity: '1', installDate: null, installerId: null, installer: null, manual: parseManualState({}), revision: 0, focus: 'unknown',
+  assessment: null, assessmentCurrent: false, planningDate: null, detectedDate: null, inDueWindow: false, dateSource: 'unknown',
 }
 beforeEach(() => { vi.clearAllMocks(); mocks.save.mockResolvedValue({ ok: true, revision: 1 }) })
 describe('staff product editor', () => {
+  it('keeps server-rendered fields disabled until change handlers are attached', () => {
+    expect(renderToStaticMarkup(<ProductEditor product={product} installers={[]} />)).toContain('<fieldset disabled=""')
+    render(<ProductEditor product={product} installers={[]} />)
+    expect(screen.getByLabelText('Notes', { exact: true })).toBeEnabled()
+  })
   it('has exact control names and preserves unsaved work when source data refreshes', async () => {
     const user = userEvent.setup()
     const view = render(<ProductEditor product={product} installers={[]} />)
@@ -58,5 +66,13 @@ describe('staff product editor', () => {
     expect((recovery as HTMLTextAreaElement).value).toContain('Preserve this after row removal')
     view.rerender(<ProductDrafts><ProductEditor product={{ ...product, revision: 2 }} installers={[]} /></ProductDrafts>)
     expect(screen.getByLabelText('Notes', { exact: true })).toHaveValue('Preserve this after row removal')
+  })
+  it('shows old-rule evidence as stale and keeps the staff date input empty', async () => {
+    const assessment: StoredAssessment = { state: 'complete', rules: 'old-rules', model: 'fixture', sourceHash: 'source', snapshotHash: 'snapshot', checkedAt: '2026-11-17T00:00:00Z', assessedAt: '2026-11-17T00:00:00Z', error: null,
+      result: { status: 'dated', date: '2026-11-20', kind: 'installation', reason: 'Old suggestion', evidence: [{ kind: 'note', reference: null, observedAt: null, quote: 'Install shower on 20/11/2026.' }] } }
+    render(<ProductEditor product={{ ...product, assessment, assessmentCurrent: assessmentIsCurrent(assessment, 'snapshot', null) }} installers={[]} />)
+    await userEvent.setup().click(screen.getByText('Detected planning evidence', { exact: true }))
+    expect(screen.getByRole('alert')).toHaveTextContent('saved suggestion is stale')
+    expect(screen.getByLabelText('Target install date')).toHaveValue('')
   })
 })

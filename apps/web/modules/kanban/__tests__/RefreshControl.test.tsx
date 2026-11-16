@@ -26,4 +26,15 @@ describe('refresh coordination with unsaved product drafts', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Save or reload your edits')
     expect(screen.getByLabelText('Draft')).toHaveValue('Started during refresh')
   })
+  it('uses the same assessment-capable refresh action for a visible stale dashboard', async () => {
+    vi.useFakeTimers()
+    try {
+      mocks.source.mockResolvedValue({ ok: true, assessment: { assessedProducts: 2, reusedProducts: 1, pendingJobs: 0, failedJobs: 0, unavailable: false } })
+      render(<RefreshControl lastSuccessfulAt="2020-01-01T00:00:00Z" />)
+      await act(async () => { await vi.advanceTimersByTimeAsync(60000) })
+      expect(mocks.source).toHaveBeenCalledTimes(1)
+      expect(screen.getByRole('status')).toHaveTextContent('2 products assessed; 1 unchanged')
+      expect(mocks.refresh).toHaveBeenCalledTimes(1)
+    } finally { vi.useRealTimers() }
+  })
 })

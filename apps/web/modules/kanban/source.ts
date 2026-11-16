@@ -2,7 +2,7 @@ import { createServiceM8RequestFromEnv, type ServiceM8FetchRequest } from '@/lib
 
 export function dashboardSourceRequest(request: ServiceM8FetchRequest = createServiceM8RequestFromEnv()): ServiceM8FetchRequest {
   return (path, init) => {
-    if ((init?.method ?? 'GET').toUpperCase() !== 'GET' || init?.body || !/^\/(vendor|job|company|jobmaterial|material)(\.json|\/[a-zA-Z0-9-]+\.json)(\?|$)/.test(path)) {
+    if ((init?.method ?? 'GET').toUpperCase() !== 'GET' || init?.body || !/^\/(vendor|job|company|jobmaterial|material|note|email)(\.json|\/[a-zA-Z0-9-]+\.json)(\?|$)/.test(path)) {
       throw new Error('Dashboard source permits selected GET requests only.')
     }
     return request(path, { ...init, method: 'GET' })

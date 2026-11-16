@@ -1,5 +1,5 @@
 'use client'
-import { useState, useTransition } from 'react'
+import { useState, useSyncExternalStore, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { saveDashboardProduct, productHistory } from './actions'
 import type { DashboardProduct } from './persistence'
@@ -8,6 +8,8 @@ import { PrecisionButton } from '@/components/precision-ui/PrecisionUI'
 import styles from './WorkOrderDashboard.module.css'
 import { hasPendingProductEdits } from './draft-guard'
 import { useProductDrafts } from './ProductDrafts'
+
+const emptySubscribe = () => () => {}
 
 export function ProductEditor({ product, installers }: { product: DashboardProduct; installers: Array<{ id: string; name: string }> }) {
   const router = useRouter()
@@ -20,6 +22,7 @@ export function ProductEditor({ product, installers }: { product: DashboardProdu
   const [installDate, setDate] = useState(restored ? restored.installDate : product.installDate)
   const [dirty, setDirty] = useState(Boolean(restored))
   const [pending, start] = useTransition()
+  const interactive = useSyncExternalStore(emptySubscribe, () => true, () => false)
   const [message, setMessage] = useState('')
   const [failed, setFailed] = useState(false)
   const [history, setHistory] = useState<Awaited<ReturnType<typeof productHistory>> | null>(null)
@@ -50,6 +53,16 @@ export function ProductEditor({ product, installers }: { product: DashboardProdu
   }
   return <div className={styles.editor}>
     <p className={styles.source}>ServiceM8 quantity: {product.quantity}. Source description: {product.description}</p>
+    <details className={styles.history}>
+      <summary>Detected planning evidence</summary>
+      <p className={styles.source}>Automatic evidence never overwrites your target date or manual fields. A staff target date takes priority; clearing it returns to automatic suggestions when Automatic assessment is selected.</p>
+      {product.assessment?.result ? <>
+        {(!product.assessmentCurrent || product.assessment.state === 'failed') && <p role="alert">This saved suggestion is stale or could not be refreshed. It is not used for automatic inclusion.</p>}
+        <p>{product.assessment.result.status === 'dated' ? `AI-suggested ${product.assessment.result.kind}: ${product.assessment.result.date}` : 'No automatic date accepted.'} {product.assessment.result.reason}</p>
+        {product.assessment.assessedAt && <p className={styles.source}>Assessed: {new Date(product.assessment.assessedAt).toLocaleString('en-NZ', { timeZone: 'Pacific/Auckland' })}</p>}
+        {product.assessment.result.evidence.map((source, index) => <blockquote key={index}><strong>{source.kind}{source.observedAt ? ` · ${source.observedAt}` : ''}</strong><p>{source.quote}</p></blockquote>)}
+      </> : <p>{product.assessment?.error ?? 'Awaiting assessment. Refresh reads job descriptions, notes and email evidence; calendar bookings are excluded.'}</p>}
+    </details>
     {newer && dirty && <p role="alert">A newer saved version is available. Your unsaved edits are preserved. Copy them before reloading.</p>}
     <form data-work-order-product={product.itemId} data-work-order-dirty={dirty ? 'true' : undefined} onSubmit={event => {
       event.preventDefault()
@@ -69,7 +82,7 @@ export function ProductEditor({ product, installers }: { product: DashboardProdu
         } catch { setFailed(true); setMessage('The update could not be saved. Your edits are kept here. Try again.') }
       })
     }}>
-      <fieldset disabled={pending} className={styles.fields}>
+      <fieldset disabled={pending || !interactive} className={styles.fields}>
         <legend>Product operations</legend>
         <label>Installer<select aria-label="Installer" value={installerId ?? ''} onChange={e => { const next = e.target.value || null; setInstaller(next); setDirty(true); retain(manual, next, installDate) }}>
           <option value="">Unassigned</option>
@@ -78,7 +91,7 @@ export function ProductEditor({ product, installers }: { product: DashboardProdu
         </select></label>
         <label>Target install date<input aria-label="Target install date" type="date" value={installDate ?? ''} onChange={e => { const next = e.target.value || null; setDate(next); setDirty(true); retain(manual, installerId, next) }} /></label>
         <label>Focus selection<select aria-label="Focus selection" value={manual.focus} onChange={e => change('focus', e.target.value as ManualState['focus'])}>
-          <option value="auto">Use target date</option><option value="include">Include manually</option><option value="exclude">Exclude manually</option><option value="unknown">Needs review</option>
+          <option value="auto">Automatic assessment</option><option value="include">Include manually</option><option value="exclude">Exclude manually</option><option value="unknown">Needs review</option>
         </select></label>
         <label>Materials ETA<input aria-label="Materials ETA" type="date" value={manual.materialsEta ?? ''} onChange={e => change('materialsEta', e.target.value || null)} /></label>
         {Object.entries(READINESS_FIELDS).map(([key, label]) => <label key={key}>{label}
@@ -91,7 +104,7 @@ export function ProductEditor({ product, installers }: { product: DashboardProdu
       </fieldset>
       <p className={styles.source}>Document requirements and issue checks are separate. These updates stay in RG Tools.</p>
       <div className={styles.actions}>
-        <PrecisionButton type="submit" disabled={pending || !dirty}>{pending ? 'Saving…' : 'Save product'}</PrecisionButton>
+        <PrecisionButton type="submit" disabled={pending || !interactive || !dirty}>{pending ? 'Saving…' : 'Save product'}</PrecisionButton>
         {dirty && <button type="button" onClick={() => { if (product.itemId) draftStore.forget(product.itemId); setBase(product); setManual(product.manual); setInstaller(product.installerId); setDate(product.installDate); setDirty(false); setMessage('Loaded the saved version.'); if (!hasPendingProductEdits(product.itemId ?? undefined)) router.refresh() }}>Reload saved version</button>}
         <span role={failed ? 'alert' : 'status'}>{message}</span>
       </div>

@@ -8,13 +8,15 @@ Quote tracking is grouped in the same submenu. Roxy Dashboard is visible only to
 
 Search by job number, customer, site or product. **Table A - All Work Orders** lists WO, Customer, Short address, Approx install date and Within 3 weeks?, following the prototype.
 **Table B - Due within 3 weeks** follows the prototype's eleven columns: WO/client/address, Materials per product, Client waiting for, Site ready, Glass ready, Hardware ready, Design, PS1/PS3, Bottle strut, BC and Minor variation.
-Each Table B row represents one product. Expand **Edit product** below a row, or select its material name, to open the planning details. Source quantity and description are read-only.
+Each Table B row represents one product. Materials shows a short description (up to 80 characters). Hover over it, focus it with the keyboard, or tap it to open the full source description. The preview stays open while you read it; select Close, press Escape or use another control to dismiss it. The preview's **Edit product** link opens the planning details, as does expanding **Edit product** below the row. Source quantity and description are read-only.
 
 Both tables use the standard RG Tools pagination: matching count, Previous / current page / Next, then Page size and Apply. Each starts with 5 rows; choose 5, 10, 20 or 50. Changing one table's page or size preserves the other table and the current search/focus. Changing size returns that table to page one.
 
-**Product planning** has All products, Next 3 weeks, Overdue, Unknown and Review conflicts views.
-Next 3 weeks includes today through 21 days ahead in Auckland time. A booking does not establish an installation date.
+**Product planning** has All products, Due within 3 weeks, Overdue, Unknown and Review conflicts views.
+Due within 3 weeks includes today through 21 days ahead in Auckland time. A booking does not establish an installation date.
+This view uses a saved staff target date first, otherwise an evidence-backed **AI-suggested** installation or delivery date. Suggestions are unconfirmed. Open **Detected planning evidence** inside Edit product to read the reason, source quotes and assessment time. Ambiguous dates stay in Review conflicts or Unknown. Products without a usable date or manual inclusion stay in Unknown; the empty view links to them. Legacy spreadsheet dates and flags are not imported automatically.
 Manual include/exclude choices that disagree with a target date appear under Review conflicts; dates are not silently changed.
+Following the Kanban bot's rules, **Include manually** keeps a product in Due within 3 weeks even when its date is overdue or outside the window. **Exclude manually** and **Needs review** prevent automatic inclusion. Clearing a staff date leaves it blank and returns to suggestions when **Automatic assessment** is selected.
 An unknown readiness state is different from No or N/A. PS1/PS3 needed is separate from issued. Bottle strut and BC are editable product fields and are included in change history.
 
 ## Edit a product
@@ -30,7 +32,8 @@ Copy any work you need before selecting **Reload saved version**. A source refre
 ## Refresh source data
 
 **Refresh from ServiceM8** reads current source jobs and product lines into saved RG Tools records.
-It sends no ServiceM8 updates and starts no AI generation. Overlapping refreshes are protected and repeated requests are rate-limited.
+After reading the source, every refresh checks descriptions, active notes and emails for installation/delivery evidence per product. Changed evidence is assessed using AI; unchanged evidence reuses its saved result. Bookings, task dates and site visits cannot establish an installation date. The rolling 21-day window updates whenever the dashboard loads.
+Refresh sends no ServiceM8 updates. Overlapping refreshes are protected and repeated requests are rate-limited.
 While this dashboard is visible, it checks once a minute and requests source refresh when the saved source time is over five minutes old.
 No unattended scheduler has been enabled.
 Refresh is paused while any product has unsaved edits. A save also waits to refresh the page while another product is being edited.
@@ -40,6 +43,7 @@ Expand that draft to copy its values, or return to All products to continue edit
 
 If a refresh fails, the previous saved records remain and the failure is shown. The displayed source time is the last successful reconciliation,
 not the time of a staff readiness edit or proof of complete Diary history.
+Assessment failures or work left pending are shown in the refresh result. Retry on the next refresh. Stale or failed suggestions do not drive automatic inclusion; saved staff fields still apply. Large evidence histories stay pending/reviewable rather than being silently truncated. AI must be configured by an administrator before suggestions are available.
 
 ## Legacy workbook values
 

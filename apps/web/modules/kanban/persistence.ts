@@ -2,7 +2,9 @@ import { and, asc, desc, eq, ilike, or } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { users } from '@rgtools/db/schema'
 import { workOrderEvents, workOrderInstallers, workOrderItems, workOrders } from '@rgtools/db/schema-workorders'
-import { aucklandToday, classifyFocus, parseManualState, type ItemSave } from './work-orders'
+import { aucklandToday, parseManualState, type ItemSave } from './work-orders'
+import { assessmentIsCurrent, readStoredAssessment, resolveProductPlanning } from './assessment'
+import { assessmentSnapshotHash } from './assessment-source'
 
 export async function readWorkOrderDashboard(q = '') {
   const found = await db.select({
@@ -13,6 +15,7 @@ export async function readWorkOrderDashboard(q = '') {
     description: workOrderItems.originalDescription, quantity: workOrderItems.quantity,
     installDate: workOrderItems.installDate, installerId: workOrderItems.installerId,
     installer: workOrderInstallers.displayName, manual: workOrderItems.dashboardState, revision: workOrderItems.dashboardRevision,
+    jobDescription: workOrders.jobDescription, assessment: workOrderItems.dashboardAssessment,
   }).from(workOrders)
     .leftJoin(workOrderItems, and(eq(workOrderItems.workOrderId, workOrders.id), eq(workOrderItems.isActive, true)))
     .leftJoin(workOrderInstallers, eq(workOrderInstallers.id, workOrderItems.installerId))
@@ -21,10 +24,14 @@ export async function readWorkOrderDashboard(q = '') {
     .orderBy(asc(workOrders.jobNumber), asc(workOrderItems.sortOrder), asc(workOrderItems.id)).limit(10001)
   if (found.length > 10000) throw new Error('Too many products. Narrow the search to load the dashboard.')
   const today = aucklandToday()
-  const rows = found.map(row => ({ ...row, revision: row.revision ?? 0, syncedAt: row.syncedAt?.toISOString() ?? null,
-    label: row.label ?? row.generatedLabel ?? row.description ?? 'No product recorded',
-    manual: parseManualState(row.manual), focus: classifyFocus(row.installDate, parseManualState(row.manual).focus, today),
-  }))
+  const rows = found.map(({ jobDescription, ...row }) => {
+    const assessment = readStoredAssessment(row.assessment), manual = parseManualState(row.manual)
+    const assessmentCurrent = Boolean(row.description && assessmentIsCurrent(assessment, assessmentSnapshotHash(jobDescription, row.description), row.syncedAt))
+    return { ...row, revision: row.revision ?? 0, syncedAt: row.syncedAt?.toISOString() ?? null,
+      label: row.label ?? row.generatedLabel ?? row.description ?? 'No product recorded', manual, assessment, assessmentCurrent,
+      ...resolveProductPlanning(row.installDate, manual, assessment, assessmentCurrent, today),
+    }
+  })
   const installers = await db.select({ id: workOrderInstallers.id, name: workOrderInstallers.displayName })
     .from(workOrderInstallers).where(eq(workOrderInstallers.isActive, true)).orderBy(asc(workOrderInstallers.displayName))
   return { rows, installers, today }
