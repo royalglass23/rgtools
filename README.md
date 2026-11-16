@@ -25,8 +25,9 @@ flow.
 
 | Area | What it does |
 | --- | --- |
-| **Dashboard** | Shows operational attention queues, next actions, business performance, and configurable live-data tables. |
-| **Job Progress** | Admin-only ServiceM8 job register with 7, 14, and 30 day job-edit views (default 7), an earliest-first upcoming bookings view, an All dates option, and 5/10/20/50 row paging (default 5). Diary-based activity and follow-up are not verified. |
+| **Dashboard** | Opens the main operations dashboard after sign-in. Its submenu groups Roxy Dashboard, Quote tracking and Work Orders. |
+| **Roxy Dashboard** | ServiceM8 Job Progress register, restricted to Admins and the configured Roxy user ID. Keeps job-edit periods, upcoming bookings and pagination; Diary-based activity and follow-up remain unverified. |
+| **Work Orders dashboard** | All-staff job/product planning with three-week, overdue, unknown and conflict views; refresh-triggered, evidence-backed AI date suggestions, durable manual overrides and attributable history. See [refresh assessment](docs/dev/work-order-due-assessment.md). |
 | **Lead Intake** | Captures and scores enquiries, then synchronises eligible lead records with ServiceM8. |
 | **Leads** | Searches leads, shows tier and follow-up context, and links to ServiceM8 jobs. |
 | **Clients** | Maintains canonical RG Tools client records, linked context, and merge review. |

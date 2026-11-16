@@ -38,12 +38,13 @@ Settings**. If no tables are selected, the dashboard explains how to restore the
 
 ## Navigation
 
-The top navigation bar shows the tools you have access to. The logo takes you back to the dashboard.
+The sidebar shows the tools you have access to. **Dashboard** opens the main dashboard; the separate arrow expands its submenu. The RG Tools home link also returns to the main dashboard.
 
 Current navigation groups include:
 
 | Menu | What it contains |
 |------|------------------|
+| **Dashboard** | Roxy Dashboard (Roxy/Admin only), Quote tracking (when Quotes is enabled), and the all-staff Work Orders dashboard |
 | **Lead Intake** | Lead intake form, Leads list, and admin-only Lead Intake configuration |
 | **PS Generator** | Generate PS and admin-only PS Configuration |
 | **Quotes** | Quote Tracker links and analytics plus Quote Movement evidence, source coverage, summaries, and conversion context |
@@ -51,7 +52,7 @@ Current navigation groups include:
 | **Clients** | Client records and linked lead/job context |
 | **Admin** | User management, settings, tracking settings, dashboard tables, audit/error exports, and admin tools |
 
-Your name and role are shown in the top right. Use **Sign out** when you are done.
+Your name and role are shown in the sidebar. Use **Sign out** when you are done.
 
 ## Appearance
 

@@ -12,7 +12,7 @@ vi.mock('next/link', () => ({
   default: ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => <a {...props}>{children}</a>,
 }))
 
-import TrackedQuoteOverviewPage from './page'
+import TrackedQuoteOverviewPage from '@/modules/quote-tracker/TrackedQuoteDashboard'
 import { QUOTE_PROGRESS_GROUPS } from '@/modules/quote-tracker/quote-progress'
 
 const event = {
@@ -99,9 +99,9 @@ describe('TrackedQuoteOverviewPage', () => {
     expect(screen.getByText('Each line is an event, not a unique viewer or a confirmed sale.')).toBeInTheDocument()
 
     const activityPages = screen.getByRole('navigation', { name: 'Recent activity pages' })
-    expect(within(activityPages).getByRole('link', { name: 'Next' })).toHaveAttribute('href', '/quote-tracker/overview?activityPage=2&activitySize=5&attentionPage=1&attentionSize=5&trackedIn=30')
+    expect(within(activityPages).getByRole('link', { name: 'Next' })).toHaveAttribute('href', '/dashboard/quotes?activityPage=2&activitySize=5&attentionPage=1&attentionSize=5&trackedIn=30')
     const attentionPages = screen.getByRole('navigation', { name: 'Needs attention pages' })
-    expect(within(attentionPages).getByRole('link', { name: 'Next' })).toHaveAttribute('href', '/quote-tracker/overview?activityPage=1&activitySize=5&attentionPage=2&attentionSize=5&trackedIn=30')
+    expect(within(attentionPages).getByRole('link', { name: 'Next' })).toHaveAttribute('href', '/dashboard/quotes?activityPage=1&activitySize=5&attentionPage=2&attentionSize=5&trackedIn=30')
     const activitySize = within(activityHeading.closest('details')!).getByRole('combobox', { name: 'Page size' })
     const attentionSize = within(attentionHeading.closest('details')!).getByRole('combobox', { name: 'Page size' })
     expect(activitySize).toHaveValue('5')
@@ -140,13 +140,13 @@ describe('TrackedQuoteOverviewPage', () => {
     expect(getTrackedQuoteOverview).toHaveBeenCalledWith({
       activity: { page: 2, size: 10 }, attention: { page: 3, size: 20 },
     }, '14')
-    expect(within(screen.getByRole('navigation', { name: 'Recent activity pages' })).getByRole('link', { name: 'Previous' })).toHaveAttribute('href', '/quote-tracker/overview?activityPage=1&activitySize=10&attentionPage=3&attentionSize=20&trackedIn=14')
+    expect(within(screen.getByRole('navigation', { name: 'Recent activity pages' })).getByRole('link', { name: 'Previous' })).toHaveAttribute('href', '/dashboard/quotes?activityPage=1&activitySize=10&attentionPage=3&attentionSize=20&trackedIn=14')
     const activityForm = within(screen.getByRole('heading', { name: 'Recent activity' }).closest('details')!).getByRole('combobox', { name: 'Page size' }).closest('form')
     expect(activityForm?.querySelector('input[name="attentionPage"]')).toHaveValue('3')
     expect(activityForm?.querySelector('input[name="attentionSize"]')).toHaveValue('20')
     expect(activityForm?.querySelector('input[name="activityPage"]')).toHaveValue('1')
     expect(activityForm?.querySelector('input[name="trackedIn"]')).toHaveValue('14')
-    expect(screen.getByRole('link', { name: 'All time' })).toHaveAttribute('href', '/quote-tracker/overview?trackedIn=all&activitySize=10&attentionSize=20')
+    expect(screen.getByRole('link', { name: 'All time' })).toHaveAttribute('href', '/dashboard/quotes?trackedIn=all&activitySize=10&attentionSize=20')
   })
 
   it('explains when there is no recorded activity', async () => {
