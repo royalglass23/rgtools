@@ -41,7 +41,11 @@ describe('prototype Work Orders tables and shared pagination', () => {
     expect(cells[4]).toHaveTextContent('Expected: 21/11/2026')
     expect(cells[9]).toHaveTextContent('approved'); expect(cells[9]).toHaveTextContent('BCO1234567')
     expect(cells[1]).toHaveTextContent('Synthetic Installer · suggestion only'); expect(cells[1]).toHaveTextContent('2.5 h')
-    expect(within(productRows[1] as HTMLElement).getAllByRole('cell')[3]).toHaveTextContent('UnknownStaff')
+    expect(within(cells[3]).getByText('Auto · Supported', { exact: true })).not.toBeVisible()
+    const staffSite = within(productRows[1] as HTMLElement).getAllByRole('cell')[3]
+    expect(within(staffSite).getByText('Unknown', { exact: true })).toBeVisible()
+    expect(staffSite.querySelector('summary')).toHaveTextContent(/^Details$/)
+    expect(within(staffSite).getByText('Staff · Protected', { exact: true })).not.toBeVisible()
   })
   it('matches both prototype column sets in order, including Bottle strut and BC', async () => {
     await show()

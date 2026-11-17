@@ -6,6 +6,24 @@ import { effectiveProduct } from './effective-fixtures'
 
 beforeEach(() => vi.stubEnv('TZ', 'UTC'))
 afterEach(() => vi.unstubAllEnvs())
+describe('simple field display', () => {
+  it.each([
+    ['Auto', 'stale', 'Auto · Stale'],
+    ['Staff', 'staff', 'Staff · Protected'],
+  ] as const)('keeps %s status behind plain closed Details', (origin, status, expected) => {
+    const field = effectiveProductFields(effectiveProduct()).fields.siteReady
+    field.origin = origin; field.status = status; field.value = null
+    render(<EffectiveValue field={field} label="Site ready" />)
+    const summary = screen.getByLabelText('Evidence for Site ready')
+    expect(summary).toHaveTextContent(/^Details$/)
+    expect(summary).not.toHaveAttribute('aria-description')
+    expect(summary.closest('details')).not.toHaveAttribute('open')
+    expect(screen.getByText(origin === 'Staff' ? 'Blank / Unknown' : 'Unknown', { exact: true })).toBeVisible()
+    expect(screen.getByText(expected, { exact: true })).not.toBeVisible()
+    fireEvent.click(summary)
+    expect(screen.getByText(expected, { exact: true })).toBeVisible()
+  })
+})
 describe('field evidence authored-time precision', () => {
   it.each([
     ['2026-11-18', 'Authored: 18/11/2026 (date only; Auckland)'],

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Simplify Work Orders field displays to values with optional Details. Accept sourced Client waiting for summaries from expected work and unresolved requests, including the Q250082 installation/variation wording, without requiring literal waiting-for phrases. Preserve staff edits and clears.
+
 - Display current automatic and protected staff operational values consistently in Work Orders planning, with field evidence, source coverage, assessment state and ownership. Keep requirements separate from issuance, readiness separate from expected dates, consent status separate from its reference, and generated gaps separate from staff Notes. Preserve draft values/modes and changed-field saves through assessment updates and row removal.
 
 - Add durable Work Orders assessment runs after one source refresh, with automatic visible-tab continuation, reload recovery, bounded retries and lease recovery. Show assessment progress separately from source freshness, pause new batches for unsaved drafts, and reject stale worker publication. Add migration 0074 for run/work state.

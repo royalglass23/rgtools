@@ -19,6 +19,7 @@ const nonObservation = (text: string) => /[?？]|\b(if|unless|please|could|might
 const declarative = (text: string) => !nonObservation(text) && !/\b(tentative|cancelled|canceled|postponed)\b|取消|推迟|暂定/.test(text)
 export const trustworthyAuthoredAt = (source: Pick<AssessmentSource, 'kind' | 'observedAt'>) => source.kind === 'note' || source.kind === 'email' ? source.observedAt : null
 const readinessField = (field: OperationalField) => ['siteReady', 'glassReady', 'hardwareReady'].includes(field)
+const closedWaitingFor = (text: string) => /\b(?:not|no longer) (?:waiting|awaiting|required|needed|requested)|\b(?:installation|work|variation|request) (?:is |was |has been )?(?:complete|completed|resolved|cancelled|canceled)\b/.test(text)
 function typedValue(field: OperationalField, value: string) {
   if (field === 'buildingConsent') return ['approved', 'pending', 'declined'].includes(value)
   if (field === 'buildingConsentNumber') return /^BCO[- ]?\d{5,}$/i.test(value)
@@ -51,6 +52,12 @@ function readinessSupports(field: OperationalField, value: string, clause: strin
 }
 
 function valueSupports(field: OperationalField, value: string, clause: string, observedAt: string | null, context: AssessmentContext, trustedInstallerTokens: string[] = []) {
+  // This field is a narrative of outstanding work, including expectations and
+  // questions. The caller verifies the exact source quotes and product scope;
+  // a useful summary need not repeat a prescribed phrase or quote verbatim.
+  if (field === 'clientWaitingFor') return typedValue(field, value)
+    && /\b(?:waiting|awaiting|expects?|expected|requests?|requested|requires?|required|needs?|needed|variation|will)\b|等待|需要|预计/.test(clause)
+    && !closedWaitingFor(clause)
   if (!declarative(clause)) return false
   const index = clause.search(fieldSubject[field])
   const prefix = index < 0 ? '' : clause.slice(0, index).split(/\b(?:and|but|or)\b/).at(-1) ?? ''
@@ -88,7 +95,6 @@ function valueSupports(field: OperationalField, value: string, clause: string, o
     return Boolean(status && new RegExp(`\\b(?:building consent|bc) (?:is |was )?(?:${status})\\b`).test(clause))
   }
   if (field === 'buildingConsentNumber') return /^BCO[- ]?\d{5,}$/i.test(value) && clause.includes(normalized(value))
-  if (field === 'clientWaitingFor') return value.length > 0 && value.length <= 500 && /\b(?:waiting for|awaiting)\b/.test(clause) && !/\b(?:not|no longer) waiting|\bnot awaiting/.test(clause) && clause.includes(normalized(value))
   if (field === 'materialsEta') return validDate(value) && /\b(materials?|glass|hardware)\b/.test(clause) && /\b(eta|expected|due)\b/.test(clause) && supportedEvidenceDates(clause, observedAt).includes(value)
   if (field === 'installerId') {
     const installer = context.installers?.find(installer => installer.token === value)
@@ -142,7 +148,7 @@ const fieldSubject: Record<OperationalField, RegExp> = {
   siteReady: /\bsite\b|现场|工地/, glassReady: /\bglass\b|玻璃/, hardwareReady: /\bhardware\b|五金/, designConfirmed: /\bdesign\b|设计/,
   ps1Required: /\bps1\b/, ps3Required: /\bps3\b/, ps1Issued: /\bps1\b/, ps3Issued: /\bps3\b/,
   bottleStrut: /\bbottle strut\b/, buildingConsent: /\b(?:building consent|bc)\b/, buildingConsentNumber: /\bbco[- ]?\d+\b/,
-  minorVariationRequired: /\bminor variation\b/, clientWaitingFor: /\b(?:waiting|awaiting)\b/, materialsEta: /\b(?:materials?|glass|hardware)\b/,
+  minorVariationRequired: /\bminor variation\b/, clientWaitingFor: /\b(?:waiting|awaiting|installation|install|variation|request)\b/, materialsEta: /\b(?:materials?|glass|hardware)\b/,
   aftercare: /\baftercare\b/, installerId: /\b(?:installer|installation team|assigned)\b/, estimatedHours: /\b(?:estimate|estimated)\b/,
 }
 function superseded(field: OperationalField, claim: Record<string, unknown>, token: string, matching: Array<{ observedAt: string | null }>, context: AssessmentContext) {
@@ -150,6 +156,7 @@ function superseded(field: OperationalField, claim: Record<string, unknown>, tok
     if (!canSupersede(trustworthyAuthoredAt(source), matching)) return false
     return clauses(source.text).some(clause => {
       if (!productApplies(clause, source.item, claim, token, context) || !fieldSubject[field].test(clause) || nonObservation(clause)) return false
+      if (field === 'clientWaitingFor' && closedWaitingFor(clause)) return true
       const sameMeaning = ['ps1Issued', 'ps3Issued'].includes(field) ? /\b(issued|issuance|sent|provided)\b|签发|出具|发出/.test(clause)
         : ['ps1Required', 'ps3Required', 'minorVariationRequired'].includes(field) ? /\b(required|needed|requirement)\b|需要|要求|必须/.test(clause)
         : field === 'buildingConsent' ? /\b(approved|approval|granted|issued|pending|declined|refused|rejected)\b/.test(clause) : true

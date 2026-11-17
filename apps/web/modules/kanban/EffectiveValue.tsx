@@ -24,7 +24,8 @@ export function EffectiveValue({ field, label, kind, installers = [] }: { field:
     <span>{value}{kind === 'installer' && field.origin === 'Auto' && field.value ? ' · suggestion only' : ''}{field.origin === 'Auto' && field.planningPurpose ? ` · ${field.planningPurpose}` : ''}</span>
     {field.date && <div className={styles.source}>{field.datePurpose === 'ready' ? 'Ready on' : 'Expected'}: {displayDate(field.date)}</div>}
     <details className={styles.fieldEvidence}>
-      <summary aria-label={`Evidence for ${label}`} aria-description={`${field.origin} · ${states[field.status]}`}>{field.origin} · {states[field.status]}</summary>
+      <summary aria-label={`Evidence for ${label}`}>Details</summary>
+      <p>{field.origin} · {states[field.status]}</p>
       <p>{field.reason}</p>
       {field.assessedAt && <p>Assessed: {time(field.assessedAt)} (Auckland)</p>}
       {field.evidence.length ? field.evidence.map((evidence, index) => <blockquote key={index}>

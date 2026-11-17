@@ -3,7 +3,7 @@ import { supportedEvidenceDates } from './temporal-evidence'
 import type { KanbanFlag } from './kanban-flags'
 import { planningEvidenceNeedsReview, readOperationalAssessment, trustworthyAuthoredAt, type OperationalAssessment } from './operational-assessment'
 
-export const ASSESSMENT_RULES = 'kanban-operational-v2-20261117'
+export const ASSESSMENT_RULES = 'kanban-operational-v3-20261118'
 export type SourceKind = 'description' | 'item' | 'note' | 'email' | 'custom_field'
 export type AssessmentCoverage = Record<string, { state: 'complete' | 'missing' | 'unsupported'; reason: string }>
 export type AssessmentInstaller = { token: string; name: string; id: string }
