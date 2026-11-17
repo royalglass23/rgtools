@@ -64,17 +64,49 @@ export function parseManualState(raw: unknown, strict = false): ManualState {
   result.focus = (data.focus ?? 'auto') as ManualState['focus']
   return result
 }
+export type OwnedField = keyof ManualState | 'installDate' | 'installerId'
+export type ReadinessDetail = { state: Readiness; date: string | null; datePurpose: 'ready' | 'expected' | null }
+type FieldValues = ManualState & { installDate: string | null; installerId: string | null }
+export type FieldPatches = Partial<{ [K in OwnedField]: { mode: 'auto' } | { mode: 'staff'; value: FieldValues[K] | (K extends keyof typeof READINESS_FIELDS ? ReadinessDetail : never) } }>
 export type ItemSave = {
   id: string; revision: number; expectedInstallerId: string | null; expectedInstallDate: string | null;
-  installerId: string | null; installDate: string | null; manual: ManualState;
+  patches: FieldPatches;
 }
 export function validateItemSave(raw: unknown): ItemSave {
   if (!raw || typeof raw !== 'object') throw new Error('Invalid product update.')
   const d = raw as Record<string, unknown>
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
   if (typeof d.id !== 'string' || !uuid.test(d.id) || !Number.isSafeInteger(d.revision) || Number(d.revision) < 0) throw new Error('Invalid product revision.')
-  for (const key of ['installerId', 'expectedInstallerId']) if (d[key] !== null && (typeof d[key] !== 'string' || !uuid.test(d[key] as string))) throw new Error('Invalid installer.')
-  for (const key of ['installDate', 'expectedInstallDate']) if (d[key] !== null && !validDate(d[key])) throw new Error('Invalid install date.')
+  if (Object.keys(d).some(key => !['id', 'revision', 'expectedInstallerId', 'expectedInstallDate', 'patches'].includes(key))) throw new Error('Unsupported product update. Reload before saving.')
+  if (d.expectedInstallerId !== null && (typeof d.expectedInstallerId !== 'string' || !uuid.test(d.expectedInstallerId))) throw new Error('Invalid installer.')
+  if (d.expectedInstallDate !== null && !validDate(d.expectedInstallDate)) throw new Error('Invalid install date.')
   return { id: d.id, revision: Number(d.revision), expectedInstallerId: d.expectedInstallerId as string | null, expectedInstallDate: d.expectedInstallDate as string | null,
-    installerId: d.installerId as string | null, installDate: d.installDate as string | null, manual: parseManualState(d.manual, true) }
+    patches: validateFieldPatches(d.patches) }
+}
+
+export function validateFieldPatches(raw: unknown): FieldPatches {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw) || !Object.keys(raw).length) throw new Error('Choose at least one field to update.')
+  const defaults = parseManualState({})
+  const patches: Record<string, unknown> = {}
+  for (const [key, rawPatch] of Object.entries(raw)) {
+    if (![...Object.keys(defaults), 'installDate', 'installerId'].includes(key) || !rawPatch || typeof rawPatch !== 'object' || Array.isArray(rawPatch)) throw new Error('Unsupported field update.')
+    const patch = rawPatch as Record<string, unknown>
+    if (patch.mode === 'auto' && Object.keys(patch).length === 1) { patches[key] = { mode: 'auto' }; continue }
+    if (patch.mode !== 'staff' || Object.keys(patch).some(key => !['mode', 'value'].includes(key)) || !Object.hasOwn(patch, 'value')) throw new Error('Invalid field ownership update.')
+    let value = patch.value
+    if (key === 'installDate') {
+      if (value !== null && !validDate(value)) throw new Error('Invalid install date.')
+    } else if (key === 'installerId') {
+      if (value !== null && (typeof value !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value))) throw new Error('Invalid installer.')
+    } else if (Object.hasOwn(READINESS_FIELDS, key) && value && typeof value === 'object' && !Array.isArray(value)) {
+      const detail = value as Record<string, unknown>
+      if (typeof detail.state !== 'string' || Object.keys(detail).some(key => !['state', 'date', 'datePurpose'].includes(key)) || (detail.date !== null && !validDate(detail.date)) || (detail.datePurpose !== null && detail.datePurpose !== 'ready' && detail.datePurpose !== 'expected') || Boolean(detail.date) !== Boolean(detail.datePurpose)) throw new Error('Invalid readiness date.')
+      value = { state: parseManualState({ [key]: detail.state }, true)[key as keyof ManualState], date: detail.date, datePurpose: detail.datePurpose }
+    } else {
+      if (value === undefined || (Object.hasOwn(READINESS_FIELDS, key) && value === null)) throw new Error('Invalid field value.')
+      value = parseManualState({ [key]: value }, true)[key as keyof ManualState]
+    }
+    patches[key] = { mode: 'staff', value }
+  }
+  return patches as FieldPatches
 }

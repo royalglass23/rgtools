@@ -68,6 +68,25 @@ beforeEach(() => {
 })
 
 describe('WorkOrderItemsSummary', () => {
+  it('sends the observed canonical date and ownership revision with a staff edit', async () => {
+    mockUpdateOperationalField.mockResolvedValue({ value: '2026-11-20', revision: 5 })
+    render(<WorkOrderItemsSummary canManage fields={[summaryField('installDate')]} items={[workOrderItem({ id: 'item-canonical', itemCode: 'GLASS', quantity: '1', originalDescription: 'Shower', lineTotalExcludingGst: null, generatedLabel: null, manualLabelOverride: null, isActive: true, dashboardRevision: 4 })]} />)
+    fireEvent.change(screen.getByLabelText('Install date for GLASS'), { target: { value: '2026-11-20' } })
+    await waitFor(() => expect(mockUpdateOperationalField).toHaveBeenCalledWith('item-canonical', 'installDate', '2026-11-20', { value: null, revision: 4 }))
+  })
+  it('keeps a failed date draft reviewable instead of rebasing Retry onto a newer staff revision', async () => {
+    mockUpdateOperationalField.mockRejectedValue(new Error('Someone changed this product.'))
+    const item = workOrderItem({ id: 'item-stale', itemCode: 'GLASS', quantity: '1', originalDescription: 'Shower', lineTotalExcludingGst: null, generatedLabel: null, manualLabelOverride: null, isActive: true, dashboardRevision: 4 })
+    const view = render(<WorkOrderItemsSummary canManage fields={[summaryField('installDate')]} items={[item]} />)
+    fireEvent.change(screen.getByLabelText('Install date for GLASS'), { target: { value: '2026-11-20' } })
+    await screen.findByRole('alert')
+    view.rerender(<WorkOrderItemsSummary canManage fields={[summaryField('installDate')]} items={[{ ...item, dashboardRevision: 5, installDate: '2026-11-22' }]} />)
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeDisabled()
+    expect(screen.getByText('Unsent value: 2026-11-20')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Reload saved Install date for GLASS' }))
+    expect(screen.getByLabelText('Install date for GLASS')).toHaveValue('2026-11-22')
+    expect(mockUpdateOperationalField).toHaveBeenCalledTimes(1)
+  })
   it('lets a Manage user retry a safely failed enrichment job', async () => {
     mockRetryEnrichment.mockResolvedValue({ status: 'queued' })
     render(<WorkOrderItemsSummary canManage items={[workOrderItem({

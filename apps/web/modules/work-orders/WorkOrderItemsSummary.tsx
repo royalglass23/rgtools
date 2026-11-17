@@ -447,6 +447,7 @@ function ItemOperationalField({
       itemLabel={item.itemCode ?? 'item'}
       field={field}
       initialValue={definition.value}
+      initialRevision={item.dashboardRevision ?? 0}
       options={definition.options}
       type={definition.type}
     />
@@ -479,6 +480,7 @@ function EditableOperationalField({
   itemLabel,
   field,
   initialValue,
+  initialRevision,
   options,
   type,
 }: {
@@ -486,15 +488,24 @@ function EditableOperationalField({
   itemLabel: string
   field: WorkOrderItemOperationalField
   initialValue: string
+  initialRevision: number
   options?: FilterOption[]
   type?: 'date'
 }) {
   const [value, setValue] = useState(initialValue)
   const [persistedValue, setPersistedValue] = useState(initialValue)
+  const [revision, setRevision] = useState(initialRevision)
+  const [seenRevision, setSeenRevision] = useState(initialRevision)
   const [retryValue, setRetryValue] = useState<string | null>(null)
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const label = operationalFieldLabel(field)
+  const canonical = field === 'installer' || field === 'installDate'
+  const newer = canonical && initialRevision !== seenRevision
+  if (newer && (status === 'idle' || status === 'saved')) {
+    setSeenRevision(initialRevision); setRevision(initialRevision)
+    setValue(initialValue); setPersistedValue(initialValue)
+  }
 
   async function save(nextValue: string) {
     setValue(nextValue)
@@ -502,7 +513,10 @@ function EditableOperationalField({
     setErrorMessage(null)
 
     try {
-      await updateWorkOrderItemOperationalFieldAction(itemId, field, nextValue)
+      const result = canonical
+        ? await updateWorkOrderItemOperationalFieldAction(itemId, field, nextValue, { value: persistedValue || null, revision })
+        : await updateWorkOrderItemOperationalFieldAction(itemId, field, nextValue)
+      if (result && 'revision' in result && typeof result.revision === 'number') setRevision(result.revision)
       setPersistedValue(nextValue)
       setRetryValue(null)
       setStatus('saved')
@@ -522,6 +536,7 @@ function EditableOperationalField({
           <input
             aria-label={`${label} for ${itemLabel}`}
             type="date"
+            disabled={status === 'saving'}
             value={value}
             onChange={(event) => void save(event.target.value)}
             className="w-full rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-950"
@@ -530,6 +545,7 @@ function EditableOperationalField({
           <select
             aria-label={`${label} for ${itemLabel}`}
             value={value}
+            disabled={status === 'saving'}
             onChange={(event) => void save(event.target.value)}
             className="w-full rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-950"
           >
@@ -537,11 +553,18 @@ function EditableOperationalField({
             {options?.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
           </select>
         )}
+        {canonical && <button type="button" disabled={status === 'saving'} aria-label={`Keep staff value for ${label} for ${itemLabel}`} onClick={() => void save(value)} className="mt-1 text-[11px] underline">Keep staff value</button>}
         <SaveStatus
           status={status}
           errorMessage={errorMessage}
           onRetry={retryValue === null ? null : () => void save(retryValue)}
+          retryDisabled={newer}
         />
+        {newer && status === 'error' && <div className="mt-1 text-[11px] text-amber-800">
+          <p>A newer saved value is available. Copy your unsent value before reloading.</p>
+          <p>Unsent value: {retryValue || '(blank)'}</p>
+          <button type="button" aria-label={`Reload saved ${label} for ${itemLabel}`} onClick={() => { setValue(initialValue); setPersistedValue(initialValue); setRevision(initialRevision); setSeenRevision(initialRevision); setRetryValue(null); setErrorMessage(null); setStatus('idle') }}>Reload saved value</button>
+        </div>}
       </dd>
     </div>
   )
@@ -551,10 +574,12 @@ function SaveStatus({
   status,
   errorMessage,
   onRetry,
+  retryDisabled = false,
 }: {
   status: 'idle' | 'saving' | 'saved' | 'error'
   errorMessage: string | null
   onRetry: (() => void) | null
+  retryDisabled?: boolean
 }) {
   if (status === 'idle') return null
   if (status === 'saving') return <span className="mt-1 block text-[11px] text-sky-700">Saving</span>
@@ -562,7 +587,7 @@ function SaveStatus({
   return (
     <span className="mt-1 block text-[11px] text-red-700" role="alert">
       {errorMessage ?? 'Save failed.'}{' '}
-      {onRetry && <button type="button" onClick={onRetry} className="font-semibold underline">Retry</button>}
+      {onRetry && <button type="button" onClick={onRetry} disabled={retryDisabled} className="font-semibold underline">Retry</button>}
     </span>
   )
 }

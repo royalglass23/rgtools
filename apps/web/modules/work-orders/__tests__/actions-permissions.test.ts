@@ -173,18 +173,19 @@ describe('work order action permissions', () => {
     const updateSet = vi.fn(() => ({ where: vi.fn(() => ({ returning })) }))
     const insertValues = vi.fn(async () => [])
     mockTransaction.mockImplementationOnce(async (callback: (tx: unknown) => Promise<void>) => callback({
-      select: vi.fn(() => ({
+      select: vi.fn().mockReturnValueOnce({
         from: vi.fn(() => ({
           where: vi.fn(() => ({
-            limit: vi.fn(async () => [{
+            limit: vi.fn(() => ({ for: vi.fn(async () => [{
               id: 'item-1',
               workOrderId: 'work-order-1',
               isActive: true,
               installerId: '11111111-1111-4111-8111-111111111111',
-            }]),
+              installDate: null, dashboardRevision: 0, dashboardState: {},
+            }]) })),
           })),
         })),
-      })),
+      }).mockReturnValue({ from: vi.fn(() => ({ where: vi.fn(() => ({ limit: vi.fn(async () => [{ id: '22222222-2222-4222-8222-222222222222' }]) })) })) }),
       update: vi.fn(() => ({ set: updateSet })),
       insert: vi.fn(() => ({ values: insertValues })),
     }))
@@ -193,6 +194,7 @@ describe('work order action permissions', () => {
       'item-1',
       'installer',
       '22222222-2222-4222-8222-222222222222',
+      { value: '11111111-1111-4111-8111-111111111111', revision: 0 },
     )
 
     expect(updateSet).toHaveBeenCalledWith(expect.objectContaining({
@@ -250,12 +252,13 @@ describe('work order action permissions', () => {
       .mockReturnValueOnce({
         from: vi.fn(() => ({
           where: vi.fn(() => ({
-            limit: vi.fn(async () => [{
+            limit: vi.fn(() => ({ for: vi.fn(async () => [{
               id: 'item-1',
               workOrderId: 'work-order-1',
               isActive: true,
               installerId: null,
-            }]),
+              installDate: null, dashboardRevision: 0, dashboardState: {},
+            }]) })),
           })),
         })),
       })
@@ -274,6 +277,7 @@ describe('work order action permissions', () => {
       'item-1',
       'installer',
       '22222222-2222-4222-8222-222222222222',
+      { value: null, revision: 0 },
     )).rejects.toThrow(
       'Installer option 22222222-2222-4222-8222-222222222222 does not exist or is inactive.',
     )

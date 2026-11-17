@@ -99,6 +99,7 @@ export function withServiceM8Retry(
   return async (path, init) => {
     for (let attempt = 1; ; attempt++) {
       try {
+        init?.signal?.throwIfAborted()
         const response = await request(path, init)
         if (!isRetryableStatus(response.status)) return response
         if (attempt >= maxAttempts) {
@@ -111,6 +112,7 @@ export function withServiceM8Retry(
 
         console.warn(`ServiceM8 request retrying: status=${response.status} path=${path} attempt=${attempt}`)
       } catch (error) {
+        if (init?.signal?.aborted) throw init.signal.reason
         if (error instanceof ServiceM8RateLimitError || error instanceof ServiceM8TimeoutError) throw error
         if (attempt >= maxAttempts) {
           console.warn(`ServiceM8 request exhausted retries: network path=${path} attempts=${attempt}`)
@@ -196,7 +198,7 @@ function buildServiceM8Request(apiKey: string, timeoutMs: number): ServiceM8Fetc
       const response = await fetch(`${baseUrl}${path}`, {
         ...init,
         headers,
-        signal: controller.signal,
+        signal: init?.signal ? AbortSignal.any([init.signal, controller.signal]) : controller.signal,
       })
 
       return {

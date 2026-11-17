@@ -80,4 +80,5 @@ If you try to access a tool disabled for your role, rgtools redirects you back t
 - Use [Clients](../how-to/clients.md) to review a customer record across leads and tracked quotes.
 - Use [Quote Tracker](../how-to/quotes.md) to create tracked quote links and read engagement.
 - Use [Work Orders](../how-to/work-orders.md) to review active jobs and maintain RG-owned operational details.
+- In [Dashboard → Work Orders](../how-to/work-order-dashboard.md), each field shows its effective value and automatic/staff origin with supporting evidence. Staff edits and deliberate blanks remain protected until you explicitly return that field to automatic assessment. One refresh starts a saved assessment run that continues while visible and resumes after reopening; unsaved edits pause new batches. Automatic suggestions remain separate from saved staff values.
 - Use [PS Generator](../how-to/ps-generator.md) to generate PS1 and PS3 Producer Statement packages.

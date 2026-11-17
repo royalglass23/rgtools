@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({ read: vi.fn() }))
 vi.mock('@/lib/dashboard-access', () => ({ requireDashboardUser: vi.fn() }))
@@ -8,6 +8,7 @@ vi.mock('@/modules/kanban/RefreshControl', () => ({ RefreshControl: () => null }
 vi.mock('@/modules/work-orders/queries', () => ({ getWorkOrderRefreshStatus: async () => ({ lastSuccessfulAt: null, latestFailure: null }) }))
 import WorkOrderPage from '../work-orders/page'
 import { parseManualState } from '@/modules/kanban/work-orders'
+import { effectiveProduct } from '@/modules/kanban/__tests__/effective-fixtures'
 const rows = Array.from({ length: 31 }, (_, index) => ({
   jobId: `job-${index + 1}`, jobNumber: `WO${index + 1}`, customer: `Customer ${index + 1}`, address: `Site ${index + 1}`,
   jobUuid: null, jobInstallDate: null, itemId: `item-${index + 1}`, itemUuid: `source-${index + 1}`, label: `Product ${index + 1}`,
@@ -21,6 +22,27 @@ const tableA = () => screen.getByRole('region', { name: 'Table A - All Work Orde
 const tableB = () => screen.getByRole('region', { name: 'Table B - Product planning' }).querySelector('table')!
 
 describe('prototype Work Orders tables and shared pagination', () => {
+  it.each(['query', 'page size'])('resynchronizes the %s control after committed filter parameters change', async field => {
+    const view = render(await WorkOrderPage({ searchParams: Promise.resolve({ q: 'old query', focus: 'all', itemsSize: '10' }) }))
+    const query = screen.getByRole('searchbox'), size = screen.getAllByRole('combobox', { name: 'Page size' })[1]
+    if (field === 'query') fireEvent.change(query, { target: { value: 'Typed draft query' } })
+    else fireEvent.change(size, { target: { value: '20' } })
+    view.rerender(await WorkOrderPage({ searchParams: Promise.resolve({ focus: 'all', itemsSize: '5' }) }))
+    expect(field === 'query' ? screen.getByRole('searchbox') : screen.getAllByRole('combobox', { name: 'Page size' })[1]).toHaveValue(field === 'query' ? '' : '5')
+  })
+  it('renders the same current automatic fields and literal consent status/reference while another product protects its staff clear', async () => {
+    const automatic = effectiveProduct(), staff = effectiveProduct()
+    staff.itemId = 'staff-product'; staff.ownership.siteReady = 'staff'; staff.manual.siteReady = 'unknown'
+    mocks.read.mockResolvedValue({ rows: [automatic, staff], installers: [{ id: '40600000-0000-4000-8000-000000000030', name: 'Synthetic Installer' }], today: '2026-11-18' })
+    await show({ focus: 'all' })
+    const productRows = tableB().querySelectorAll('tbody > tr:not([class])')
+    const cells = within(productRows[0] as HTMLElement).getAllByRole('cell')
+    expect(cells[3]).toHaveTextContent('Y'); expect(cells[3]).toHaveTextContent('Ready on: 18/11/2026')
+    expect(cells[4]).toHaveTextContent('Expected: 21/11/2026')
+    expect(cells[9]).toHaveTextContent('approved'); expect(cells[9]).toHaveTextContent('BCO1234567')
+    expect(cells[1]).toHaveTextContent('Synthetic Installer · suggestion only'); expect(cells[1]).toHaveTextContent('2.5 h')
+    expect(within(productRows[1] as HTMLElement).getAllByRole('cell')[3]).toHaveTextContent('UnknownStaff')
+  })
   it('matches both prototype column sets in order, including Bottle strut and BC', async () => {
     await show()
     expect(within(tableA()).getAllByRole('columnheader').map(el => el.textContent)).toEqual(['WO', 'Customer', 'Short address', 'Approx install date', 'Within 3 weeks?'])

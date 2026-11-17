@@ -1,7 +1,8 @@
 import type { ServiceM8FetchRequest } from '@/lib/servicem8/client'
 import { ASSESSMENT_RULES, validateAssessmentOutput, type AssessmentStore, type ProviderContext, type StoredAssessment } from './assessment'
-import { assessmentContextHash, assessmentSnapshotHash, loadAssessmentContext } from './assessment-source'
+import { ASSESSMENT_SOURCE_POLICY, assessmentContextHash, assessmentInstallerVersion, assessmentSnapshotHash, loadAssessmentContext } from './assessment-source'
 import { assessmentModel, generateDueAssessment } from './assessment-provider'
+import { OPERATIONAL_SCHEMA, validateOperationalAssessmentOutput, type OperationalAssessment } from './operational-assessment'
 
 export type AssessmentSummary = { assessedProducts: number; reusedProducts: number; failedJobs: number; pendingJobs: number; unavailable: boolean }
 export async function refreshDueAssessments(request: ServiceM8FetchRequest, actorId: string, options: {
@@ -22,20 +23,22 @@ export async function refreshDueAssessments(request: ServiceM8FetchRequest, acto
       try {
         const context = await loadAssessmentContext(job, request)
         const sourceHash = assessmentContextHash(context), checkedAt = now().toISOString()
-        const cached = job.items.every(item => item.stored?.state === 'complete' && item.stored.sourceHash === sourceHash && item.stored.rules === ASSESSMENT_RULES && item.stored.model === model)
+        const cached = job.items.every(item => item.stored?.state === 'complete' && item.stored.operational?.version === OPERATIONAL_SCHEMA && item.stored.sourceHash === sourceHash && item.stored.rules === ASSESSMENT_RULES && item.stored.model === model)
         let proposals: Array<StoredAssessment['result']>
-        if (cached) proposals = job.items.map(item => item.stored!.result)
+        let operational: OperationalAssessment[]
+        if (cached) { proposals = job.items.map(item => item.stored!.result); operational = job.items.map(item => item.stored!.operational!) }
         else {
           stage = 'provider'
-          const output = await provider({ items: context.items, sources: context.sources.map(source => ({ token: source.token, kind: source.kind, item: source.item, observedAt: source.observedAt, text: source.text })) })
+          const output = await provider({ items: context.items, coverage: context.coverage, installers: context.installers?.map(({ token }) => ({ token })), sources: context.sources.map(source => ({ token: source.token, kind: source.kind, item: source.item, observedAt: source.observedAt, text: source.text, installerTokens: source.installerTokens })) })
           stage = 'validation'
           proposals = validateAssessmentOutput(output, context)
+          operational = validateOperationalAssessmentOutput(output, context)
         }
         const values: Record<string, StoredAssessment> = {}
         job.items.forEach((item, i) => { values[item.id] = { state: 'complete', sourceHash, snapshotHash: assessmentSnapshotHash(job.description, item.description), rules: ASSESSMENT_RULES, model,
-          checkedAt, assessedAt: cached ? item.stored!.assessedAt : checkedAt, result: proposals[i], error: null } })
+          checkedAt, assessedAt: cached ? item.stored!.assessedAt : checkedAt, result: proposals[i], operational: operational[i], coverage: context.coverage, sourceGeneration: job.sourceGeneration ?? null, installerVersion: assessmentInstallerVersion(context.installers ?? []), sourcePolicy: ASSESSMENT_SOURCE_POLICY, error: null } })
         stage = 'persistence'
-        if (await store.save(job, values, actorId)) {
+        if (await store.save({ ...job, assessmentReused: cached }, values, actorId)) {
           if (cached) result.reusedProducts += job.items.length
           else result.assessedProducts += job.items.length
         } else result.pendingJobs++

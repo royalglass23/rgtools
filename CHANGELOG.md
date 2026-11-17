@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Display current automatic and protected staff operational values consistently in Work Orders planning, with field evidence, source coverage, assessment state and ownership. Keep requirements separate from issuance, readiness separate from expected dates, consent status separate from its reference, and generated gaps separate from staff Notes. Preserve draft values/modes and changed-field saves through assessment updates and row removal.
+
+- Add durable Work Orders assessment runs after one source refresh, with automatic visible-tab continuation, reload recovery, bounded retries and lease recovery. Show assessment progress separately from source freshness, pause new batches for unsaved drafts, and reject stale worker publication. Add migration 0074 for run/work state.
+
+- Extend Work Orders refresh to validate and store evidence-backed operational-field assessments alongside compatible date results. Read only allowlisted custom-field text, record unsupported coverage, mask configured installer identities, invalidate cache on relevant evidence/inventory changes and reject stale assessment writes. Staff ownership and canonical manual fields stay protected.
+
+- Add per-field automatic/staff ownership to Work Orders product planning. Preserve deliberate blank/Unknown choices and legacy stored values, apply only edited fields, and audit date/installer ownership across both screens. Explicit return to automatic clears the saved manual date/assignment while retaining history; broader operational-field AI assessment remains later work.
+
 - Match Kanban Master Y/N/? flags with an audited, exact-match import; products inherit job flags while keeping independent overrides and readiness. Repair AI product identity responses and complete-history limits behind failed assessments.
 
 - Fix three-week assessment rejecting yearless dates in dated notes/emails; validate nearby source-year dates and year rollover, invalidate old rule caches, and surface assessment failures with safe retry details.
