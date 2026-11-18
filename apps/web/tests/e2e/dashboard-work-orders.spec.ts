@@ -15,7 +15,7 @@ async function login(page: Page, username: string) {
 
 test.describe('columns-only Work Orders dashboard on the named disposable fixture', () => {
   test.skip(!enabled, 'Requires the explicit disposable localhost RG406 acceptance URL; never a live target.')
-  test('shows the PDF columns, blank planning cells and retained material preview', async ({ page }) => {
+  test('shows the PDF columns with both tables temporarily empty', async ({ page }) => {
     await login(page, 'rg406-staff')
     await page.goto('/dashboard/work-orders')
     const a = page.getByRole('region', { name: 'All Work Order rows', exact: true })
@@ -24,23 +24,11 @@ test.describe('columns-only Work Orders dashboard on the named disposable fixtur
     await expect(page.getByRole('heading', { name: 'Table B - Due within 3 weeks' })).toBeVisible()
     await expect(a.getByRole('columnheader')).toHaveText(['WO', 'Customer', 'Short address', 'Approx install date', 'Within 3 weeks?'])
     await expect(b.getByRole('columnheader')).toHaveText(['WO / client / address', 'Materials (per product)', 'Client waiting for', 'Site ready', 'Glass ready', 'Hardware ready', 'Design Y/N/?', 'PS1 / PS3', 'Bottle strut', 'BC?', 'Minor var?'])
-    for (const row of await a.locator('tbody tr').all()) await expect(row.locator('td').filter({ hasText: /./ })).toHaveCount(3)
-    for (const row of await b.locator('tbody tr').all()) {
-      await expect(row.locator('td')).toHaveCount(11)
-      for (let column = 2; column < 11; column++) await expect(row.locator('td').nth(column)).toHaveText('')
-    }
+    await expect(a.locator('tbody tr')).toHaveCount(0)
+    await expect(b.locator('tbody tr')).toHaveCount(0)
     await expect(page.getByRole('button', { name: /Refresh|Save product/ })).toHaveCount(0)
     await expect(page.locator('details')).toHaveCount(0)
-    const materials = b.getByRole('button', { name: /View material description/ }).first()
-    await expect(materials).toBeVisible()
-    await materials.hover()
-    await expect(page.getByRole('dialog')).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Edit product' })).toHaveCount(0)
-    await page.keyboard.press('Escape')
-    await expect(page.getByRole('dialog')).toHaveCount(0)
-    await materials.click()
-    await page.getByRole('button', { name: 'Close materials preview' }).click()
-    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /View material description/ })).toHaveCount(0)
   })
   test('retains search and independent page-size controls', async ({ page }) => {
     await login(page, 'rg406-staff')
@@ -49,7 +37,7 @@ test.describe('columns-only Work Orders dashboard on the named disposable fixtur
     await expect(sizes.nth(0)).toHaveValue('10'); await expect(sizes.nth(1)).toHaveValue('20')
     await page.getByRole('searchbox').fill('COLUMN_RESET_NO_MATCH')
     await page.getByRole('button', { name: 'Search', exact: true }).click()
-    await expect(page.getByText('No saved Work Orders match this search.')).toBeVisible()
+    await expect(page.getByText('No rows to display.')).toHaveCount(2)
     await expect(sizes.nth(0)).toHaveValue('10'); await expect(sizes.nth(1)).toHaveValue('20')
     await page.getByRole('link', { name: 'Clear search' }).click()
     await expect(page.getByRole('searchbox')).toHaveValue('')

@@ -3,7 +3,7 @@ import Form from 'next/form'
 import { requireDashboardUser } from '@/lib/dashboard-access'
 import { PageHeader, DataPanel, TableShell, FeedbackState } from '@/components/precision-ui/PrecisionUI'
 import { PaginationBar } from '@/components/pagination/PaginationBar'
-import { readWorkOrderDashboard } from '@/modules/kanban/persistence'
+import type { DashboardProduct } from '@/modules/kanban/persistence'
 import { DASHBOARD_PAGE_SIZES, dashboardPageSize } from '@/modules/kanban/work-orders'
 import { MaterialDescription } from '@/modules/kanban/MaterialDescription'
 import styles from '@/modules/kanban/WorkOrderDashboard.module.css'
@@ -18,9 +18,8 @@ export default async function WorkOrderDashboard({ searchParams }: { searchParam
   await requireDashboardUser()
   const p = await searchParams
   const q = value(p, 'q').trim().slice(0, 100)
-  let data
-  try { data = await readWorkOrderDashboard(q) }
-  catch { return <><PageHeader title="Work Orders dashboard" /><FeedbackState tone="error">Work Order records could not load. Reload the page or ask an administrator to check the dashboard.</FeedbackState></> }
+  // Keep both tables empty during the columns-only setup. Stored records are untouched.
+  const data: { rows: DashboardProduct[] } = { rows: [] }
   const jobs = Array.from(new Map(data.rows.map(row => [row.jobId, row])).values())
   const products = data.rows.filter(row => row.itemId && row.inDueWindow)
   const jobsSize = dashboardPageSize(value(p, 'jobsSize')); const itemsSize = dashboardPageSize(value(p, 'itemsSize'))
@@ -56,7 +55,7 @@ export default async function WorkOrderDashboard({ searchParams }: { searchParam
           <td>{job.customer}</td><td>{job.address ?? 'Address unknown'}</td><td /><td />
         </tr>)}</tbody>
       </table></TableShell>
-      {jobs.length === 0 && <FeedbackState tone="empty">No saved Work Orders match this search.</FeedbackState>}
+      {jobs.length === 0 && <FeedbackState tone="empty">No rows to display.</FeedbackState>}
       {pagination('jobs', jobs.length, jp, jobPages, jobsSize)}
     </DataPanel>
     <DataPanel title="Table B - Due within 3 weeks">
@@ -68,7 +67,7 @@ export default async function WorkOrderDashboard({ searchParams }: { searchParam
           {Array.from({ length: 9 }, (_, index) => <td key={index} />)}
         </tr>)}</tbody>
       </table></TableShell>
-      {products.length === 0 && <FeedbackState tone="empty">No saved products are due within 3 weeks.</FeedbackState>}
+      {products.length === 0 && <FeedbackState tone="empty">No rows to display.</FeedbackState>}
       {pagination('items', products.length, ip, productPages, itemsSize)}
     </DataPanel>
   </div>

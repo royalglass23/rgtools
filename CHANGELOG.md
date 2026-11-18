@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Temporarily clear displayed Work Orders rows while keeping both table column sets and controls; leave stored records unchanged.
+
 - Reset the Work Orders dashboard to the two requested PDF table schemas, with blank planning cells. Retain saved job/material rows, search, independent pagination and material hover/focus/tap previews; remove assessment/refresh/editor controls from this page without deleting stored data.
 - Reset the Work Orders dashboard to the two requested PDF table schemas, with blank planning cells. Retain saved job/material rows, search, independent pagination and material hover/focus/tap previews; remove assessment/refresh/editor controls from this page without deleting stored data.
 - Simplify Work Orders field displays to values with optional Details. Accept sourced Client waiting for summaries from expected work and unresolved requests, including the Q250082 installation/variation wording, without requiring literal waiting-for phrases. Preserve staff edits and clears.
