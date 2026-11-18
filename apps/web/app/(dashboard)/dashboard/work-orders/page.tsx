@@ -3,7 +3,9 @@ import Form from 'next/form'
 import { requireDashboardUser } from '@/lib/dashboard-access'
 import { PageHeader, DataPanel, TableShell, FeedbackState } from '@/components/precision-ui/PrecisionUI'
 import { PaginationBar } from '@/components/pagination/PaginationBar'
-import type { DashboardProduct } from '@/modules/kanban/persistence'
+import { filterPublishedOutput, type PublishedOutput } from '@/modules/kanban/published-output'
+import { readPublishedOutput } from '@/modules/kanban/published-source'
+import { PublishedRefreshControl } from '@/modules/kanban/PublishedRefreshControl'
 import { DASHBOARD_PAGE_SIZES, dashboardPageSize } from '@/modules/kanban/work-orders'
 import { MaterialDescription } from '@/modules/kanban/MaterialDescription'
 import styles from '@/modules/kanban/WorkOrderDashboard.module.css'
@@ -18,10 +20,10 @@ export default async function WorkOrderDashboard({ searchParams }: { searchParam
   await requireDashboardUser()
   const p = await searchParams
   const q = value(p, 'q').trim().slice(0, 100)
-  // Keep both tables empty during the columns-only setup. Stored records are untouched.
-  const data: { rows: DashboardProduct[] } = { rows: [] }
-  const jobs = Array.from(new Map(data.rows.map(row => [row.jobId, row])).values())
-  const products = data.rows.filter(row => row.itemId && row.inDueWindow)
+  let data: PublishedOutput = { jobs: [], products: [] }, loadFailed = false
+  try { data = filterPublishedOutput(await readPublishedOutput(), q) }
+  catch { loadFailed = true }
+  const { jobs, products } = data
   const jobsSize = dashboardPageSize(value(p, 'jobsSize')); const itemsSize = dashboardPageSize(value(p, 'itemsSize'))
   const jobPages = Math.max(1, Math.ceil(jobs.length / jobsSize)); const jp = Math.min(pageNumber(p, 'jobsPage'), jobPages)
   const productPages = Math.max(1, Math.ceil(products.length / itemsSize)); const ip = Math.min(pageNumber(p, 'itemsPage'), productPages)
@@ -42,6 +44,8 @@ export default async function WorkOrderDashboard({ searchParams }: { searchParam
   }
   return <div className={styles.page}>
     <PageHeader title="Work Orders dashboard" />
+    <PublishedRefreshControl />
+    {loadFailed && <FeedbackState tone="error">Kanban output could not load. Ask an administrator to check the published board connection.</FeedbackState>}
     <Form className={styles.toolbar} action="/dashboard/work-orders" prefetch={false}>
       <label>Find a job or product<input key={q} name="q" type="search" defaultValue={q} placeholder="Job, customer, site or product" maxLength={100} /></label>
       <input type="hidden" name="jobsSize" value={jobsSize} /><input type="hidden" name="itemsSize" value={itemsSize} /><button type="submit">Search</button>
@@ -50,9 +54,8 @@ export default async function WorkOrderDashboard({ searchParams }: { searchParam
     <DataPanel title="Table A - Every work order">
       <TableShell label="All Work Order rows"><table className={styles.table}>
         <thead><tr>{['WO', 'Customer', 'Short address', 'Approx install date', 'Within 3 weeks?'].map(column => <th key={column} scope="col">{column}</th>)}</tr></thead>
-        <tbody>{jobs.slice((jp - 1) * jobsSize, jp * jobsSize).map(job => <tr key={job.jobId}>
-          <td>{job.jobUuid ? <a href={`https://go.servicem8.com/OpenJob/${encodeURIComponent(job.jobUuid)}`} target="_blank" rel="noreferrer">{job.jobNumber ?? 'Unnumbered job'}</a> : job.jobNumber}</td>
-          <td>{job.customer}</td><td>{job.address ?? 'Address unknown'}</td><td /><td />
+        <tbody>{jobs.slice((jp - 1) * jobsSize, jp * jobsSize).map(job => <tr key={job.key}>
+          {job.cells.map((cell, index) => <td key={index} style={{ whiteSpace: 'pre-line' }}>{cell}</td>)}
         </tr>)}</tbody>
       </table></TableShell>
       {jobs.length === 0 && <FeedbackState tone="empty">No rows to display.</FeedbackState>}
@@ -61,10 +64,10 @@ export default async function WorkOrderDashboard({ searchParams }: { searchParam
     <DataPanel title="Table B - Due within 3 weeks">
       <TableShell label="Due product rows"><table className={`${styles.table} ${styles.planningTable}`}>
         <thead><tr>{['WO / client / address', 'Materials (per product)', 'Client waiting for', 'Site ready', 'Glass ready', 'Hardware ready', 'Design Y/N/?', 'PS1 / PS3', 'Bottle strut', 'BC?', 'Minor var?'].map(column => <th key={column} scope="col">{column}</th>)}</tr></thead>
-        <tbody>{products.slice((ip - 1) * itemsSize, ip * itemsSize).map(row => <tr key={row.itemId}>
-          <td><strong>{row.jobNumber} / {row.customer}</strong><div>{row.address ?? 'Address unknown'}</div></td>
-          <td><MaterialDescription label={row.label} description={row.description} jobNumber={row.jobNumber} /></td>
-          {Array.from({ length: 9 }, (_, index) => <td key={index} />)}
+        <tbody>{products.slice((ip - 1) * itemsSize, ip * itemsSize).map(row => <tr key={row.key}>
+          <td style={{ whiteSpace: 'pre-line' }}>{row.cells[0]}</td>
+          <td><MaterialDescription label={row.cells[1]} description={row.cells[1]} jobNumber={row.cells[0].split('\n')[0]} /></td>
+          {row.cells.slice(2).map((cell, index) => <td key={index} style={{ whiteSpace: 'pre-line' }}>{cell}</td>)}
         </tr>)}</tbody>
       </table></TableShell>
       {products.length === 0 && <FeedbackState tone="empty">No rows to display.</FeedbackState>}

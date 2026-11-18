@@ -27,7 +27,7 @@ flow.
 | --- | --- |
 | **Dashboard** | Opens the main operations dashboard after sign-in. Its submenu groups Roxy Dashboard, Quote tracking and Work Orders. |
 | **Roxy Dashboard** | ServiceM8 Job Progress register, restricted to Admins and the configured Roxy user ID. Keeps job-edit periods, upcoming bookings and pagination; Diary-based activity and follow-up remain unverified. |
-| **Work Orders dashboard** | Two temporarily empty tables matching the supplied Work Orders PDF columns. Search, pagination and material-preview support are retained; stored records are untouched. See [dashboard guide](docs/how-to/work-order-dashboard.md). |
+| **Work Orders dashboard** | Displays the Kanban bot's generated Work Orders board, including its existing findings, with the exact columns, search, independent pagination and material previews. Refresh starts the configured bot and reloads only after a matching completion receipt. No editing or independent AI assessment. Requires the [server-side connection setup](docs/dev/kanban-published-output.md); no live connection is implied by installing the code. See [dashboard guide](docs/how-to/work-order-dashboard.md). |
 | **Lead Intake** | Captures and scores enquiries, then synchronises eligible lead records with ServiceM8. |
 | **Leads** | Searches leads, shows tier and follow-up context, and links to ServiceM8 jobs. |
 | **Clients** | Maintains canonical RG Tools client records, linked context, and merge review. |

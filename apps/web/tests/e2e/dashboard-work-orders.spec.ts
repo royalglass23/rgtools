@@ -13,9 +13,9 @@ async function login(page: Page, username: string) {
   await expect(page).toHaveURL('http://127.0.0.1:55443/', { timeout: 120000 })
 }
 
-test.describe('columns-only Work Orders dashboard on the named disposable fixture', () => {
+test.describe('Work Orders dashboard on the named disposable fixture without a Google connection', () => {
   test.skip(!enabled, 'Requires the explicit disposable localhost RG406 acceptance URL; never a live target.')
-  test('shows the PDF columns with both tables temporarily empty', async ({ page }) => {
+  test('keeps exact columns and Refresh available when the source is not connected', async ({ page }) => {
     await login(page, 'rg406-staff')
     await page.goto('/dashboard/work-orders')
     const a = page.getByRole('region', { name: 'All Work Order rows', exact: true })
@@ -26,7 +26,9 @@ test.describe('columns-only Work Orders dashboard on the named disposable fixtur
     await expect(b.getByRole('columnheader')).toHaveText(['WO / client / address', 'Materials (per product)', 'Client waiting for', 'Site ready', 'Glass ready', 'Hardware ready', 'Design Y/N/?', 'PS1 / PS3', 'Bottle strut', 'BC?', 'Minor var?'])
     await expect(a.locator('tbody tr')).toHaveCount(0)
     await expect(b.locator('tbody tr')).toHaveCount(0)
-    await expect(page.getByRole('button', { name: /Refresh|Save product/ })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Save product/ })).toHaveCount(0)
+    await expect(page.getByText('Kanban output could not load.', { exact: false })).toBeVisible()
     await expect(page.locator('details')).toHaveCount(0)
     await expect(page.getByRole('button', { name: /View material description/ })).toHaveCount(0)
   })
