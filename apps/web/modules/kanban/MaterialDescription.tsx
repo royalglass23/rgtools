@@ -6,7 +6,7 @@ import { shortMaterialDescription } from './material-description'
 import styles from './MaterialDescription.module.css'
 
 export function MaterialDescription({ label, description, jobNumber, editHref }: {
-  label: string; description: string | null; jobNumber: string | null; editHref: string;
+  label: string; description: string | null; jobNumber: string | null; editHref?: string;
 }) {
   const [open, setOpen] = useState(false)
   const trigger = useRef<HTMLButtonElement>(null)
@@ -70,7 +70,7 @@ export function MaterialDescription({ label, description, jobNumber, editHref }:
       className={styles.preview} onPointerEnter={cancelClose} onPointerLeave={scheduleClose}>
       <div className={styles.heading}><h3 id={`${id}-title`}>Materials · {jobNumber ?? 'Unnumbered job'}</h3><button type="button" onClick={close} aria-label="Close materials preview">Close</button></div>
       <p className={styles.description}>{description?.trim() || label}</p>
-      <Link href={editHref} onClick={close}>Edit product</Link>
+      {editHref && <Link href={editHref} onClick={close}>Edit product</Link>}
     </div>, document.body)}
   </>
 }

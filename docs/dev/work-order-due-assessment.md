@@ -1,5 +1,7 @@
 # Work Orders evidence assessment
 
+> Retained backend reference: the Work Orders dashboard has been reset to columns-only. It does not mount refresh/continuation, assessment/evidence or product editing controls. The backend, schema and stored staff/assessment data described below remain intact; these are not current page instructions.
+
 The signed-in dashboard refresh action reconciles ServiceM8 first, then runs `refreshDueAssessments` under the existing shared refresh lease. Visible auto-refresh uses the same action. Page reads only recompute the Auckland today-through-21-days window; they do not call AI. Existing Production Specification enrichment is a separate workflow.
 
 ## Rules and source

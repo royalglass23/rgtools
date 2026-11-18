@@ -1,18 +1,11 @@
 import Link from 'next/link'
 import Form from 'next/form'
-import { Fragment } from 'react'
 import { requireDashboardUser } from '@/lib/dashboard-access'
-import { PageHeader, DataPanel, TableShell, FeedbackState, StatusBadge } from '@/components/precision-ui/PrecisionUI'
+import { PageHeader, DataPanel, TableShell, FeedbackState } from '@/components/precision-ui/PrecisionUI'
 import { PaginationBar } from '@/components/pagination/PaginationBar'
 import { readWorkOrderDashboard } from '@/modules/kanban/persistence'
-import { DASHBOARD_PAGE_SIZES, dashboardPageSize, FOCUS_LABELS, withinThreeWeeks, type Focus } from '@/modules/kanban/work-orders'
-import { effectiveProductFields } from '@/modules/kanban/effective-fields'
-import { EffectiveValue } from '@/modules/kanban/EffectiveValue'
-import { ProductEditor } from '@/modules/kanban/ProductEditor'
-import { RefreshControl } from '@/modules/kanban/RefreshControl'
+import { DASHBOARD_PAGE_SIZES, dashboardPageSize } from '@/modules/kanban/work-orders'
 import { MaterialDescription } from '@/modules/kanban/MaterialDescription'
-import { shortMaterialDescription } from '@/modules/kanban/material-description'
-import { getWorkOrderRefreshStatus } from '@/modules/work-orders/queries'
 import styles from '@/modules/kanban/WorkOrderDashboard.module.css'
 
 export const dynamic = 'force-dynamic'
@@ -20,27 +13,20 @@ export const maxDuration = 300
 type Params = Record<string, string | string[] | undefined>
 const value = (p: Params, key: string) => typeof p[key] === 'string' ? p[key] as string : ''
 const pageNumber = (p: Params, key: string) => Math.max(1, Math.min(10000, Number.parseInt(value(p, key), 10) || 1))
-const focusChoices = { all: 'All products', upcoming: 'Due within 3 weeks', overdue: 'Overdue', unknown: 'Unknown', conflict: 'Review conflicts' }
-function date(value: string | null) { return value ? `${value.slice(8, 10)}/${value.slice(5, 7)}/${value.slice(0, 4)}` : 'TBC' }
 
 export default async function WorkOrderDashboard({ searchParams }: { searchParams: Promise<Params> }) {
   await requireDashboardUser()
   const p = await searchParams
   const q = value(p, 'q').trim().slice(0, 100)
-  const focus = Object.hasOwn(focusChoices, value(p, 'focus')) ? value(p, 'focus') as keyof typeof focusChoices : 'upcoming'
-  let data, status
-  try { [data, status] = await Promise.all([readWorkOrderDashboard(q), getWorkOrderRefreshStatus()]) }
-  catch { return <><PageHeader title="Work Orders dashboard" /><FeedbackState tone="error">Work Order records could not load. Reload the page or ask an administrator to check the dashboard migration.</FeedbackState></> }
-  const products = data.rows.filter(row => row.itemId)
-  const failedAssessments = products.filter(row => row.assessment?.state === 'failed').length
+  let data
+  try { data = await readWorkOrderDashboard(q) }
+  catch { return <><PageHeader title="Work Orders dashboard" /><FeedbackState tone="error">Work Order records could not load. Reload the page or ask an administrator to check the dashboard.</FeedbackState></> }
   const jobs = Array.from(new Map(data.rows.map(row => [row.jobId, row])).values())
-  const focused = products.filter(row => focus === 'all' || (focus === 'upcoming' ? row.inDueWindow : row.focus === focus))
+  const products = data.rows.filter(row => row.itemId && row.inDueWindow)
   const jobsSize = dashboardPageSize(value(p, 'jobsSize')); const itemsSize = dashboardPageSize(value(p, 'itemsSize'))
   const jobPages = Math.max(1, Math.ceil(jobs.length / jobsSize)); const jp = Math.min(pageNumber(p, 'jobsPage'), jobPages)
-  const productPages = Math.max(1, Math.ceil(focused.length / itemsSize))
-  const targetIndex = focused.findIndex(row => row.itemId === value(p, 'product'))
-  const ip = targetIndex >= 0 ? Math.floor(targetIndex / itemsSize) + 1 : Math.min(pageNumber(p, 'itemsPage'), productPages)
-  const current = { q, focus, jobsPage: String(jp), jobsSize: String(jobsSize), itemsPage: String(ip), itemsSize: String(itemsSize) }
+  const productPages = Math.max(1, Math.ceil(products.length / itemsSize)); const ip = Math.min(pageNumber(p, 'itemsPage'), productPages)
+  const current = { q, jobsPage: String(jp), jobsSize: String(jobsSize), itemsPage: String(ip), itemsSize: String(itemsSize) }
   function href(update: Record<string, string>) { return `/dashboard/work-orders?${new URLSearchParams({ ...current, ...update })}` }
   function pagination(kind: 'jobs' | 'items', total: number, page: number, pageCount: number, size: number) {
     const key = `${kind}Page`; const sizeKey = `${kind}Size`
@@ -55,62 +41,35 @@ export default async function WorkOrderDashboard({ searchParams }: { searchParam
         <button type="submit">Apply</button>
       </Form>} />
   }
-  const count = (key: Focus) => products.filter(row => row.focus === key).length
   return <div className={styles.page}>
-    <PageHeader title="Work Orders dashboard" description="Plan each product, record readiness and see what needs attention." actions={<RefreshControl lastSuccessfulAt={status.lastSuccessfulAt?.toISOString() ?? null} />} />
-    <p className={styles.source}>ServiceM8 source refreshed: {status.lastSuccessfulAt ? status.lastSuccessfulAt.toLocaleString('en-NZ', { timeZone: 'Pacific/Auckland' }) : 'Not yet refreshed'}. Staff edits save immediately in RG Tools. Dates use Auckland time.</p>
-    {status.latestFailure && <FeedbackState tone="error">The latest ServiceM8 refresh failed. Previous saved records are shown.</FeedbackState>}
-    {data.flagsUnavailable && <FeedbackState tone="error">Imported Kanban flags could not load. Product overrides still apply; automatic inclusion waits for an administrator to check the saved flags.</FeedbackState>}
+    <PageHeader title="Work Orders dashboard" />
     <Form className={styles.toolbar} action="/dashboard/work-orders" prefetch={false}>
       <label>Find a job or product<input key={q} name="q" type="search" defaultValue={q} placeholder="Job, customer, site or product" maxLength={100} /></label>
-      <input type="hidden" name="focus" value={focus} /><input type="hidden" name="jobsSize" value={jobsSize} /><input type="hidden" name="itemsSize" value={itemsSize} /><button type="submit">Search</button>
+      <input type="hidden" name="jobsSize" value={jobsSize} /><input type="hidden" name="itemsSize" value={itemsSize} /><button type="submit">Search</button>
       {q && <Link href="/dashboard/work-orders">Clear search</Link>}
     </Form>
-    <p className={styles.counts}><strong>{jobs.length}</strong> matching jobs · <strong>{products.length}</strong> products · {count('overdue')} overdue · {count('unknown')} unknown · {count('conflict')} conflicts</p>
-    {failedAssessments > 0 && <FeedbackState tone="error">Due-date assessment failed for {failedAssessments} {failedAssessments === 1 ? 'product' : 'products'}. Use Refresh from ServiceM8 to retry. Open All products, then Detected planning evidence for details. Saved staff dates and manual choices still apply.</FeedbackState>}
-    <DataPanel title="Table A - All Work Orders">
-      {jobs.length === 0 ? <FeedbackState tone="empty">No saved Work Orders match this search. Clear the search or refresh from ServiceM8.</FeedbackState> : <TableShell label="All Work Order rows"><table className={styles.table}>
+    <DataPanel title="Table A - Every work order">
+      <TableShell label="All Work Order rows"><table className={styles.table}>
         <thead><tr>{['WO', 'Customer', 'Short address', 'Approx install date', 'Within 3 weeks?'].map(column => <th key={column} scope="col">{column}</th>)}</tr></thead>
-        <tbody>{jobs.slice((jp - 1) * jobsSize, jp * jobsSize).map(job => {
-          const jobProducts = products.filter(row => row.jobId === job.jobId)
-          const window = jobProducts.length ? (jobProducts.some(row => row.inDueWindow) ? 'Y' : jobProducts.some(row => row.focus === 'conflict' && row.manual.focus === 'auto' && !row.kanbanFlag) ? 'Review' : jobProducts.some(row => row.focus === 'unknown') ? '?' : 'N') : job.kanbanFlag?.flag ?? withinThreeWeeks([], job.jobInstallDate, data.today)
-          const candidateDates = [...new Set(jobProducts.flatMap(row => row.planningDate ? [row.planningDate] : []))]
-          const approximateDate = job.jobInstallDate ?? (candidateDates.length === 1 ? candidateDates[0] : null)
-          return <tr key={job.jobId}>
-            <td>{job.jobUuid ? <a href={`https://go.servicem8.com/OpenJob/${encodeURIComponent(job.jobUuid)}`} target="_blank" rel="noreferrer">{job.jobNumber ?? 'Unnumbered job'}</a> : job.jobNumber}</td>
-            <td>{job.customer}</td><td>{job.address ?? 'Address unknown'}</td>
-            <td>{date(approximateDate)}<div className={styles.source}>{job.jobInstallDate ? 'Job target; products may differ' : candidateDates.length ? 'Product targets / suggestions; check each product' : 'No supported target date'}</div></td>
-            <td><StatusBadge tone={window === 'Review' ? 'warning' : 'muted'}>{window}</StatusBadge></td>
-          </tr>
-        })}</tbody>
-      </table></TableShell>}
+        <tbody>{jobs.slice((jp - 1) * jobsSize, jp * jobsSize).map(job => <tr key={job.jobId}>
+          <td>{job.jobUuid ? <a href={`https://go.servicem8.com/OpenJob/${encodeURIComponent(job.jobUuid)}`} target="_blank" rel="noreferrer">{job.jobNumber ?? 'Unnumbered job'}</a> : job.jobNumber}</td>
+          <td>{job.customer}</td><td>{job.address ?? 'Address unknown'}</td><td /><td />
+        </tr>)}</tbody>
+      </table></TableShell>
+      {jobs.length === 0 && <FeedbackState tone="empty">No saved Work Orders match this search.</FeedbackState>}
       {pagination('jobs', jobs.length, jp, jobPages, jobsSize)}
     </DataPanel>
     <DataPanel title="Table B - Due within 3 weeks">
-      <p className={styles.source}>One row per product. Product Include/Exclude/Needs review overrides the imported Master Y/N/? job flag. Where no flag exists, automatic dates use supported installation/delivery evidence for today through 21 days ahead. A Y flag can retain work with a TBC or overdue date. AI dates are suggestions; open Edit product for evidence and flag provenance. Calendar bookings are not installation evidence. Y = Yes, N = No, ? = Unknown, N/A = Not applicable. Scroll sideways to see every column.</p>
-      <nav aria-label="Product focus" className={styles.tabs}>{Object.entries(focusChoices).map(([key, label]) => <Link key={key} href={href({ focus: key, itemsPage: '1' })} aria-current={focus === key ? 'page' : undefined}>{label}</Link>)}</nav>
-      {focused.length === 0 ? <FeedbackState tone="empty">{focus === 'upcoming' && count('unknown') > 0 ? <><p>{count('unknown')} {count('unknown') === 1 ? 'product has' : 'products have'} no target date or confirmed inclusion. Refresh from ServiceM8 to assess date evidence, or enter a target date or select Include manually.</p><Link href={href({ focus: 'unknown', itemsPage: '1' })}>Review products with unknown dates</Link></> : 'No products match this view. Check All products, Unknown or Review conflicts.'}</FeedbackState> : <div className={styles.planningShell}><TableShell label="Table B - Product planning"><table className={`${styles.table} ${styles.planningTable}`}>
+      <TableShell label="Due product rows"><table className={`${styles.table} ${styles.planningTable}`}>
         <thead><tr>{['WO / client / address', 'Materials (per product)', 'Client waiting for', 'Site ready', 'Glass ready', 'Hardware ready', 'Design Y/N/?', 'PS1 / PS3', 'Bottle strut', 'BC?', 'Minor var?'].map(column => <th key={column} scope="col">{column}</th>)}</tr></thead>
-        <tbody>{focused.slice((ip - 1) * itemsSize, ip * itemsSize).map(row => { const effective = effectiveProductFields(row); return <Fragment key={row.itemId}>
-          <tr>
-            <td><strong>{row.jobNumber} / {row.customer}</strong><div>{row.address ?? 'Address unknown'}</div><div className={styles.source}>Target: {date(row.planningDate)}{row.dateSource === 'detected' ? ` · AI-suggested ${row.assessment?.result?.kind ?? 'date'}` : row.dateSource === 'staff' ? ' · Staff target' : ''}</div>{row.kanbanFlag && <div className={styles.source}>Master flag: {row.kanbanFlag.flag}{row.manual.focus !== 'auto' ? ' · Product override applies' : ' · Inherited'}</div>}<StatusBadge tone={row.focus === 'conflict' || row.focus === 'overdue' ? 'warning' : 'muted'}>{FOCUS_LABELS[row.focus]}</StatusBadge>{(!row.assessmentCurrent || row.assessment?.state === 'failed') && <div className={styles.source}>{row.assessment?.state === 'failed' ? 'Assessment failed; retry refresh' : 'Evidence assessment pending'}</div>}</td>
-            <td><MaterialDescription label={row.label} description={row.description} jobNumber={row.jobNumber} editHref={href({ product: row.itemId! }) + `#product-${row.itemId}`} /><div className={styles.source}>Quantity: {row.quantity}</div><span className={styles.source}>Materials ETA</span><EffectiveValue field={effective.fields.materialsEta} label="Materials ETA" kind="date" /><span className={styles.source}>Installer</span><EffectiveValue field={effective.fields.installerId} label="Installer" kind="installer" installers={data.installers} /><span className={styles.source}>Estimate</span><EffectiveValue field={effective.fields.estimatedHours} label="Estimated hours" kind="hours" /><span className={styles.source}>Aftercare</span><EffectiveValue field={effective.fields.aftercare} label="Aftercare" /></td>
-            <td><EffectiveValue field={effective.fields.clientWaitingFor} label="Client waiting for" /></td>
-            <td><EffectiveValue field={effective.fields.siteReady} label="Site ready" /></td>
-            <td><EffectiveValue field={effective.fields.glassReady} label="Glass ready" /></td>
-            <td><EffectiveValue field={effective.fields.hardwareReady} label="Hardware ready" /></td>
-            <td><EffectiveValue field={effective.fields.designConfirmed} label="Design confirmed" /></td>
-            <td><div>PS1 needed: <EffectiveValue field={effective.fields.ps1Required} label="PS1 needed" /></div><div>PS1 issued: <EffectiveValue field={effective.fields.ps1Issued} label="PS1 issued" /></div><div>PS3 needed: <EffectiveValue field={effective.fields.ps3Required} label="PS3 needed" /></div><div>PS3 issued: <EffectiveValue field={effective.fields.ps3Issued} label="PS3 issued" /></div></td>
-            <td><EffectiveValue field={effective.fields.bottleStrut} label="Bottle strut" /></td><td><EffectiveValue field={effective.fields.buildingConsent} label="BC?" /><span className={styles.source}>Consent reference · read-only</span><EffectiveValue field={effective.fields.buildingConsentNumber} label="Consent reference" /></td><td><EffectiveValue field={effective.fields.minorVariationRequired} label="Minor variation needed" /></td>
-          </tr>
-          <tr className={styles.editorRow}><td colSpan={11}>
-            <details id={`product-${row.itemId}`} className={styles.product} open={value(p, 'product') === row.itemId}>
-              <summary>Edit product · {shortMaterialDescription(row.label)}</summary><ProductEditor product={row} installers={data.installers} />
-            </details>
-          </td></tr>
-        </Fragment> })}</tbody>
-      </table></TableShell></div>}
-      {pagination('items', focused.length, ip, productPages, itemsSize)}
+        <tbody>{products.slice((ip - 1) * itemsSize, ip * itemsSize).map(row => <tr key={row.itemId}>
+          <td><strong>{row.jobNumber} / {row.customer}</strong><div>{row.address ?? 'Address unknown'}</div></td>
+          <td><MaterialDescription label={row.label} description={row.description} jobNumber={row.jobNumber} /></td>
+          {Array.from({ length: 9 }, (_, index) => <td key={index} />)}
+        </tr>)}</tbody>
+      </table></TableShell>
+      {products.length === 0 && <FeedbackState tone="empty">No saved products are due within 3 weeks.</FeedbackState>}
+      {pagination('items', products.length, ip, productPages, itemsSize)}
     </DataPanel>
   </div>
 }

@@ -8,6 +8,15 @@ function show() { return render(<><MaterialDescription label={description} descr
 afterEach(() => vi.useRealTimers())
 
 describe('compact Materials description preview', () => {
+  it('shows the source preview without an edit link when no editor is supplied', () => {
+    render(<MaterialDescription label="Shower" description={description} jobNumber="TEST406" />)
+    fireEvent.click(screen.getByRole('button', { name: 'View material description: Shower' }))
+    expect(screen.getByRole('dialog').textContent).toContain(description)
+    expect(screen.queryByRole('link', { name: 'Edit product' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Close materials preview' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
   it('uses a short whitespace-normalized description while keeping the full text in a hover window', () => {
     show()
     const trigger = screen.getByRole('button', { name: /View material description/ })
