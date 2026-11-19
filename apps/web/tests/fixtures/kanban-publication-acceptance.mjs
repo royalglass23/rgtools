@@ -1,5 +1,5 @@
 // Synthetic, exact-loopback-only fixture. Never use a shared database.
-import { execFileSync, spawn } from 'node:child_process'
+import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { createServer } from 'node:http'
@@ -7,6 +7,7 @@ import { createServer as createSecureServer } from 'node:https'
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { captureInputs, beginBuild, completeBuild, beginSecurityRun, completeSecurityRun } from './kanban-security-evidence.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..')
 const web = path.join(root, 'apps/web'), evidence = path.join(root, 'tmp/rg408-production-e2e')
@@ -14,12 +15,14 @@ const configFile = path.join(evidence, 'fixture.json')
 const database = 'rg408_production_e2e'
 const databaseUrl = 'postgresql://rg408@127.0.0.1:55442/rg408_production_e2e?sslmode=disable'
 const baseUrl = 'http://127.0.0.1:3058'
-const production = process.env.RG408_E2E_PRODUCTION === '1'
+const security = process.argv[2] === 'security'
+const production = ['security', 'build'].includes(process.argv[2]) || process.env.RG408_E2E_PRODUCTION === '1'
 const adapterUrl = `${production ? 'https' : 'http'}://127.0.0.1:3059`
-const psql = process.env.RG408_PSQL ?? 'C:/Program Files/PostgreSQL/18/bin/psql.exe'
+const psql = process.env.RG408_PSQL ?? (process.platform === 'win32' ? 'C:/Program Files/PostgreSQL/18/bin/psql.exe' : 'psql')
+const openssl = process.env.RG408_OPENSSL ?? (process.platform === 'win32' ? 'C:/Program Files/Git/usr/bin/openssl.exe' : 'openssl')
 const literal = value => `'${String(value).replaceAll("'", "''")}'`
 // Exclude inherited connection credentials, NODE_OPTIONS and application .env.
-const environment = Object.fromEntries(['SystemRoot', 'WINDIR', 'ComSpec', 'PATH', 'PATHEXT', 'TEMP', 'TMP', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA'].filter(key => process.env[key]).map(key => [key, process.env[key]]))
+const environment = Object.fromEntries(['SystemRoot', 'WINDIR', 'ComSpec', 'PATH', 'PATHEXT', 'TEMP', 'TMP', 'HOME', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA'].filter(key => process.env[key]).map(key => [key, process.env[key]]))
 function query(statement, target = database) {
   if (![database, 'postgres'].includes(target)) throw new Error('Database not allowlisted')
   return execFileSync(psql, ['-X', '-w', '-h', '127.0.0.1', '-p', '55442', '-U', 'rg408', '-d', target, '-v', 'ON_ERROR_STOP=1', '-A', '-t'], { input: statement, encoding: 'utf8', env: environment }).trim()
@@ -74,7 +77,18 @@ async function prepare() {
   console.log('Prepared verified loopback fixture: 74 main migrations and fictional users.')
   return config
 }
+function applicationEnvironment(config, cert) {
+  return { ...environment, __NEXT_PROCESSED_ENV: 'true', NODE_ENV: production ? 'production' : 'development', ...(production && cert ? { NODE_EXTRA_CA_CERTS: cert } : {}), NEXT_TELEMETRY_DISABLED: '1', WS_NO_BUFFER_UTIL: '1', WS_NO_UTF_8_VALIDATE: '1', DATABASE_URL: databaseUrl, DATABASE_WS_PROXY: '127.0.0.1:55443', AUTH_SECRET: config.authSecret, AUTH_URL: baseUrl, AUTH_TRUST_HOST: 'true', ROXY_DASHBOARD_USER_ID: config.roxyId, KANBAN_PUBLISH_SECRET: config.publishSecret, SERVICEM8_API_BASE_URL: `${adapterUrl}/api_1.0`, SERVICEM8_API_KEY: 'fictional-local-only', OPENAI_RESPONSES_URL: `${adapterUrl}/ai`, OPENAI_API_KEY: 'fictional-local-only' }
+}
+async function build() {
+  const provenance = beginBuild()
+  const config = await prepare()
+  const result = spawnSync(process.execPath, ['node_modules/next/dist/bin/next', 'build', '--webpack'], { cwd: web, env: applicationEnvironment(config), stdio: 'inherit', windowsHide: true })
+  if (result.error || result.status !== 0) throw new Error('Isolated direct Next build failed')
+  completeBuild(provenance)
+}
 async function run() {
+  const runRecord = security ? beginSecurityRun() : null
   const config = await prepare(), metrics = { reads: 0, writes: 0, aiCalls: 0 }
   const handle = (request, response) => {
     response.setHeader('Content-Type', 'application/json')
@@ -87,13 +101,14 @@ async function run() {
   const cert = path.join(evidence, 'loopback-cert.pem'), key = path.join(evidence, 'loopback-key.pem')
   if (production) {
     // Fictional fixture certificate only; no machine/global trust changes.
-    execFileSync('C:/Program Files/Git/usr/bin/openssl.exe', ['req', '-x509', '-nodes', '-newkey', 'rsa:2048', '-days', '2', '-keyout', key, '-out', cert, '-subj', '/CN=RG408 fictional loopback fixture', '-addext', 'subjectAltName=IP:127.0.0.1'], { env: { ...environment, OPENSSL_CONF: 'C:/Program Files/Git/usr/ssl/openssl.cnf' }, stdio: 'pipe' })
+    execFileSync(openssl, ['req', '-x509', '-nodes', '-newkey', 'rsa:2048', '-days', '2', '-keyout', key, '-out', cert, '-subj', '/CN=RG408 fictional loopback fixture', '-addext', 'subjectAltName=IP:127.0.0.1'], { env: { ...environment, ...(process.env.RG408_OPENSSL_CONF ? { OPENSSL_CONF: process.env.RG408_OPENSSL_CONF } : process.platform === 'win32' ? { OPENSSL_CONF: 'C:/Program Files/Git/usr/ssl/openssl.cnf' } : {}) }, stdio: 'pipe' })
   }
   const adapter = production ? createSecureServer({ key: readFileSync(key), cert: readFileSync(cert) }, handle) : createServer(handle)
   await new Promise((resolve, reject) => { adapter.once('error', reject); adapter.listen(3059, '127.0.0.1', resolve) })
-  const env = { ...environment, __NEXT_PROCESSED_ENV: 'true', NODE_ENV: production ? 'production' : 'development', ...(production ? { NODE_EXTRA_CA_CERTS: cert } : {}), NEXT_TELEMETRY_DISABLED: '1', WS_NO_BUFFER_UTIL: '1', WS_NO_UTF_8_VALIDATE: '1', DATABASE_URL: databaseUrl, DATABASE_WS_PROXY: '127.0.0.1:55443', AUTH_SECRET: config.authSecret, AUTH_URL: baseUrl, AUTH_TRUST_HOST: 'true', ROXY_DASHBOARD_USER_ID: config.roxyId, KANBAN_PUBLISH_SECRET: config.publishSecret, SERVICEM8_API_BASE_URL: `${adapterUrl}/api_1.0`, SERVICEM8_API_KEY: 'fictional-local-only', OPENAI_RESPONSES_URL: `${adapterUrl}/ai`, OPENAI_API_KEY: 'fictional-local-only' }
-  const log = openSync(path.join(evidence, 'next.log'), 'w'); let app
+  const env = applicationEnvironment(config, cert)
+  const log = openSync(path.join(evidence, 'next.log'), 'w'); let app, succeeded = false
   try {
+    if (security) captureInputs({ optimized: production, adapterUrl, run: runRecord })
     app = spawn(process.execPath, ['node_modules/next/dist/bin/next', ...(production ? ['start'] : ['dev', '--webpack']), '--hostname', '127.0.0.1', '--port', '3058'], { cwd: web, env, stdio: ['ignore', log, log], windowsHide: true })
     let ready = false
     for (let attempt = 0; attempt < 180; attempt++) {
@@ -103,10 +118,11 @@ async function run() {
     }
     if (!ready) throw new Error('Fixture Next did not become ready')
     const exitCode = await new Promise((resolve, reject) => {
-      const child = spawn(process.execPath, ['node_modules/@playwright/test/cli.js', 'test', 'tests/e2e/dashboard-work-orders.spec.ts', '--project=chromium', '--workers=1', '--reporter=list,json'], { cwd: web, env: { ...env, E2E_BASE_URL: baseUrl, RG408_PUBLICATION_E2E_URL: baseUrl, RG408_ADAPTER_URL: adapterUrl, RG408_FIXTURE_FILE: configFile, RG408_PSQL: psql, E2E_DATABASE_SENTINEL: config.sentinel, PLAYWRIGHT_JSON_OUTPUT_NAME: path.join(evidence, 'playwright.json') }, stdio: 'inherit', windowsHide: true })
+      const child = spawn(process.execPath, ['node_modules/@playwright/test/cli.js', 'test', ...(security ? ['--config', 'tests/fixtures/kanban-security.config.cjs'] : ['tests/e2e/dashboard-work-orders.spec.ts', '--reporter=list,json']), '--project=chromium', '--workers=1', '--retries=0'], { cwd: web, env: { ...env, E2E_BASE_URL: baseUrl, RG408_PUBLICATION_E2E_URL: baseUrl, RG408_ADAPTER_URL: adapterUrl, RG408_SECURITY_E2E: security ? '1' : '0', RG408_FIXTURE_FILE: configFile, RG408_PSQL: psql, E2E_DATABASE_SENTINEL: config.sentinel, PLAYWRIGHT_JSON_OUTPUT_NAME: path.join(evidence, 'playwright.json') }, stdio: 'inherit', windowsHide: true })
       child.once('error', reject); child.once('exit', resolve)
     })
     if (exitCode !== 0) throw new Error(`Playwright exited ${exitCode}`)
+    succeeded = true
   } finally {
     if (app && app.exitCode === null) {
       if (process.platform === 'win32') execFileSync('taskkill', ['/PID', String(app.pid), '/T', '/F'], { stdio: 'ignore', env: environment })
@@ -114,8 +130,10 @@ async function run() {
     }
     closeSync(log); await new Promise(resolve => adapter.close(resolve))
     writeFileSync(path.join(evidence, 'source-metrics.json'), JSON.stringify(metrics, null, 2))
+    if (security && succeeded) completeSecurityRun(runRecord)
   }
 }
 if (process.argv[2] === 'prepare') await prepare()
-else if (process.argv[2] === 'run') await run()
-else throw new Error('Usage: node apps/web/tests/fixtures/kanban-publication-acceptance.mjs prepare|run')
+else if (process.argv[2] === 'build') await build()
+else if (['run', 'security'].includes(process.argv[2])) await run()
+else throw new Error('Usage: node apps/web/tests/fixtures/kanban-publication-acceptance.mjs prepare|build|run|security')

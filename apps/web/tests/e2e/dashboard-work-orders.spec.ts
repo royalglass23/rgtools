@@ -29,7 +29,7 @@ function publication() {
 function localSql(statement: string) {
   if (!enabled || fixture.databaseUrl !== databaseUrl || fixture.baseUrl !== fixtureUrl || !/^[a-f0-9]{64}$/.test(fixture.sentinel)) throw new Error('Refusing unsafe fixture SQL')
   const guard = `DO $$ BEGIN IF current_database() <> 'rg408_production_e2e' OR inet_server_addr() <> '127.0.0.1'::inet OR inet_server_port() <> 55442 OR (SELECT sentinel FROM rgtools_e2e.database_sentinel WHERE id=1) IS DISTINCT FROM '${fixture.sentinel}' THEN RAISE EXCEPTION 'Unsafe E2E fixture'; END IF; END $$;`
-  return execFileSync(process.env.RG408_PSQL ?? 'C:/Program Files/PostgreSQL/18/bin/psql.exe', ['-X', '-w', '-h', '127.0.0.1', '-p', '55442', '-U', 'rg408', '-d', 'rg408_production_e2e', '-v', 'ON_ERROR_STOP=1', '-A', '-t', '-q'], { input: `${guard}\n${statement}`, encoding: 'utf8', env: Object.fromEntries(['SystemRoot', 'WINDIR', 'PATH', 'TEMP', 'TMP'].filter(key => process.env[key]).map(key => [key, process.env[key]!])) }).trim()
+  return execFileSync(process.env.RG408_PSQL ?? (process.platform === 'win32' ? 'C:/Program Files/PostgreSQL/18/bin/psql.exe' : 'psql'), ['-X', '-w', '-h', '127.0.0.1', '-p', '55442', '-U', 'rg408', '-d', 'rg408_production_e2e', '-v', 'ON_ERROR_STOP=1', '-A', '-t', '-q'], { input: `${guard}\n${statement}`, encoding: 'utf8', env: Object.fromEntries(['SystemRoot', 'WINDIR', 'PATH', 'TEMP', 'TMP'].filter(key => process.env[key]).map(key => [key, process.env[key]!])) }).trim()
 }
 async function send(request: APIRequestContext, body: ReturnType<typeof publication>) {
   // Stringify once: caller reuses the same envelope for an identical retry.
