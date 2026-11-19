@@ -4,6 +4,21 @@ import { getKeylessGoogleAccessToken, keylessSourceConfigured } from './keyless-
 type Environment = Record<string, string | undefined>
 type Fetch = typeof fetch
 const SOURCE_ERROR = 'Kanban output could not load. The published board connection can be checked by an administrator.'
+const RECEIPT_READ_MESSAGES = {
+  authorization: 'Google authorization for the completion check could not be verified. The bot may still be running.',
+  access: 'Google denied access to the completion Sheet. Ask an administrator to check its sharing and Google Sheets API access.',
+  range: 'The completion Sheet range could not be read. Ask an administrator to check the configured tab and range.',
+  unavailable: 'Kanban completion status is temporarily unavailable. The bot may still be running.',
+  response: 'The completion Sheet returned an unreadable response. The bot may still be running.',
+} as const
+
+class ReceiptReadError extends Error {
+  constructor(readonly reason: keyof typeof RECEIPT_READ_MESSAGES) { super(SOURCE_ERROR) }
+}
+
+export function getReceiptReadMessage(error: unknown): string | undefined {
+  return error instanceof ReceiptReadError ? RECEIPT_READ_MESSAGES[error.reason] : undefined
+}
 
 export async function boundedText(response: Response, maxBytes = 4_000_000): Promise<string> {
   if (!response.ok || !response.body) throw new Error(SOURCE_ERROR)
@@ -32,14 +47,20 @@ export async function readPublishedRange(range: string, env: Environment = proce
   // Only callers in this server module/action choose a range; no browser URL/ID is accepted.
   if (!keylessSourceConfigured(env)) throw new Error('Kanban keyless Google access is not configured. Ask an administrator to set up the read-only connection.')
   try {
-    const token = await getKeylessGoogleAccessToken(env)
+    let token: string
+    try { token = await getKeylessGoogleAccessToken(env) } catch { throw new ReceiptReadError('authorization') }
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${PUBLISHED_SHEET_ID}/values/${encodeURIComponent(range)}?majorDimension=ROWS&valueRenderOption=FORMATTED_VALUE`
     const response = await request(url, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10_000), redirect: 'error', cache: 'no-store' })
-    const data = await boundedJson(response) as { values?: unknown }
+    if (!response.ok) {
+      if (response.body) await response.body.cancel().catch(() => {})
+      throw new ReceiptReadError(response.status === 400 ? 'range' : response.status === 401 ? 'authorization' : [403, 404].includes(response.status) ? 'access' : 'unavailable')
+    }
+    let data: { values?: unknown }
+    try { data = await boundedJson(response) as { values?: unknown } } catch { throw new ReceiptReadError('response') }
     if (data.values === undefined) return []
-    if (!Array.isArray(data.values) || data.values.length > 10000 || data.values.some(row => !Array.isArray(row))) throw new Error(SOURCE_ERROR)
+    if (!Array.isArray(data.values) || data.values.length > 10000 || data.values.some(row => !Array.isArray(row))) throw new ReceiptReadError('response')
     return data.values
-  } catch { throw new Error(SOURCE_ERROR) }
+  } catch (error) { throw error instanceof ReceiptReadError ? error : new ReceiptReadError('unavailable') }
 }
 
 export async function readPublishedOutput(env: Environment = process.env, request: Fetch = fetch) {

@@ -118,4 +118,23 @@ describe('keyless published source boundary', () => {
     await expect(boundedJson(new Response('private error', { status: 403 }))).rejects.toThrow('could not load')
     await expect(boundedText(new Response('123456'), 3)).rejects.toThrow('could not load')
   })
+  it.each([
+    [403, 'sharing and Google Sheets API access'],
+    [400, 'configured tab and range'],
+    [503, 'temporarily unavailable'],
+  ])('identifies a receipt HTTP %s failure without exposing the upstream response', async (status, hint) => {
+    const authRequest = transport(); vi.stubGlobal('fetch', authRequest)
+    const request = vi.fn().mockResolvedValue(new Response('fictional-private-upstream-details', { status: Number(status) }))
+    const { readPublishedRange, getReceiptReadMessage } = await import('../published-source')
+    const error = await readPublishedRange("'RGTools Refresh'!A:D", env, request).catch(value => value)
+    expect(getReceiptReadMessage(error)).toContain(hint)
+    expect(getReceiptReadMessage(error)).not.toContain('fictional-private-upstream-details')
+    expect(error.message).not.toContain('fictional-private-upstream-details')
+    expect(request).toHaveBeenCalledOnce()
+  })
+  it('never presents an arbitrary error message as a receipt diagnostic', async () => {
+    const { getReceiptReadMessage } = await import('../published-source')
+    expect(getReceiptReadMessage(new Error('fictional-secret'))).toBeUndefined()
+    expect(getReceiptReadMessage({ reason: 'access', message: 'fictional-secret' })).toBeUndefined()
+  })
 })

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep checking the same Kanban refresh request when its completion receipt cannot be read, rather than re-enabling Refresh as though the bot had stopped. Distinguish an unconfirmed check from an explicit bot failure, retain the five-minute monitoring window, and show safe guidance for Sheet access/range problems without automatically retriggering the bot.
+
 - Replace the Kanban reader's service-account private key with keyless Vercel OIDC and Google Workload Identity Federation, impersonating the nominated reader with final Drive-readonly and Sheets-readonly scopes. Keep the organization key-creation policy enabled; require current OIDC availability before starting a bot refresh. Cloud trust and bot configuration remain external setup steps.
 
 - Connect the Work Orders dashboard to the Kanban bot's existing generated HTML board through a fixed read-only Drive file download, preserving automatic findings that the Sheet's manual columns omit. Extract text only with exact table schemas, retaining the columns, source values/membership, search, independent pagination and material preview. Add an authenticated explicit Refresh trigger with request-matched completion/no-change receipts in the Sheet, bounded waiting and safe failure states. File/identity access, bot webhook and receipt publishing still require setup; no editing, independent AI, database migration or rate-limit feature is introduced.

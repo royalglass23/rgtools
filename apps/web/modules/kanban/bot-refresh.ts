@@ -2,11 +2,11 @@
 
 import { randomUUID } from 'node:crypto'
 import { requireDashboardUser } from '@/lib/dashboard-access'
-import { publishedSourceConfigured, readPublishedRange } from './published-source'
+import { getReceiptReadMessage, publishedSourceConfigured, readPublishedRange } from './published-source'
 import { verifyPublishedSourceIdentity } from './keyless-google-auth'
 
 export type RefreshStart = { ok: true; requestId: string } | { ok: false; error: string }
-export type RefreshStatus = { state: 'pending' } | { state: 'complete'; changed: boolean } | { state: 'failed'; error: string }
+export type RefreshStatus = { state: 'pending' } | { state: 'unconfirmed'; error: string } | { state: 'complete'; changed: boolean } | { state: 'failed'; error: string }
 
 function configuration() {
   const url = process.env.KANBAN_BOT_WEBHOOK_URL, secret = process.env.KANBAN_BOT_WEBHOOK_SECRET, range = process.env.KANBAN_BOT_RECEIPTS_RANGE
@@ -35,7 +35,7 @@ export async function startPublishedRefresh(): Promise<RefreshStart> {
 
 export async function publishedRefreshStatus(requestId: string): Promise<RefreshStatus> {
   await requireDashboardUser()
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId)) return { state: 'failed', error: 'Invalid Kanban refresh request.' }
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId)) return { state: 'unconfirmed', error: 'Invalid Kanban refresh request. Completion cannot be checked.' }
   try {
     const { range } = configuration()
     const rows = await readPublishedRange(range)
@@ -48,5 +48,5 @@ export async function publishedRefreshStatus(requestId: string): Promise<Refresh
     if (state === 'failed') return { state: 'failed', error: 'Kanban reported that this refresh failed. Existing published rows are unchanged here.' }
     if (!['success', 'no_change'].includes(String(state)) || typeof version !== 'string' || !version.trim() || typeof completedAt !== 'string' || !/^\d{4}-\d{2}-\d{2}T.+(?:Z|[+-]\d{2}:\d{2})$/.test(completedAt) || !Number.isFinite(Date.parse(completedAt))) throw new Error()
     return { state: 'complete', changed: state === 'success' }
-  } catch { return { state: 'failed', error: 'Kanban completion could not be verified. Existing rows remain visible; check the bot before retrying.' } }
+  } catch (error) { return { state: 'unconfirmed', error: getReceiptReadMessage(error) ?? 'Kanban completion could not be verified. The bot may still be running; status checking will continue.' } }
 }

@@ -17,6 +17,8 @@ Select **Refresh** to ask Kanban bot to update its output. Existing rows remain 
 
 The dashboard waits for a receipt matching this request, then reloads the bot's published rows. It distinguishes completion with new output from completion with no changes. A trigger acknowledgement alone is not treated as completion. If the bot fails or completion cannot be confirmed within five minutes, existing rows stay visible and a message explains the state. Check the bot before trying again when acceptance/completion is uncertain; the app does not automatically repeat the trigger. The bot can continue in the cloud after the tab closes; reopening this page reads its latest published output.
 
+If a completion check cannot be read, the bot's result is still unconfirmed. The dashboard shows a warning and keeps checking the same request within the five-minute window, with Refresh disabled. This does not start another bot run. Sheet access or range warnings help an administrator check the connection; only a matching failure receipt reports that the bot itself failed.
+
 If output or Refresh is not configured, an administrator must complete the [connection setup](../dev/kanban-published-output.md). The Google connection uses keyless Vercel workload identity, not a service-account JSON key. Workload trust, a routine webhook and receipt publishing are separate setup steps; the application code alone does not establish a live connection.
 
 Existing stored Work Orders, old assessments and staff history are retained. This dashboard reads the published bot tables rather than merging those old assessments into the display.

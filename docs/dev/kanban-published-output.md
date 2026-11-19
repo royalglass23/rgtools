@@ -69,6 +69,8 @@ The Google SDK's cached client is keyed by the complete non-secret provider audi
 
 All trigger, source and receipt settings are checked before sending a trigger. A missing setting produces a setup message, not an attempted run that cannot be monitored. HTTP `200` means accepted, never completed. There is no automatic retry on an ambiguous timeout. The UI checks the matching receipt every ten seconds for at most five minutes, retains current rows on failure/timeout and reloads through the normal page read only after success/no-change. Unmount stops polling, not the cloud bot. There is no new cooldown/quota/rate-limit policy; only a local in-flight button guard.
 
+A receipt read/validation failure or status-action transport exception is an unconfirmed monitoring result, not a terminal bot failure. Continue polling the same request within the existing deadline and retain the in-flight button guard. Only a valid matching `failed` receipt is terminal failure. Sheets read errors expose only allowlisted messages for authorization, access, range, availability or response format; raw SDK errors, response bodies and credentials are never returned. These messages diagnose a read boundary and do not prove a particular deployed setup issue until verified.
+
 Expected legacy source/history remains stored and unchanged. This path does not call the OpenAI assessment runtime, write staff fields or run ServiceM8 reconciliation. No database migration is required. The current package build script runs migrations, so do not execute it against inherited/shared credentials merely to verify this display change.
 
 ## Verification

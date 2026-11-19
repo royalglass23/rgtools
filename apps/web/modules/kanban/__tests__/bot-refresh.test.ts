@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-const mocks = vi.hoisted(() => ({ auth: vi.fn(), range: vi.fn(), fetch: vi.fn(), identity: vi.fn() }))
+const mocks = vi.hoisted(() => ({ auth: vi.fn(), range: vi.fn(), fetch: vi.fn(), identity: vi.fn(), receiptMessage: vi.fn() }))
 vi.mock('@/lib/dashboard-access', () => ({ requireDashboardUser: mocks.auth }))
-vi.mock('../published-source', () => ({ readPublishedRange: mocks.range, publishedSourceConfigured: () => true }))
+vi.mock('../published-source', () => ({ readPublishedRange: mocks.range, publishedSourceConfigured: () => true, getReceiptReadMessage: mocks.receiptMessage }))
 vi.mock('../keyless-google-auth', () => ({ verifyPublishedSourceIdentity: mocks.identity }))
 import { startPublishedRefresh, publishedRefreshStatus } from '../bot-refresh'
 
@@ -48,13 +48,28 @@ describe('published Kanban refresh boundary', () => {
     mocks.range.mockResolvedValue([['requestId', 'status', 'outputVersion', 'completedAt'], [id, status, 'v2', '2026-11-19T01:00:00Z']])
     expect(await publishedRefreshStatus(id)).toMatchObject({ state: 'complete', changed: status === 'success' })
   })
-  it('rejects invalid IDs, malformed success receipts and duplicate receipt IDs', async () => {
-    expect(await publishedRefreshStatus('bad')).toMatchObject({ state: 'failed' })
+  it('keeps invalid IDs, malformed success receipts and duplicate receipt IDs unconfirmed', async () => {
+    expect(await publishedRefreshStatus('bad')).toMatchObject({ state: 'unconfirmed' })
     expect(mocks.range).not.toHaveBeenCalled()
     mocks.range.mockResolvedValue([['requestId', 'status', 'outputVersion', 'completedAt'], [id, 'success', '', '']])
-    expect(await publishedRefreshStatus(id)).toMatchObject({ state: 'failed' })
+    expect(await publishedRefreshStatus(id)).toMatchObject({ state: 'unconfirmed' })
     mocks.range.mockResolvedValue([['requestId', 'status', 'outputVersion', 'completedAt'], [id, 'failed', '', ''], [id, 'success', 'v1', '2026-11-19T01:00:00Z']])
+    expect(await publishedRefreshStatus(id)).toMatchObject({ state: 'unconfirmed' })
+  })
+  it('distinguishes an unavailable receipt check from an explicit matching bot failure', async () => {
+    mocks.range.mockRejectedValueOnce(new Error('fictional private SDK payload'))
+    const unavailable = await publishedRefreshStatus(id)
+    expect(unavailable).toMatchObject({ state: 'unconfirmed' })
+    expect(JSON.stringify(unavailable)).not.toContain('private SDK payload')
+    mocks.range.mockResolvedValueOnce([['requestId', 'status', 'outputVersion', 'completedAt'], [id, 'failed', '', '']])
     expect(await publishedRefreshStatus(id)).toMatchObject({ state: 'failed' })
+  })
+  it('uses only the source helper safe message for actionable receipt-read failures', async () => {
+    const failure = new Error('fictional secret Google response body')
+    mocks.range.mockRejectedValueOnce(failure)
+    mocks.receiptMessage.mockReturnValueOnce('The completion Sheet could not be accessed. Status checking will continue.')
+    expect(await publishedRefreshStatus(id)).toEqual({ state: 'unconfirmed', error: 'The completion Sheet could not be accessed. Status checking will continue.' })
+    expect(mocks.receiptMessage).toHaveBeenCalledWith(failure)
   })
   it('reports an uncertain trigger safely and never retries automatically', async () => {
     mocks.fetch.mockRejectedValue(new Error('fictional-secret sensitive URL'))
