@@ -5,11 +5,8 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { auth } from '@/lib/auth'
 import { requireDashboardUser } from '@/lib/dashboard-access'
-import { dashboardSourceRequest, verifyDashboardVendor, withSourceBudget, settledSourceValues } from '@/modules/kanban/source'
-import { assessmentRunRuntime } from '@/modules/kanban/assessment-run-runtime'
-import type { RunProgress } from '@/modules/kanban/assessment-runs'
-import { automaticDashboardState } from '@/modules/kanban/field-ownership'
-import { persistCanonicalStaffField } from './canonical-field-write'
+import { dashboardSourceRequest, verifyDashboardVendor } from '@/modules/kanban/source'
+import { refreshDueAssessments, type AssessmentSummary } from '@/modules/kanban/assessment-refresh'
 import { logAudit } from '@/lib/audit-db'
 import { db } from '@/lib/db'
 import { createServiceM8RequestFromEnv, type ServiceM8FetchRequest } from '@/lib/servicem8/client'
@@ -192,7 +189,7 @@ export async function batchDeleteWorkOrdersAction(formData: FormData): Promise<v
 }
 
 export async function refreshWorkOrdersFromServiceM8(
-  request: ServiceM8FetchRequest = createServiceM8RequestFromEnv({ timeoutMs: 5000, retry: { maxAttempts: 1 } }),
+  request: ServiceM8FetchRequest = createServiceM8RequestFromEnv(),
   enqueueEnrichments: WorkOrderItemEnrichmentEnqueuer = queueWorkOrderItemEnrichments,
 ): Promise<WorkOrderRefreshResult> {
   const actorId = await assertRefreshManageAccessWithAudit()
@@ -203,12 +200,12 @@ export async function refreshWorkOrdersFromServiceM8(
     throw new Error('Work Orders refresh was requested too recently. Please wait a minute before trying again.')
   }
 
-  const refreshPromise = withWorkOrderRefreshLock(() => withSourceBudget(request, bounded => performWorkOrderRefresh(
-    bounded,
+  const refreshPromise = withWorkOrderRefreshLock(() => performWorkOrderRefresh(
+    request,
     enqueueEnrichments,
     actorId,
     { kind: 'all' },
-  ), { timeoutMs: 120_000, maxRequests: 150 }))
+  ))
   inFlightWorkOrderRefresh = refreshPromise
 
   try {
@@ -220,7 +217,7 @@ export async function refreshWorkOrdersFromServiceM8(
 
 export async function refreshWorkOrderByJobNumberFromServiceM8(
   jobNumber: string,
-  request: ServiceM8FetchRequest = createServiceM8RequestFromEnv({ timeoutMs: 5000, retry: { maxAttempts: 1 } }),
+  request: ServiceM8FetchRequest = createServiceM8RequestFromEnv(),
   enqueueEnrichments: WorkOrderItemEnrichmentEnqueuer = queueWorkOrderItemEnrichments,
 ): Promise<WorkOrderRefreshResult> {
   const actorId = await assertRefreshManageAccessWithAudit()
@@ -230,29 +227,31 @@ export async function refreshWorkOrderByJobNumberFromServiceM8(
     throw new Error('A Work Order update was requested too recently. Please wait a minute before trying again.')
   }
 
-  return withWorkOrderRefreshLock(() => withSourceBudget(request, bounded => performWorkOrderRefresh(
-    bounded,
+  return withWorkOrderRefreshLock(() => performWorkOrderRefresh(
+    request,
     enqueueEnrichments,
     actorId,
     { kind: 'job', jobNumber: normalizedJobNumber },
-  ), { timeoutMs: 120_000, maxRequests: 150 }))
+  ))
 }
 
-export async function refreshDashboardWorkOrdersAction(): Promise<{ ok: boolean; error?: string; run?: RunProgress }> {
+export async function refreshDashboardWorkOrdersAction(): Promise<{ ok: boolean; error?: string; assessment?: AssessmentSummary }> {
   const user = await requireDashboardUser()
   try {
     if (!(await acquireWorkOrderRateLimit('dashboard-refresh', user.id))) return { ok: false, error: 'A refresh was requested recently. Wait a minute before trying again.' }
-    const run = await assessmentRunRuntime(async actorId => {
-      const request = dashboardSourceRequest(createServiceM8RequestFromEnv({ timeoutMs: 5000, retry: { maxAttempts: 1 } }))
-      await withSourceBudget(request, async bounded => {
-        await verifyDashboardVendor(bounded)
-        await performWorkOrderRefresh(bounded, async () => 0, actorId, { kind: 'all' }, false)
-      }, { timeoutMs: 120_000, maxRequests: 150 })
-    }).start(user.id)
+    const request = dashboardSourceRequest()
+    await verifyDashboardVendor(request)
+    const assessment = await withWorkOrderRefreshLock(async () => {
+      await performWorkOrderRefresh(request, async () => 0, user.id, { kind: 'all' }, false)
+      // Every source refresh runs this pass. Only changed evidence/rules calls AI.
+      const evidenceRequest = dashboardSourceRequest(createServiceM8RequestFromEnv({ timeoutMs: 5000, retry: { maxAttempts: 1 } }))
+      try { return await refreshDueAssessments(evidenceRequest, user.id) }
+      catch { return { assessedProducts: 0, reusedProducts: 0, failedJobs: 1, pendingJobs: 0, unavailable: true } }
+    })
     // The dashboard client coordinates refresh after checking all dirty forms.
-    return { ok: true, run }
+    return { ok: true, assessment }
   } catch {
-    return { ok: false, error: 'Refresh could not finish. Saved records remain available; reload to check source and assessment progress.' }
+    return { ok: false, error: 'ServiceM8 refresh could not finish. The previous saved records are kept. Try again.' }
   }
 }
 
@@ -283,7 +282,7 @@ async function performWorkOrderRefresh(
         throw new Error(`ServiceM8 Work Order ${scope.jobNumber} was not found.`)
       }
       const companyUuid = targetedInput.servicem8CompanyUuid
-      ;[companyRows, jobMaterialRows, billingExclusions] = await settledSourceValues([
+      ;[companyRows, jobMaterialRows, billingExclusions] = await Promise.all([
         companyUuid
           ? readServiceM8Object<ServiceM8Company>(
             request,
@@ -302,7 +301,7 @@ async function performWorkOrderRefresh(
         const materialUuid = String(row.material_uuid ?? '').trim()
         return materialUuid ? [materialUuid] : []
       })))
-      materialRows = await settledSourceValues(materialUuids.map((materialUuid) => (
+      materialRows = await Promise.all(materialUuids.map((materialUuid) => (
         readServiceM8Object<ServiceM8Material>(
           request,
           `/material/${encodeURIComponent(materialUuid)}.json`,
@@ -310,7 +309,7 @@ async function performWorkOrderRefresh(
         )
       )))
     } else {
-      [jobRows, companyRows, jobMaterialRows, materialRows, billingExclusions] = await settledSourceValues([
+      [jobRows, companyRows, jobMaterialRows, materialRows, billingExclusions] = await Promise.all([
         readServiceM8Array<ServiceM8WorkOrderJob>(request, `/job.json${odataFilter(WORK_ORDER_FILTER)}`, 'job'),
         readServiceM8Array<ServiceM8Company>(request, '/company.json', 'company'),
         readServiceM8Array<ServiceM8JobMaterial>(request, `/jobmaterial.json${odataFilter(ACTIVE_FILTER)}`, 'jobmaterial'),
@@ -488,7 +487,6 @@ async function performWorkOrderRefresh(
               lineTotalExcludingGst: itemInput.lineTotalExcludingGst,
               sortOrder: itemInput.sortOrder,
               isActive: true,
-              dashboardState: automaticDashboardState(),
               enrichmentHandoffPending: !existingItemUuids.has(itemInput.servicem8ItemUuid),
               updatedAt: now,
             })
@@ -671,19 +669,11 @@ export async function updateWorkOrderItemOperationalFieldAction(
   itemId: string,
   field: WorkOrderItemOperationalField,
   value: string | null,
-  expected?: { value: string | null; revision: number },
 ) {
   await assertCurrentUserCanManageWorkOrders()
   const normalizedValue = parseWorkOrderItemOperationalValue(field, value)
   await assertSummaryFieldEditingEnabled(field)
   const session = await auth()
-
-  if (field === 'installer' || field === 'installDate') {
-    if (!expected) throw new Error('Reload this product before saving.')
-    const result = await persistCanonicalStaffField({ id: itemId, field: field === 'installer' ? 'installerId' : 'installDate', value: normalizedValue as string | null, expectedValue: expected.value, revision: expected.revision }, session?.user?.id ?? null)
-    revalidateWorkOrderItemPaths(result.workOrderId)
-    return { value: result.value, revision: result.revision }
-  }
 
   const result = await db.transaction(async (tx) => {
     const [item] = await tx

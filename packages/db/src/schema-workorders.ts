@@ -325,51 +325,6 @@ export const workOrderRefreshLocks = pgTable('work_order_refresh_locks', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 })
 
-// Durable dashboard assessment work is independent of source-refresh history.
-export const workOrderAssessmentRuns = pgTable('work_order_assessment_runs', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  snapshot: text('snapshot').notNull(),
-  requesterId: uuid('requester_id').references(() => users.id, { onDelete: 'set null' }),
-  state: text('state').notNull().default('active'),
-  rules: text('rules').notNull(),
-  model: text('model').notNull(),
-  schema: integer('schema_version').notNull(),
-  sourcePolicy: text('source_policy').notNull(),
-  totalJobs: integer('total_jobs').notNull().default(0),
-  completedJobs: integer('completed_jobs').notNull().default(0),
-  pendingJobs: integer('pending_jobs').notNull().default(0),
-  failedJobs: integer('failed_jobs').notNull().default(0),
-  unavailableJobs: integer('unavailable_jobs').notNull().default(0),
-  assessedProducts: integer('assessed_products').notNull().default(0),
-  reusedProducts: integer('reused_products').notNull().default(0),
-  reviewProducts: integer('review_products').notNull().default(0),
-  reason: text('reason'),
-  sourceSyncedAt: timestamp('source_synced_at', { withTimezone: true }),
-  completedAt: timestamp('completed_at', { withTimezone: true }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-}, table => [index('work_order_assessment_runs_created_idx').on(table.createdAt)])
-
-export const workOrderAssessmentWork = pgTable('work_order_assessment_work', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  runId: uuid('run_id').notNull().references(() => workOrderAssessmentRuns.id, { onDelete: 'cascade' }),
-  // Immutable captured identity: deleting a source job must not delete queued
-  // work or change the run's original denominator.
-  workOrderId: uuid('work_order_id').notNull(),
-  sourceGeneration: timestamp('source_generation', { withTimezone: true }),
-  state: text('state').notNull().default('pending'),
-  attempts: integer('attempts').notNull().default(0),
-  leaseToken: uuid('lease_token'),
-  leaseExpiresAt: timestamp('lease_expires_at', { withTimezone: true }),
-  executorId: uuid('executor_id').references(() => users.id, { onDelete: 'set null' }),
-  availableAt: timestamp('available_at', { withTimezone: true }).notNull().defaultNow(),
-  assessedProducts: integer('assessed_products').notNull().default(0),
-  reusedProducts: integer('reused_products').notNull().default(0),
-  reviewProducts: integer('review_products').notNull().default(0),
-  reason: text('reason'),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-}, table => [uniqueIndex('work_order_assessment_work_run_job_uq').on(table.runId, table.workOrderId), index('work_order_assessment_work_claim_idx').on(table.runId, table.state, table.availableAt)])
-
 export const workOrderEvents = pgTable('work_order_events', {
   id: uuid('id').primaryKey().defaultRandom(),
   workOrderId: uuid('work_order_id').notNull().references(() => workOrders.id, { onDelete: 'cascade' }),

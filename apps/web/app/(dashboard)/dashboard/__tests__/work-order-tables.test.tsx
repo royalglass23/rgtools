@@ -78,6 +78,14 @@ describe('published Work Orders tables', () => {
     expect(screen.getByRole('link', { name: 'Older publications' })).toHaveAttribute('href', expect.stringContaining('historyPage=2'))
     expect(screen.getAllByRole('table')).toHaveLength(2)
   })
+  it('describes an accepted initial empty snapshot without claiming rejection', async () => {
+    const id = '22345678-1234-4123-8123-123456789abc'
+    mocks.read.mockResolvedValue(snapshot({ jobs: [], products: [] }))
+    mocks.changes.mockResolvedValue({ publicationId: id, outcome: 'published', initial: true, changes: { added: [], removed: [], changed: [] } })
+    await show({ publication: id })
+    expect(screen.getByRole('region', { name: 'Publication changes' })).toHaveTextContent('No row or field changes.')
+    expect(screen.queryByText('This publication did not replace the stored snapshot.')).not.toBeInTheDocument()
+  })
   it.each(['query', 'page size'])('resynchronizes the committed %s control', async field => {
     const view = render(await WorkOrderPage({ searchParams: Promise.resolve({ q: 'old query', itemsSize: '10' }) }))
     const control = field === 'query' ? screen.getByRole('searchbox') : screen.getAllByRole('combobox', { name: 'Page size' })[1]

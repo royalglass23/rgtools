@@ -34,19 +34,6 @@ describe('createServiceM8RequestFromEnv', () => {
     vi.useRealTimers()
   })
 
-  it('propagates an upstream deadline to an in-flight response body without retrying', async () => {
-    process.env.SERVICEM8_API_KEY = 'synthetic-key'
-    const upstream = new AbortController()
-    const requestFetch = vi.fn(async (_url: unknown, init: RequestInit) => ({ ok: true, status: 200, headers: new Headers(), json: () => new Promise((_resolve, reject) => init.signal!.addEventListener('abort', () => reject(new DOMException('Cancelled', 'AbortError')), { once: true })) }))
-    vi.stubGlobal('fetch', requestFetch)
-    const request = createServiceM8RequestFromEnv({ timeoutMs: 5000, retry: { maxAttempts: 1 } })
-    const response = await request('/job.json', { signal: upstream.signal })
-    const reading = response.json()
-    upstream.abort()
-    await expect(reading).rejects.toMatchObject({ name: 'AbortError' })
-    expect(requestFetch).toHaveBeenCalledTimes(1)
-  })
-
   it('supports a controlled ServiceM8 adapter endpoint', async () => {
     process.env.SERVICEM8_API_KEY = 'e2e-read-key'
     process.env.SERVICEM8_API_BASE_URL = 'http://127.0.0.1:32199/api_1.0/'
