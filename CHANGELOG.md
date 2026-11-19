@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Replace the dashboard's Google board/receipt reader with an authenticated direct Kanban publisher. Atomically store complete snapshots and server-derived row/field history in existing settings/audit tables, with stable identities, duplicate/conflict/stale protection and bounded payloads. Preserve exact table columns, search, pagination and materials. Request update acknowledges dispatch without completion polling; visible tabs check the stored publication version. Publisher secret and bot delivery setup remain deployment steps; no migration or rate-limit feature is added.
+
 - Keep checking the same Kanban refresh request when its completion receipt cannot be read, rather than re-enabling Refresh as though the bot had stopped. Distinguish an unconfirmed check from an explicit bot failure, retain the five-minute monitoring window, and show safe guidance for Sheet access/range problems without automatically retriggering the bot.
 
 - Replace the Kanban reader's service-account private key with keyless Vercel OIDC and Google Workload Identity Federation, impersonating the nominated reader with final Drive-readonly and Sheets-readonly scopes. Keep the organization key-creation policy enabled; require current OIDC availability before starting a bot refresh. Cloud trust and bot configuration remain external setup steps.

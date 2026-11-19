@@ -4,7 +4,8 @@ import { requireDashboardUser } from '@/lib/dashboard-access'
 import { PageHeader, DataPanel, TableShell, FeedbackState } from '@/components/precision-ui/PrecisionUI'
 import { PaginationBar } from '@/components/pagination/PaginationBar'
 import { filterPublishedOutput, type PublishedOutput } from '@/modules/kanban/published-output'
-import { readPublishedOutput } from '@/modules/kanban/published-source'
+import { readLatestPublication, readPublicationChanges, readPublicationHistory } from '@/modules/kanban/publication-store'
+import { UUID, type PublicationEvent, type StoredPublication } from '@/modules/kanban/publication'
 import { PublishedRefreshControl } from '@/modules/kanban/PublishedRefreshControl'
 import { DASHBOARD_PAGE_SIZES, dashboardPageSize } from '@/modules/kanban/work-orders'
 import { MaterialDescription } from '@/modules/kanban/MaterialDescription'
@@ -20,14 +21,29 @@ export default async function WorkOrderDashboard({ searchParams }: { searchParam
   await requireDashboardUser()
   const p = await searchParams
   const q = value(p, 'q').trim().slice(0, 100)
-  let data: PublishedOutput = { jobs: [], products: [] }, loadFailed = false
-  try { data = filterPublishedOutput(await readPublishedOutput(), q) }
+  let data: PublishedOutput = { jobs: [], products: [] }, loadFailed = false, latest: StoredPublication | null = null
+  try {
+    latest = await readLatestPublication()
+    if (latest) data = filterPublishedOutput({ jobs: latest.publication.tables.jobs.map(row => ({ key: row.id, cells: row.cells })), products: latest.publication.tables.products.map(row => ({ key: row.id, cells: row.cells })) }, q)
+  }
   catch { loadFailed = true }
+  const historyPage = Math.min(1000, pageNumber(p, 'historyPage')), publicationId = UUID.test(value(p, 'publication')) ? value(p, 'publication').toLowerCase() : ''
+  let history: Awaited<ReturnType<typeof readPublicationHistory>> = { events: [], hasNext: false }, selected: PublicationEvent | null = null, historyFailed = false
+  try {
+    history = await readPublicationHistory(historyPage)
+    if (UUID.test(publicationId)) selected = await readPublicationChanges(publicationId)
+  } catch { historyFailed = true }
+  const details = selected?.changes ? [
+    ...selected.changes.added.map(row => ({ key: `add-${row.table}-${row.id}`, label: `Added row · Table ${row.table === 'jobs' ? 'A' : 'B'} · ${row.id}`, before: '', after: row.cells.join('\n') })),
+    ...selected.changes.removed.map(row => ({ key: `remove-${row.table}-${row.id}`, label: `Removed row · Table ${row.table === 'jobs' ? 'A' : 'B'} · ${row.id}`, before: row.cells.join('\n'), after: '' })),
+    ...selected.changes.changed.map(field => ({ key: `edit-${field.table}-${field.id}-${field.column}`, label: `Table ${field.table === 'jobs' ? 'A' : 'B'} · ${field.id} · ${field.label}`, before: field.before, after: field.after })),
+  ] : []
+  const changePage = Math.min(pageNumber(p, 'changePage'), Math.max(1, Math.ceil(details.length / 50)))
   const { jobs, products } = data
   const jobsSize = dashboardPageSize(value(p, 'jobsSize')); const itemsSize = dashboardPageSize(value(p, 'itemsSize'))
   const jobPages = Math.max(1, Math.ceil(jobs.length / jobsSize)); const jp = Math.min(pageNumber(p, 'jobsPage'), jobPages)
   const productPages = Math.max(1, Math.ceil(products.length / itemsSize)); const ip = Math.min(pageNumber(p, 'itemsPage'), productPages)
-  const current = { q, jobsPage: String(jp), jobsSize: String(jobsSize), itemsPage: String(ip), itemsSize: String(itemsSize) }
+  const current = { q, jobsPage: String(jp), jobsSize: String(jobsSize), itemsPage: String(ip), itemsSize: String(itemsSize), historyPage: String(historyPage), ...(publicationId ? { publication: publicationId, changePage: String(changePage) } : {}) }
   function href(update: Record<string, string>) { return `/dashboard/work-orders?${new URLSearchParams({ ...current, ...update })}` }
   function pagination(kind: 'jobs' | 'items', total: number, page: number, pageCount: number, size: number) {
     const key = `${kind}Page`; const sizeKey = `${kind}Size`
@@ -44,8 +60,10 @@ export default async function WorkOrderDashboard({ searchParams }: { searchParam
   }
   return <div className={styles.page}>
     <PageHeader title="Work Orders dashboard" />
-    <PublishedRefreshControl />
-    {loadFailed && <FeedbackState tone="error">Kanban output could not load. Ask an administrator to check the published board connection.</FeedbackState>}
+    <PublishedRefreshControl publicationId={latest?.publication.publicationId ?? null} />
+    {latest && <p className={styles.source}>Source as of {latest.publication.sourceAsOf} · Received {latest.receivedAt} (UTC)</p>}
+    {!latest && !loadFailed && <FeedbackState tone="empty">No Kanban publication received yet.</FeedbackState>}
+    {loadFailed && <FeedbackState tone="error">Kanban output could not load. Ask an administrator to check publication storage.</FeedbackState>}
     <Form className={styles.toolbar} action="/dashboard/work-orders" prefetch={false}>
       <label>Find a job or product<input key={q} name="q" type="search" defaultValue={q} placeholder="Job, customer, site or product" maxLength={100} /></label>
       <input type="hidden" name="jobsSize" value={jobsSize} /><input type="hidden" name="itemsSize" value={itemsSize} /><button type="submit">Search</button>
@@ -72,6 +90,23 @@ export default async function WorkOrderDashboard({ searchParams }: { searchParam
       </table></TableShell>
       {products.length === 0 && <FeedbackState tone="empty">No rows to display.</FeedbackState>}
       {pagination('items', products.length, ip, productPages, itemsSize)}
+    </DataPanel>
+    <DataPanel title="Publication history">
+      {historyFailed && <FeedbackState tone="error">Publication history could not load.</FeedbackState>}
+      {!historyFailed && history.events.length === 0 && <p>No publications received yet.</p>}
+      <ol>{history.events.map(event => <li key={event.id}>
+        <Link href={href({ publication: event.id, changePage: '1' })}>{event.receivedAt}</Link>{' · '}
+        {event.outcome === 'published' ? event.initial ? `Initial snapshot: ${event.tableCounts.jobs} Table A rows, ${event.tableCounts.products} Table B rows` : `${event.counts.added} rows added, ${event.counts.removed} removed, ${event.counts.changed} fields changed` : event.outcome === 'no_change' ? 'No changes' : event.outcome === 'stale' ? 'Rejected older snapshot' : 'Rejected conflicting snapshot timing'}
+        <span className={styles.source}> · Source {event.sourceAsOf} · Generated {event.generatedAt} (UTC)</span>
+      </li>)}</ol>
+      <nav aria-label="Publication history pages">{historyPage > 1 && <Link href={href({ historyPage: String(historyPage - 1) })}>Newer publications</Link>}{' '}{history.hasNext && historyPage < 1000 && <Link href={href({ historyPage: String(historyPage + 1) })}>Older publications</Link>}</nav>
+      {selected && <section aria-label="Publication changes">
+        <h3>Publication {selected.publicationId}</h3>
+        {details.length === 0 ? <p>{selected.outcome === 'no_change' ? 'No row or field changes.' : 'This publication did not replace the stored snapshot.'}</p> : <>
+          <ul>{details.slice((changePage - 1) * 50, changePage * 50).map(detail => <li key={detail.key}><strong>{detail.label}</strong><dl><dt>Before</dt><dd style={{ whiteSpace: 'pre-wrap' }}>{detail.before || '(blank)'}</dd><dt>After</dt><dd style={{ whiteSpace: 'pre-wrap' }}>{detail.after || '(blank)'}</dd></dl></li>)}</ul>
+          <nav aria-label="Publication change pages">{changePage > 1 && <Link href={href({ changePage: String(changePage - 1) })}>Previous changes</Link>}{' '}{changePage * 50 < details.length && <Link href={href({ changePage: String(changePage + 1) })}>More changes</Link>}</nav>
+        </>}
+      </section>}
     </DataPanel>
   </div>
 }

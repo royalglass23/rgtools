@@ -2,53 +2,38 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { publishedRefreshStatus, startPublishedRefresh } from './bot-refresh'
+import { currentPublicationVersion, startPublishedRefresh } from './bot-refresh'
 import styles from './WorkOrderDashboard.module.css'
 
-const POLL_MS = 10_000, WAIT_MS = 5 * 60_000
-const WAITING_MESSAGE = "Waiting for Kanban's completion receipt. Current published rows remain visible."
-
-export function PublishedRefreshControl() {
+export function PublishedRefreshControl({ publicationId = null }: { publicationId?: string | null }) {
   const router = useRouter()
-  const [pending, setPending] = useState(false)
-  const [message, setMessage] = useState('')
+  const [pending, setPending] = useState(false), [message, setMessage] = useState('')
   const active = useRef(false), alive = useRef(true)
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  useEffect(() => { alive.current = true; return () => { alive.current = false; if (timer.current) clearTimeout(timer.current) } }, [])
-  async function refresh() {
+  useEffect(() => {
+    alive.current = true
+    let checking = false
+    const timer = setInterval(async () => {
+      if (document.visibilityState !== 'visible' || checking) return
+      checking = true
+      try {
+        const latest = await currentPublicationVersion()
+        if (alive.current && latest !== publicationId) router.refresh()
+      } catch { /* A later check or normal navigation can load the stored publication. */ }
+      finally { checking = false }
+    }, 30_000)
+    return () => { alive.current = false; clearInterval(timer) }
+  }, [publicationId, router])
+  async function requestUpdate() {
     if (active.current) return
-    active.current = true; setPending(true); setMessage('Starting Kanban refresh…')
-    const finish = (text: string) => { if (alive.current) { setMessage(text); setPending(false); active.current = false } }
+    active.current = true; setPending(true); setMessage('Requesting update…')
     try {
       const result = await startPublishedRefresh()
-      if (!alive.current) return
-      if (!result.ok) { finish(result.error); return }
-      const requestId = result.requestId
-      setMessage(WAITING_MESSAGE)
-      const deadline = Date.now() + WAIT_MS
-      async function check() {
-        if (!alive.current) return
-        try {
-          const status = await publishedRefreshStatus(requestId)
-          if (!alive.current) return
-          if (status.state === 'complete') {
-            finish(status.changed ? 'Kanban finished. Loading the published update…' : 'Kanban finished with no changes. Reloading published rows…')
-            router.refresh(); return
-          }
-          if (status.state === 'failed') { finish(status.error); return }
-          setMessage(status.state === 'unconfirmed' ? status.error : WAITING_MESSAGE)
-        } catch {
-          if (!alive.current) return
-          setMessage('Kanban completion could not be checked. The bot may still be running; status checking will continue.')
-        }
-        if (Date.now() >= deadline) { finish('Kanban completion is not yet confirmed. The bot may still be running; reload later or check the bot before retrying.'); return }
-        timer.current = setTimeout(check, POLL_MS)
-      }
-      timer.current = setTimeout(check, POLL_MS)
-    } catch { finish('Refresh could not be started. Existing rows remain visible; check the bot before retrying.') }
+      if (alive.current) setMessage(result.ok ? 'Update requested. Current rows remain available; new publications load automatically while this page is visible.' : result.error)
+    } catch { if (alive.current) setMessage('Update request acceptance could not be confirmed. Check the bot before retrying.') }
+    finally { active.current = false; if (alive.current) setPending(false) }
   }
   return <div className={styles.toolbar}>
-    <button type="button" disabled={pending} onClick={refresh}>{pending ? 'Refreshing…' : 'Refresh'}</button>
+    <button type="button" disabled={pending} onClick={requestUpdate}>{pending ? 'Requesting…' : 'Request update'}</button>
     {message && <p role="status" className={styles.source}>{message}</p>}
   </div>
 }

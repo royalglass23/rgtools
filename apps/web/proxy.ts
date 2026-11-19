@@ -2,6 +2,7 @@ import { auth } from '@/lib/auth'
 import { NextResponse } from 'next/server'
 
 export const proxy = auth((req) => {
+  if (req.nextUrl.pathname === '/api/kanban/publish') return NextResponse.next()
   if (
     req.nextUrl.pathname === '/api/lead-intake/calculator-submit' ||
     req.nextUrl.pathname === '/api/pricing' ||

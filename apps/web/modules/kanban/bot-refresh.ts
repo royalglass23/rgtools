@@ -2,51 +2,27 @@
 
 import { randomUUID } from 'node:crypto'
 import { requireDashboardUser } from '@/lib/dashboard-access'
-import { getReceiptReadMessage, publishedSourceConfigured, readPublishedRange } from './published-source'
-import { verifyPublishedSourceIdentity } from './keyless-google-auth'
+import { readPublicationVersion } from './publication-store'
 
-export type RefreshStart = { ok: true; requestId: string } | { ok: false; error: string }
-export type RefreshStatus = { state: 'pending' } | { state: 'unconfirmed'; error: string } | { state: 'complete'; changed: boolean } | { state: 'failed'; error: string }
-
-function configuration() {
-  const url = process.env.KANBAN_BOT_WEBHOOK_URL, secret = process.env.KANBAN_BOT_WEBHOOK_SECRET, range = process.env.KANBAN_BOT_RECEIPTS_RANGE
-  if (!url || !secret || !range || !publishedSourceConfigured()) throw new Error('Refresh is not configured. Ask an administrator to connect the Kanban trigger and completion receipt.')
-  try {
-    const parsed = new URL(url)
-    if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.hash) throw new Error()
-  } catch { throw new Error('The Kanban trigger configuration needs administrator review.') }
-  if (range.length > 200 || !/!\$?[A-Z]+(?::\$?[A-Z]+|\$?\d+:\$?[A-Z]+\$?\d+)$/.test(range)) throw new Error('The Kanban completion receipt range needs administrator review.')
-  return { url, secret, range }
-}
-
+type RefreshStart = { ok: true; requestId: string } | { ok: false; error: string }
 export async function startPublishedRefresh(): Promise<RefreshStart> {
   await requireDashboardUser()
-  let config
-  try { config = configuration() } catch (error) { return { ok: false, error: (error as Error).message } }
-  try { await verifyPublishedSourceIdentity() } catch { return { ok: false, error: 'The Vercel identity for Kanban is unavailable. Ask an administrator to check OIDC access before refreshing.' } }
+  const secret = process.env.KANBAN_BOT_WEBHOOK_SECRET, rawUrl = process.env.KANBAN_BOT_WEBHOOK_URL
+  let url: URL
+  try {
+    if (!rawUrl || !secret || secret === process.env.KANBAN_PUBLISH_SECRET) throw new Error('Missing or shared secret')
+    url = new URL(rawUrl)
+    if (url.protocol !== 'https:' || url.username || url.password || url.hash) throw new Error('Unsafe webhook')
+  } catch { return { ok: false, error: 'Kanban update requests are not configured. Ask an administrator to check the webhook.' } }
   const requestId = randomUUID()
   try {
-    const response = await fetch(config.url, { method: 'POST', headers: { Authorization: `Bearer ${config.secret}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'refresh_work_orders', requestId }), signal: AbortSignal.timeout(15_000), redirect: 'error', cache: 'no-store' })
-    await response.body?.cancel()
-    if (response.status !== 200) return { ok: false, error: 'The Kanban trigger did not confirm acceptance. Check the bot before starting another refresh.' }
+    const response = await fetch(url.toString(), { method: 'POST', headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'refresh_work_orders', requestId }), cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(15_000) })
+    void response.body?.cancel().catch(() => {})
+    if (response.status !== 200) return { ok: false, error: 'Kanban did not accept the update request. Existing rows remain available; check the bot before retrying.' }
     return { ok: true, requestId }
-  } catch { return { ok: false, error: 'Could not confirm whether Kanban started. Check the bot before starting another refresh.' } }
+  } catch { return { ok: false, error: 'Update request acceptance could not be confirmed. Existing rows remain available; check the bot before retrying.' } }
 }
-
-export async function publishedRefreshStatus(requestId: string): Promise<RefreshStatus> {
+export async function currentPublicationVersion(): Promise<string | null> {
   await requireDashboardUser()
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId)) return { state: 'unconfirmed', error: 'Invalid Kanban refresh request. Completion cannot be checked.' }
-  try {
-    const { range } = configuration()
-    const rows = await readPublishedRange(range)
-    const headers = ['requestId', 'status', 'outputVersion', 'completedAt']
-    if (!rows[0] || headers.some((header, i) => rows[0][i] !== header)) throw new Error()
-    const matching = rows.slice(1).filter(row => row[0] === requestId)
-    if (!matching.length) return { state: 'pending' }
-    if (matching.length !== 1) throw new Error()
-    const [, state, version, completedAt] = matching[0]
-    if (state === 'failed') return { state: 'failed', error: 'Kanban reported that this refresh failed. Existing published rows are unchanged here.' }
-    if (!['success', 'no_change'].includes(String(state)) || typeof version !== 'string' || !version.trim() || typeof completedAt !== 'string' || !/^\d{4}-\d{2}-\d{2}T.+(?:Z|[+-]\d{2}:\d{2})$/.test(completedAt) || !Number.isFinite(Date.parse(completedAt))) throw new Error()
-    return { state: 'complete', changed: state === 'success' }
-  } catch (error) { return { state: 'unconfirmed', error: getReceiptReadMessage(error) ?? 'Kanban completion could not be verified. The bot may still be running; status checking will continue.' } }
+  return readPublicationVersion()
 }
