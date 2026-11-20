@@ -10,4 +10,5 @@ allowBuilds:
   workerd: true
 
 overrides:
-  postcss: 8.5.15
+  postcss: 8.5.23
+  "@babel/helper-compilation-targets>browserslist": 4.28.7

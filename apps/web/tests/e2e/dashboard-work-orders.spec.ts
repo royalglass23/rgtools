@@ -1,286 +1,216 @@
-import { test, expect, type Page } from '@playwright/test'
-import { readFileSync, writeFileSync, unlinkSync, existsSync } from 'node:fs'
+import { test, expect, type Page, type APIRequestContext } from '@playwright/test'
+import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import AxeBuilder from '@axe-core/playwright'
-const fixtureUrl = process.env.RG406_ACCEPTANCE_URL
-const enabled = fixtureUrl === 'http://127.0.0.1:55443'
-const root = path.resolve(process.cwd(), '../../tmp/rg406')
-const shower = '40600000-0000-4000-8000-000000000020'
-const balustrade = '40600000-0000-4000-8000-000000000021'
-async function login(page: Page, username: string) {
-  const credentials = JSON.parse(readFileSync(path.join(root, 'credentials.json'), 'utf8'))
+import { verifyIsolatedE2eDatabase } from './e2e-database-safety'
+
+const fixtureUrl = 'http://127.0.0.1:3058'
+const adapterUrl = process.env.RG408_ADAPTER_URL ?? 'http://127.0.0.1:3059'
+const databaseUrl = 'postgresql://rg408@127.0.0.1:55442/rg408_production_e2e?sslmode=disable'
+const enabled = process.env.RG408_PUBLICATION_E2E_URL === fixtureUrl && process.env.E2E_BASE_URL === fixtureUrl
+const root = path.resolve(process.cwd(), '../../tmp/rg408-production-e2e')
+type Fixture = { databaseUrl: string; baseUrl: string; sentinel: string; password: string; publishSecret: string }
+let fixture: Fixture
+const headersA = ['WO', 'Customer', 'Short address', 'Approx install date', 'Within 3 weeks?']
+const headersB = ['WO / client / address', 'Materials (per product)', 'Client waiting for', 'Site ready', 'Glass ready', 'Hardware ready', 'Design Y/N/?', 'PS1 / PS3', 'Bottle strut', 'BC?', 'Minor var?']
+const material = 'Fictional shower – 10 mm\nKeep every source line visible. <b>literal source</b>\nGlass café / 工程 ✓'
+let timestamp = Date.now() - 60_000
+function publication() {
+  timestamp = Math.max(timestamp + 1, Date.now() - 1000)
+  const sourceAsOf = new Date(timestamp).toISOString()
+  return { schemaVersion: 1, board: 'work-orders', publicationId: randomUUID(), complete: true, sourceAsOf, generatedAt: sourceAsOf, tables: {
+    jobs: Array.from({ length: 12 }, (_, i) => ({ id: `fictional-job-${i + 1}`, cells: [`WO408${String(i + 1).padStart(2, '0')}`, `Fictional customer ${i + 1}`, i ? `Fictional site ${i + 1}` : 'Fictional site\nUnit café 工程', i ? 'Bot source date?' : '', i % 2 ? 'No' : '?'] })),
+    products: Array.from({ length: 12 }, (_, i) => ({ id: `fictional-job-${i + 1}`, cells: [`WO408${String(i + 1).padStart(2, '0')}\nFictional customer ${i + 1}`, i ? `Fictional material ${i + 1}` : material, 'Client source says ?', '', 'Unknown', 'No', '?', 'PS1 / PS3 source', '', 'N/A', '?'] })),
+  } }
+}
+// Every reset is confined to the owned synthetic database and guarded in that connection.
+function localSql(statement: string) {
+  if (!enabled || fixture.databaseUrl !== databaseUrl || fixture.baseUrl !== fixtureUrl || !/^[a-f0-9]{64}$/.test(fixture.sentinel)) throw new Error('Refusing unsafe fixture SQL')
+  const guard = `DO $$ BEGIN IF current_database() <> 'rg408_production_e2e' OR inet_server_addr() <> '127.0.0.1'::inet OR inet_server_port() <> 55442 OR (SELECT sentinel FROM rgtools_e2e.database_sentinel WHERE id=1) IS DISTINCT FROM '${fixture.sentinel}' THEN RAISE EXCEPTION 'Unsafe E2E fixture'; END IF; END $$;`
+  return execFileSync(process.env.RG408_PSQL ?? (process.platform === 'win32' ? 'C:/Program Files/PostgreSQL/18/bin/psql.exe' : 'psql'), ['-X', '-w', '-h', '127.0.0.1', '-p', '55442', '-U', 'rg408', '-d', 'rg408_production_e2e', '-v', 'ON_ERROR_STOP=1', '-A', '-t', '-q'], { input: `${guard}\n${statement}`, encoding: 'utf8', env: Object.fromEntries(['SystemRoot', 'WINDIR', 'PATH', 'TEMP', 'TMP'].filter(key => process.env[key]).map(key => [key, process.env[key]!])) }).trim()
+}
+async function send(request: APIRequestContext, body: ReturnType<typeof publication>) {
+  // Stringify once: caller reuses the same envelope for an identical retry.
+  return request.post('/api/kanban/publish', { headers: { Authorization: `Bearer ${fixture.publishSecret}`, 'Content-Type': 'application/json' }, data: JSON.stringify(body) })
+}
+async function login(page: Page, username = 'rg408-staff') {
   await page.goto('/login')
   await page.getByLabel('Username', { exact: true }).fill(username)
-  await page.getByLabel('Password', { exact: true }).fill(credentials.password)
+  await page.getByLabel('Password', { exact: true }).fill(fixture.password)
   await page.getByRole('button', { name: 'Sign in', exact: true }).click()
-  await expect(page).toHaveURL('http://127.0.0.1:55443/', { timeout: 120000 })
+  await expect(page).toHaveURL(`${fixtureUrl}/`, { timeout: 120_000 })
 }
-function localSql(statement: string) {
-  execFileSync(process.env.RG406_PSQL ?? 'psql', ['-h', '127.0.0.1', '-p', '55440', '-U', 'rg406', '-d', 'rg406', '-v', 'ON_ERROR_STOP=1', '-c', statement], { stdio: 'pipe' })
-}
-async function clearRefreshLimit() {
-  localSql("DELETE FROM work_order_refresh_locks WHERE lock_name = 'work-order-rate:dashboard-refresh:40600000-0000-4000-8000-000000000002'")
-}
-test.describe('RG-406 isolated dashboard acceptance', () => {
-  test.skip(!enabled, 'Requires the named synthetic localhost fixture, never a production URL.')
-  test.setTimeout(240000)
-  test('staff edits independent products, preserves state through refresh failure and success', async ({ page, request }) => {
-    await login(page, 'rg406-staff')
-    await expect(page.getByRole('heading', { name: 'Operations dashboard' })).toBeVisible()
-    const group = page.locator('#navigation-group-dashboard')
-    await expect(group.getByRole('link', { name: 'Roxy Dashboard' })).toHaveCount(0)
-    await group.getByRole('link', { name: 'Work Orders', exact: true }).click()
-    await expect(page.getByRole('heading', { name: 'Work Orders dashboard' })).toBeVisible()
-    await page.getByRole('link', { name: 'All products', exact: true }).click()
-    await expect(page.getByRole('region', { name: 'All Work Order rows' }).getByRole('columnheader')).toHaveText(['WO', 'Customer', 'Short address', 'Approx install date', 'Within 3 weeks?'])
-    await expect(page.getByRole('region', { name: 'Table B - Product planning' }).getByRole('columnheader')).toHaveText(['WO / client / address', 'Materials (per product)', 'Client waiting for', 'Site ready', 'Glass ready', 'Hardware ready', 'Design Y/N/?', 'PS1 / PS3', 'Bottle strut', 'BC?', 'Minor var?'])
-    await expect(page.getByRole('combobox', { name: 'Page size' })).toHaveCount(2)
-    const item = page.locator(`#product-${shower}`)
-    await item.locator(':scope > summary').click()
-    await item.getByLabel('Site ready', { exact: true }).selectOption('yes')
-    await item.getByLabel('Bottle strut', { exact: true }).selectOption('no')
-    await item.getByLabel('BC?', { exact: true }).selectOption('na')
-    await item.getByLabel('Target install date').fill('2026-11-20')
-    await item.getByLabel('Installer', { exact: true }).selectOption('40600000-0000-4000-8000-000000000030')
-    await item.getByLabel('Notes', { exact: true }).fill('Fixture staff inspection')
-    await item.getByRole('button', { name: 'Save product' }).click()
-    await expect(item.getByRole('status')).toHaveText('Saved. Change history updated.')
-    await item.getByText('Change history', { exact: true }).click()
-    await expect(item.getByText(/rg406-staff/).first()).toBeVisible()
-    const other = page.locator(`#product-${balustrade}`)
-    await other.locator(':scope > summary').click()
-    await expect(other.getByLabel('Site ready', { exact: true })).toHaveValue('unknown')
-    writeFileSync(path.join(root, 'source-fail'), 'synthetic 403')
-    await clearRefreshLimit()
-    await page.getByRole('button', { name: 'Refresh from ServiceM8' }).click()
-    await expect(page.getByText(/ServiceM8 refresh could not finish/)).toBeVisible()
-    await expect(item.getByLabel('Notes', { exact: true })).toHaveValue('Fixture staff inspection')
-    unlinkSync(path.join(root, 'source-fail')); await clearRefreshLimit()
-    await page.getByRole('button', { name: 'Refresh from ServiceM8' }).click()
-    await expect(page.getByText('ServiceM8 records refreshed.')).toBeVisible()
-    await page.reload()
-    const saved = page.locator(`#product-${shower}`)
-    await saved.locator(':scope > summary').click()
-    await expect(saved.getByLabel('Site ready', { exact: true })).toHaveValue('yes')
-    await expect(saved.getByLabel('Bottle strut', { exact: true })).toHaveValue('no')
-    await expect(saved.getByLabel('BC?', { exact: true })).toHaveValue('na')
-    await expect(saved.getByLabel('Notes', { exact: true })).toHaveValue('Fixture staff inspection')
-    await saved.getByLabel('Notes', { exact: true }).fill('')
-    await saved.getByRole('button', { name: 'Save product' }).click()
-    await expect(saved.getByRole('status')).toHaveText('Saved. Change history updated.')
-    await page.reload(); await page.locator(`#product-${shower} > summary`).click()
-    await expect(page.locator(`#product-${shower}`).getByLabel('Notes', { exact: true })).toHaveValue('')
-    const metrics = await (await request.get('http://127.0.0.1:55442/__metrics')).json()
-    expect(metrics.gets).toBeGreaterThan(0); expect(metrics.writes).toBe(0)
-    await page.evaluate(() => window.scrollTo(0, 0))
-    await page.screenshot({ path: path.join(root, 'work-orders-desktop.png'), fullPage: true, animations: 'disabled' })
-    await page.emulateMedia({ reducedMotion: 'reduce' })
-    await page.setViewportSize({ width: 390, height: 844 })
-    await page.getByRole('button', { name: 'Open navigation', exact: true }).click()
-    await expect(page.locator('aside')).toHaveAttribute('data-mobile-open', 'true')
-    await page.getByRole('button', { name: 'Close navigation', exact: true }).click()
-    await expect(page.locator('aside')).not.toHaveAttribute('data-mobile-open', 'true')
-    await page.screenshot({ path: path.join(root, 'work-orders-mobile.png'), fullPage: true, animations: 'disabled' })
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+const jobs = (page: Page) => page.getByRole('region', { name: 'All Work Order rows', exact: true })
+const products = (page: Page) => page.getByRole('region', { name: 'Due product rows', exact: true })
+const history = (page: Page) => page.getByRole('region', { name: 'Publication history', exact: true })
+const metrics = async (request: APIRequestContext) => (await (await request.get(`${adapterUrl}/__metrics`, { ignoreHTTPSErrors: adapterUrl === 'https://127.0.0.1:3059' })).json()) as { reads: number; writes: number; aiCalls: number }
+
+test.describe('RG-408 isolated direct Kanban publication acceptance', () => {
+  test.skip(!enabled, 'Run only with the exact guarded local Kanban publication fixture')
+  test.describe.configure({ mode: 'default' })
+  test.setTimeout(180_000)
+  test.beforeAll(async () => {
+    if (!['http://127.0.0.1:3059', 'https://127.0.0.1:3059'].includes(adapterUrl)) throw new Error('Exact loopback adapter required')
+    const file = process.env.RG408_FIXTURE_FILE
+    if (!file || path.resolve(file) !== path.join(root, 'fixture.json')) throw new Error('Exact owned fixture file required')
+    fixture = JSON.parse(readFileSync(file, 'utf8'))
+    await verifyIsolatedE2eDatabase({ expectedSentinel: process.env.E2E_DATABASE_SENTINEL, purpose: 'RG-408 direct publication acceptance', readProof: async () => JSON.parse(localSql(`SELECT json_build_object('databaseName',current_database(),'sentinel',sentinel) FROM rgtools_e2e.database_sentinel WHERE id=1;`)) })
   })
+  test.beforeEach(async ({ request, page }) => {
+    page.on('pageerror', error => console.error('Fixture browser error:', error.message))
+    localSql("DELETE FROM settings WHERE key='kanban.work-orders.latest.v1'; DELETE FROM audit_log WHERE entity_type='kanban.work-orders.publication';")
+    expect((await send(request, publication())).status()).toBe(200)
+  })
+
+  test('receiver requires publisher authentication, rejects incomplete/conflicting delivery, and deduplicates identical retry', async ({ request, page }) => {
+    const body = publication(), serialized = JSON.stringify(body)
+    expect((await request.post('/api/kanban/publish', { data: body })).status()).toBe(401)
+    expect((await request.post('/api/kanban/publish', { headers: { Authorization: 'Bearer fictional-wrong' }, data: body })).status()).toBe(401)
+    const first = await send(request, body)
+    expect(first.status()).toBe(200)
+    expect(await first.json()).toEqual({ outcome: 'no_change', publicationId: body.publicationId, duplicate: false })
+    const retry = await request.post('/api/kanban/publish', { headers: { Authorization: `Bearer ${fixture.publishSecret}`, 'Content-Type': 'application/json' }, data: serialized })
+    expect(await retry.json()).toEqual({ outcome: 'no_change', publicationId: body.publicationId, duplicate: true })
+    expect(localSql(`SELECT count(*) FROM audit_log WHERE id='${body.publicationId}';`)).toBe('1')
+    const conflict = structuredClone(body); conflict.tables.jobs[0].cells[1] = 'Different fictional delivery'
+    expect((await send(request, conflict)).status()).toBe(409)
+    const incomplete = { ...publication(), complete: false }
+    expect((await request.post('/api/kanban/publish', { headers: { Authorization: `Bearer ${fixture.publishSecret}` }, data: incomplete })).status()).toBe(400)
+    await page.goto('/dashboard/work-orders'); await expect(page).toHaveURL(/\/login/)
+    const sibling = await request.post('/api/kanban/publish-unrelated', { maxRedirects: 0 })
+    expect(sibling.status()).toBeGreaterThanOrEqual(300); expect(sibling.status()).toBeLessThan(400)
+  })
+
+  test('read-only dashboard preserves exact columns/source strings, searches all rows before paging, and makes no source/AI calls', async ({ page, request }) => {
+    const before = await metrics(request)
+    await login(page)
+    const nav = page.locator('#navigation-group-dashboard')
+    await expect(nav.getByRole('link', { name: 'Roxy Dashboard' })).toHaveCount(0)
+    await nav.getByRole('link', { name: 'Work Orders', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Work Orders dashboard' })).toBeVisible()
+    await expect(jobs(page).getByRole('columnheader')).toHaveText(headersA)
+    await expect(products(page).getByRole('columnheader')).toHaveText(headersB)
+    await expect(jobs(page).locator('tbody tr')).toHaveCount(5)
+    await expect(products(page).locator('tbody tr')).toHaveCount(5)
+    expect(await jobs(page).locator('tbody tr').first().locator('td').allTextContents()).toEqual(publication().tables.jobs[0].cells)
+    const sourceCells = await products(page).locator('tbody tr').first().locator('td').allTextContents()
+    expect(sourceCells).toHaveLength(11)
+    expect([sourceCells[0], ...sourceCells.slice(2)]).toEqual([publication().tables.products[0].cells[0], ...publication().tables.products[0].cells.slice(2)])
+    expect(sourceCells[1]).toMatch(/^Fictional shower – 10 mm/); expect(sourceCells[1].length).toBeLessThanOrEqual(80)
+    await expect(page.getByRole('button', { name: /Save product|Refresh from ServiceM8/ })).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Edit product', exact: true })).toHaveCount(0)
+    await page.getByRole('searchbox', { name: 'Find a job or product' }).fill('WO40812')
+    await page.getByRole('button', { name: 'Search', exact: true }).click()
+    await expect(jobs(page).locator('tbody tr')).toHaveCount(1)
+    await expect(products(page).locator('tbody tr')).toHaveCount(1)
+    await expect(jobs(page).getByRole('cell', { name: 'WO40812', exact: true })).toBeVisible()
+    await page.getByRole('link', { name: 'Clear search', exact: true }).click()
+    await expect(page.getByText('12 work orders', { exact: true })).toBeVisible()
+    await expect(page.getByText('12 products', { exact: true })).toBeVisible()
+    // Wait for the search/clear navigation and its client assets to settle before activation.
+    await expect(page).toHaveURL(`${fixtureUrl}/dashboard/work-orders`)
+    await page.waitForLoadState('networkidle')
+    await page.getByRole('button', { name: 'Request update', exact: true }).focus()
+    await page.keyboard.press('Enter')
+    await expect(page.getByRole('status')).toHaveText('Kanban update requests are not configured. Ask an administrator to check the webhook.')
+    await expect(page.getByRole('button', { name: 'Request update', exact: true })).toBeEnabled()
+    expect(await metrics(request)).toEqual(before)
+  })
+
+  test('table pages and sizes remain independent and search resets both page positions', async ({ page }) => {
+    await login(page); await page.goto('/dashboard/work-orders')
+    await page.getByRole('navigation', { name: 'Work Order pages' }).getByRole('link', { name: 'Next', exact: true }).click()
+    await expect(jobs(page).locator('tbody tr').first()).toContainText('WO40806')
+    await expect(products(page).locator('tbody tr').first()).toContainText('WO40801')
+    await page.getByRole('navigation', { name: 'Product pages' }).getByRole('link', { name: 'Next', exact: true }).click()
+    await expect(products(page).locator('tbody tr').first()).toContainText('WO40806')
+    const a = page.getByRole('region', { name: 'Table A - Every work order', exact: true })
+    await a.getByRole('combobox', { name: 'Page size' }).selectOption('10')
+    await a.getByRole('button', { name: 'Apply', exact: true }).click()
+    await expect(jobs(page).locator('tbody tr')).toHaveCount(10)
+    await expect(jobs(page).locator('tbody tr').first()).toContainText('WO40801')
+    await expect(products(page).locator('tbody tr').first()).toContainText('WO40806')
+    await page.getByRole('searchbox').fill('WO40812'); await page.getByRole('button', { name: 'Search', exact: true }).click()
+    await expect(page.getByRole('navigation', { name: 'Work Order pages' })).toContainText('Page 1 of 1')
+    await expect(page.getByRole('navigation', { name: 'Product pages' })).toContainText('Page 1 of 1')
+    await expect(a.getByRole('combobox', { name: 'Page size' })).toHaveValue('10')
+  })
+
+  test('materials retain full literal source with keyboard, hover and touch access without editing', async ({ page, browser }) => {
+    await login(page); await page.goto('/dashboard/work-orders')
+    const trigger = products(page).getByRole('button', { name: /View material description:/ }).first()
+    await trigger.hover()
+    const dialog = page.getByRole('dialog', { name: 'Materials · WO40801', exact: true })
+    await expect(dialog).toBeVisible()
+    expect(await dialog.locator('p').textContent()).toBe(material)
+    await expect(dialog.locator('b')).toHaveCount(0)
+    await dialog.hover(); await expect(dialog).toBeVisible()
+    await page.keyboard.press('Escape'); await expect(dialog).toHaveCount(0)
+    await trigger.focus(); await page.keyboard.press('Enter'); await expect(dialog).toBeFocused()
+    await expect(dialog.getByRole('link', { name: 'Edit product' })).toHaveCount(0)
+    for (const colorScheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme })
+      expect((await new AxeBuilder({ page }).include('[role="dialog"]').withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze()).violations).toEqual([])
+    }
+    await page.screenshot({ path: path.join(root, 'materials-desktop.png'), animations: 'disabled' })
+    await dialog.getByRole('button', { name: 'Close materials preview' }).click()
+    await expect(trigger).toBeFocused(); await expect(dialog).toHaveCount(0)
+    const context = await browser.newContext({ baseURL: fixtureUrl, viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, storageState: await page.context().storageState() })
+    try {
+      const mobile = await context.newPage(); await mobile.goto('/dashboard/work-orders')
+      await products(mobile).getByRole('button', { name: /View material description:/ }).first().tap()
+      const preview = mobile.getByRole('dialog', { name: 'Materials · WO40801', exact: true })
+      await expect(preview).toBeVisible()
+      expect(await preview.locator('p').textContent()).toBe(material)
+      const bounds = await preview.boundingBox()
+      expect(bounds!.x).toBeGreaterThanOrEqual(0); expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390)
+      await preview.getByRole('button', { name: 'Close materials preview' }).tap(); await expect(preview).toHaveCount(0)
+      expect(await mobile.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+      expect(await products(mobile).evaluate(element => element.scrollWidth > element.clientWidth)).toBe(true)
+      await mobile.screenshot({ path: path.join(root, 'work-orders-mobile.png'), fullPage: true, animations: 'disabled' })
+    } finally { await context.close() }
+  })
+
+  test('visible page loads a later publication automatically, history shows exact changes and records no_change once per delivery', async ({ page, request }) => {
+    await login(page); await page.goto('/dashboard/work-orders')
+    const changed = publication(); changed.tables.jobs[0].cells[1] = 'Updated fictional customer'
+    const accepted = await send(request, changed); expect(accepted.status()).toBe(200)
+    expect(await accepted.json()).toEqual({ outcome: 'published', publicationId: changed.publicationId, duplicate: false })
+    // Observe the production 30-second visible-page version check, without navigation/reload.
+    await expect(jobs(page).getByRole('cell', { name: 'Updated fictional customer', exact: true })).toBeVisible({ timeout: 45_000 })
+    await expect(history(page)).toContainText('0 rows added, 0 removed, 1 fields changed')
+    const changedLink = history(page).locator(`a[href*="publication=${changed.publicationId}"]`)
+    await changedLink.click()
+    const changes = page.getByRole('region', { name: 'Publication changes' })
+    await expect(changes).toContainText('Table A · fictional-job-1 · Customer')
+    await expect(changes.locator('dd')).toHaveText(['Fictional customer 1', 'Updated fictional customer'])
+    const noChange = { ...publication(), tables: structuredClone(changed.tables) }
+    expect(await (await send(request, noChange)).json()).toEqual({ outcome: 'no_change', publicationId: noChange.publicationId, duplicate: false })
+    expect(await (await send(request, noChange)).json()).toEqual({ outcome: 'no_change', publicationId: noChange.publicationId, duplicate: true })
+    await page.reload(); await expect(history(page).locator('ol > li')).toHaveCount(3)
+    await expect(history(page)).toContainText('No changes')
+    await history(page).locator(`a[href*="publication=${noChange.publicationId}"]`).click()
+    await expect(page.getByRole('region', { name: 'Publication changes' })).toContainText('No row or field changes.')
+    const counters = await metrics(request); expect(counters.writes).toBe(0); expect(counters.aiCalls).toBe(0)
+  })
+
   test('staff cannot open Roxy Dashboard directly, while the configured Roxy staff account can', async ({ page }) => {
-    if (existsSync(path.join(root, 'source-fail'))) unlinkSync(path.join(root, 'source-fail'))
     await page.goto('/dashboard/roxy'); await expect(page).toHaveURL(/\/login/)
-    await login(page, 'rg406-staff')
-    await page.goto('/dashboard/roxy'); await expect(page).toHaveURL(/denied=roxy-dashboard/)
-    await page.context().clearCookies(); await login(page, 'rg406-roxy')
-    await page.goto('/dashboard/roxy')
+    await login(page); await page.goto('/dashboard/roxy'); await expect(page).toHaveURL(/denied=roxy-dashboard/)
+    await page.context().clearCookies(); await login(page, 'rg408-roxy'); await page.goto('/dashboard/roxy')
     await expect(page.getByRole('heading', { name: 'Roxy Dashboard' })).toBeVisible()
     await expect(page.locator('#navigation-group-dashboard').getByRole('link', { name: 'Roxy Dashboard' })).toHaveAttribute('aria-current', 'page')
-    await page.goto('/admin/job-progress?days=30')
-    await expect(page).toHaveURL(/\/dashboard\/roxy\?days=30/)
+    await page.goto('/admin/job-progress?days=30'); await expect(page).toHaveURL(/\/dashboard\/roxy\?days=30/)
   })
-  test('Admin access and old quote overview URLs retain their destination and filters', async ({ page }) => {
-    await login(page, 'rg406-admin')
-    await page.goto('/dashboard/roxy'); await expect(page.getByRole('heading', { name: 'Roxy Dashboard' })).toBeVisible()
+
+  test('Admin access and old quote overview URLs retain their destination and filters', async ({ page, request }) => {
+    await login(page, 'rg408-admin'); await page.goto('/dashboard/roxy')
+    await expect(page.getByRole('heading', { name: 'Roxy Dashboard' })).toBeVisible()
     await page.goto('/quote-tracker/overview?trackedIn=14&activityPage=2')
     await expect(page).toHaveURL(/\/dashboard\/quotes\?trackedIn=14&activityPage=2/)
     await expect(page.getByRole('heading', { name: 'Tracked quote activity' })).toBeVisible()
-  })
-  test('a dirty product stays recoverable when another edit would remove it from this focus', async ({ page }) => {
-    localSql(`UPDATE work_order_items SET install_date=(now() AT TIME ZONE 'Pacific/Auckland')::date + 4, dashboard_revision=dashboard_revision+1 WHERE id='${shower}'`)
-    await login(page, 'rg406-staff')
-    await page.goto('/dashboard/work-orders?focus=upcoming')
-    const item = page.locator(`#product-${shower}`)
-    await item.locator(':scope > summary').click()
-    await item.getByLabel('Notes', { exact: true }).fill('Keep this draft when the product moves')
-    localSql(`UPDATE work_order_items SET install_date='2030-01-01', dashboard_revision=dashboard_revision+1 WHERE id='${shower}'`)
-    await page.getByRole('button', { name: 'Refresh from ServiceM8' }).click()
-    await expect(page.getByText('Save or reload your product edits before refreshing.')).toBeVisible()
-    await expect(item.getByLabel('Notes', { exact: true })).toHaveValue('Keep this draft when the product moves')
-    await item.getByRole('button', { name: 'Save product' }).click()
-    await expect(item.getByRole('alert')).toContainText('Someone changed this product')
-    await expect(item.getByLabel('Notes', { exact: true })).toHaveValue('Keep this draft when the product moves')
-  })
-  test('an edit begun during a delayed refresh survives the product leaving the view', async ({ page }) => {
-    localSql(`UPDATE work_order_items SET install_date=(now() AT TIME ZONE 'Pacific/Auckland')::date + 4, dashboard_revision=dashboard_revision+1 WHERE id='${shower}'`)
-    await login(page, 'rg406-staff')
-    await page.goto('/dashboard/work-orders?focus=upcoming')
-    const item = page.locator(`#product-${shower}`)
-    await item.locator(':scope > summary').click()
-    await clearRefreshLimit()
-    let release!: () => void
-    const held = new Promise<void>(resolve => { release = resolve })
-    let intercepted!: () => void
-    const started = new Promise<void>(resolve => { intercepted = resolve })
-    await page.route('**/dashboard/work-orders?**', async route => {
-      if (route.request().method() !== 'GET' || route.request().headers().rsc !== '1') return route.continue()
-      intercepted()
-      await held
-      await route.continue()
-    })
-    try {
-      await page.getByRole('button', { name: 'Refresh from ServiceM8' }).click()
-      await Promise.race([started, new Promise((_, reject) => setTimeout(() => reject(new Error('No RSC refresh intercepted')), 20000))])
-      await item.getByLabel('Notes', { exact: true }).fill('Draft started while refresh was in flight')
-      localSql(`UPDATE work_order_items SET install_date='2030-01-01', dashboard_revision=dashboard_revision+1 WHERE id='${shower}'`)
-      release()
-      await expect(item).toHaveCount(0)
-      const recovery = page.getByLabel('Recoverable draft for TEST406 Shower', { exact: true })
-      await page.getByRole('complementary', { name: 'Recoverable product drafts' }).getByText('TEST406 · Shower', { exact: true }).click()
-      await expect(recovery).toHaveValue(/Draft started while refresh was in flight/)
-      await page.unroute('**/dashboard/work-orders?**')
-      await page.getByRole('link', { name: 'All products', exact: true }).click()
-      await item.locator(':scope > summary').click()
-      await expect(item.getByLabel('Notes', { exact: true })).toHaveValue('Draft started while refresh was in flight')
-    } finally {
-      release()
-      await page.unroute('**/dashboard/work-orders?**')
-    }
-  })
-  test('both tables use the standard pagination and retain each other’s page and size', async ({ page }) => {
-    const records = Array.from({ length: 12 }, (_, index) => ({ job: randomUUID(), item: randomUUID(), number: String(index + 1).padStart(2, '0') }))
-    const ids = records.map(row => `'${row.job}'`).join(',')
-    try {
-      localSql(`INSERT INTO work_orders (id, identity_kind, identity_value, servicem8_job_uuid, servicem8_status, job_number, client_name) VALUES ${records.map(row => `('${row.job}', 'servicem8_uuid', '${row.job}', '${row.job}', 'Work Order', 'P406${row.number}', 'Pagination406')`).join(',')}`)
-      localSql(`INSERT INTO work_order_items (id, work_order_id, servicem8_job_uuid, servicem8_item_uuid, original_description, quantity, install_date) VALUES ${records.map(row => `('${row.item}', '${row.job}', '${row.job}', '${row.item}', 'Pagination product ${row.number}', '1', (now() AT TIME ZONE 'Pacific/Auckland')::date + 4)`).join(',')}`)
-      await login(page, 'rg406-staff')
-      await page.goto('/dashboard/work-orders?q=Pagination406&focus=all')
-      const jobs = page.getByRole('region', { name: 'Table A - All Work Orders', exact: true })
-      const products = page.getByRole('region', { name: 'Table B - Due within 3 weeks', exact: true })
-      await expect(jobs.getByRole('navigation')).toHaveText('PreviousPage 1 of 3Next')
-      await jobs.getByRole('combobox', { name: 'Page size' }).selectOption('10')
-      await jobs.getByRole('button', { name: 'Apply' }).click()
-      await expect(jobs.getByRole('navigation')).toContainText('Page 1 of 2')
-      await expect(products.getByRole('combobox', { name: 'Page size' })).toHaveValue('5')
-      await products.getByRole('navigation', { name: 'Product pages' }).getByRole('link', { name: 'Next' }).click()
-      await expect(products.getByRole('navigation', { name: 'Product pages' })).toContainText('Page 2 of 3')
-      await expect(products.getByRole('button', { name: 'View material description: Pagination product 06', exact: true })).toBeVisible()
-      await jobs.getByRole('navigation').getByRole('link', { name: 'Next' }).click()
-      await expect(jobs.getByRole('navigation')).toContainText('Page 2 of 2')
-      await expect(products.getByRole('navigation', { name: 'Product pages' })).toContainText('Page 2 of 3')
-      await products.getByRole('combobox', { name: 'Page size' }).selectOption('20')
-      await products.getByRole('button', { name: 'Apply' }).click()
-      await expect(products.getByRole('navigation', { name: 'Product pages' })).toContainText('Page 1 of 1')
-      await expect(jobs.getByRole('navigation')).toContainText('Page 2 of 2')
-      await expect(jobs.getByRole('combobox', { name: 'Page size' })).toHaveValue('10')
-      await expect(page.getByRole('searchbox')).toHaveValue('Pagination406')
-    } finally { localSql(`DELETE FROM work_orders WHERE id IN (${ids})`) }
-  })
-  test('explains missing due dates and previews full Materials text on hover, keyboard and touch', async ({ page, browser }) => {
-    const job = randomUUID(), item = randomUUID()
-    const description = 'Frameless shower enclosure with clear toughened glass and brushed hardware for the main bathroom.\nFull specification: custom panel dimensions, wall channel, hinges, handle and seal details. Keep every source line visible in the preview.'
-    try {
-      localSql(`INSERT INTO work_orders (id, identity_kind, identity_value, servicem8_job_uuid, servicem8_status, job_number, client_name) VALUES ('${job}', 'servicem8_uuid', '${job}', '${job}', 'Work Order', 'HOVER406', 'Hover406')`)
-      localSql(`INSERT INTO work_order_items (id, work_order_id, servicem8_job_uuid, servicem8_item_uuid, original_description, quantity) VALUES ('${item}', '${job}', '${job}', '${item}', '${description}', '1')`)
-      await login(page, 'rg406-staff')
-      await page.goto('/dashboard/work-orders?q=Hover406')
-      await expect(page.getByText(/1 product has no target date or confirmed inclusion/)).toBeVisible()
-      expect((await new AxeBuilder({ page }).include('main').withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze()).violations).toEqual([])
-      await page.getByRole('link', { name: 'Review products with unknown dates' }).click()
-      const trigger = page.getByRole('button', { name: /View material description:/ })
-      expect((await trigger.textContent())!.length).toBeLessThanOrEqual(80)
-      await trigger.hover()
-      const preview = page.getByRole('dialog', { name: 'Materials · HOVER406', exact: true })
-      await expect(preview).toBeVisible()
-      await expect(preview).toContainText('Keep every source line visible in the preview.')
-      await preview.hover()
-      await expect(preview).toBeVisible()
-      await page.screenshot({ path: path.join(root, 'materials-preview-desktop.png'), animations: 'disabled' })
-      for (const colorScheme of ['light', 'dark'] as const) {
-        await page.emulateMedia({ colorScheme })
-        expect((await new AxeBuilder({ page }).include('[role="dialog"]').withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze()).violations).toEqual([])
-      }
-      await page.keyboard.press('Escape')
-      await expect(preview).toHaveCount(0)
-      await trigger.focus()
-      await page.keyboard.press('Enter')
-      await expect(preview).toBeFocused()
-      await preview.getByRole('button', { name: 'Close materials preview' }).click()
-      await expect(trigger).toBeFocused()
-      await expect(preview).toHaveCount(0)
-      const mobileContext = await browser.newContext({ baseURL: fixtureUrl, viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, storageState: await page.context().storageState() })
-      try {
-        const mobile = await mobileContext.newPage()
-        await mobile.goto('/dashboard/work-orders?q=Hover406&focus=unknown')
-        await mobile.getByRole('button', { name: /View material description:/ }).tap()
-        const mobilePreview = mobile.getByRole('dialog', { name: 'Materials · HOVER406', exact: true })
-        await expect(mobilePreview).toBeVisible()
-        const bounds = await mobilePreview.boundingBox()
-        expect(bounds!.x).toBeGreaterThanOrEqual(0)
-        expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390)
-        await mobile.screenshot({ path: path.join(root, 'materials-preview-mobile.png'), animations: 'disabled' })
-        await mobilePreview.getByRole('link', { name: 'Edit product', exact: true }).tap()
-        await expect(mobile.locator(`#product-${item}`)).toHaveAttribute('open', '')
-      } finally { await mobileContext.close() }
-    } finally { localSql(`DELETE FROM work_orders WHERE id='${job}'`) }
-  })
-  test('refresh assesses changed evidence, reuses unchanged results and preserves staff overrides on AI failure', async ({ page, request }) => {
-    const noteFile = path.join(root, 'assessment-note.txt'), failFile = path.join(root, 'assessment-fail')
-    const day = (offset: number) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(Date.now() + offset * 86400000))
-    const refresh = async () => {
-      await clearRefreshLimit()
-      await page.getByRole('button', { name: 'Refresh from ServiceM8' }).click()
-      await expect(page.getByText('ServiceM8 records refreshed.')).toBeVisible()
-      await expect(page.getByRole('button', { name: 'Refresh from ServiceM8' })).toBeEnabled()
-    }
-    const calls = async () => (await (await request.get('http://127.0.0.1:55442/__metrics')).json()).aiCalls
-    try {
-      localSql(`UPDATE work_order_items SET install_date=NULL, dashboard_state='{}', dashboard_assessment='{}', dashboard_revision=dashboard_revision+1 WHERE id IN ('${shower}', '${balustrade}')`)
-      writeFileSync(noteFile, `Install the shower on ${day(4)}.`)
-      await login(page, 'rg406-staff')
-      await page.goto('/dashboard/work-orders?focus=all')
-      const before = await calls()
-      await refresh()
-      await expect(page.getByText(/^Target:.*AI-suggested installation/)).toBeVisible()
-      expect(await calls()).toBe(before + 1)
-      await page.reload()
-      const item = page.locator(`#product-${shower}`)
-      await item.locator(':scope > summary').click()
-      await item.getByText('Detected planning evidence', { exact: true }).click()
-      await expect(item.locator('blockquote')).toContainText(`Install the shower on ${day(4)}.`)
-      await refresh(); expect(await calls()).toBe(before + 1)
-      writeFileSync(noteFile, `Install the shower on ${day(5)}.`)
-      await refresh(); expect(await calls()).toBe(before + 2)
-      await page.reload()
-      await item.locator(':scope > summary').click()
-      await item.getByLabel('Target install date').fill(day(40))
-      await item.getByLabel('Focus selection').selectOption('include')
-      await item.getByRole('button', { name: 'Save product' }).click()
-      await expect(item.getByRole('status')).toHaveText('Saved. Change history updated.')
-      await page.goto('/dashboard/work-orders?focus=upcoming')
-      await expect(page.locator(`#product-${shower}`)).toBeVisible()
-      await expect(page.getByText(/^Target:.*Staff target/)).toBeVisible()
-      writeFileSync(noteFile, `Install the shower on ${day(6)}.`); writeFileSync(failFile, 'synthetic failure')
-      await refresh()
-      await expect(page.getByText('Assessment failed; retry refresh')).toBeVisible()
-      await item.locator(':scope > summary').click()
-      await expect(item.getByLabel('Target install date')).toHaveValue(day(40))
-      await expect(item.getByLabel('Focus selection')).toHaveValue('include')
-      await item.getByLabel('Focus selection').selectOption('exclude')
-      await item.getByRole('button', { name: 'Save product' }).click()
-      await expect(item).toHaveCount(0)
-      const metrics = await (await request.get('http://127.0.0.1:55442/__metrics')).json()
-      expect(metrics.writes).toBe(0)
-    } finally {
-      for (const file of [noteFile, failFile]) if (existsSync(file)) unlinkSync(file)
-    }
+    const counters = await metrics(request); expect(counters.writes).toBe(0); expect(counters.aiCalls).toBe(0)
   })
 })

@@ -1,0 +1,99 @@
+name: kanban-security
+
+on:
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - 'apps/web/**'
+      - 'apps/catalog/package.json'
+      - 'packages/db/**'
+      - 'drizzle/migrations/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.github/workflows/kanban-security.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kanban-security-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  isolated-security:
+    name: isolated-security
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Evidence must describe the PR candidate, not GitHub's synthetic merge commit.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@v4
+      - name: Install frozen dependencies with repository-native build allowlist
+        run: pnpm install --frozen-lockfile
+      - name: Check the fail-closed evidence contract
+        run: node --test apps/web/tests/fixtures/kanban-security-evidence.checks.mjs
+      - name: Install Chromium and isolated database client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client openssl
+          node apps/web/node_modules/@playwright/test/cli.js install --with-deps chromium
+      - name: Start an ephemeral PostgreSQL18 service on exact loopback55442
+        shell: bash
+        run: |
+          # Host networking preserves inet_server_addr/port proof; mapped Docker ports would not.
+          docker run --detach --network host --name rg408-e2e-postgres --env POSTGRES_USER=rg408 --env POSTGRES_DB=postgres --env POSTGRES_HOST_AUTH_METHOD=trust postgres:18 postgres -h 127.0.0.1 -p 55442
+          for attempt in $(seq 1 30); do
+            if docker exec rg408-e2e-postgres pg_isready -h 127.0.0.1 -p 55442 -U rg408 -d postgres; then exit 0; fi
+            sleep 1
+          done
+          exit 1
+      - name: Audit the exact lockfile and inventory all production advisories
+        run: node apps/web/tests/fixtures/kanban-security-evidence.mjs audit
+      - name: Build and run the strict fictional security lane
+        env:
+          E2E_DATABASE_URL: postgresql://rg408@127.0.0.1:55442/rg408_production_e2e?sslmode=disable
+        shell: bash
+        run: |
+          mkdir -p tmp/rg408-production-e2e
+          node apps/web/tests/fixtures/kanban-pg-bridge.mjs > tmp/rg408-production-e2e/bridge.log 2>&1 &
+          bridge_pid=$!
+          trap 'kill "$bridge_pid" 2>/dev/null || true' EXIT
+          node apps/web/tests/fixtures/kanban-publication-acceptance.mjs build
+          node apps/web/tests/fixtures/kanban-publication-acceptance.mjs security
+      - name: Generate current-commit evidence from actual reports and audit
+        if: always()
+        run: node apps/web/tests/fixtures/kanban-security-evidence.mjs generate
+      - name: Validate current-commit evidence before upload
+        run: node apps/web/tests/fixtures/kanban-security-evidence.mjs validate
+      - name: Preserve full HTML, raw audit and failure traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kanban-security-${{ github.event.pull_request.head.sha || github.sha }}
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            tmp/rg408-production-e2e/e2e-results.json
+            tmp/rg408-production-e2e/input-manifest.json
+            tmp/rg408-production-e2e/build-provenance.json
+            tmp/rg408-production-e2e/run-start.json
+            tmp/rg408-production-e2e/run-completion.json
+            tmp/rg408-production-e2e/playwright.json
+            tmp/rg408-production-e2e/html/
+            tmp/rg408-production-e2e/test-results/
+            tmp/rg408-production-e2e/audit-prod.json
+            tmp/rg408-production-e2e/audit-prod.stderr.log
+            tmp/rg408-production-e2e/audit-meta.json
+            tmp/rg408-production-e2e/source-metrics.json
+            tmp/rg408-production-e2e/next.log
+            tmp/rg408-production-e2e/bridge.log
+      - name: Stop only the ephemeral fixture database
+        if: always()
+        run: docker rm --force rg408-e2e-postgres
