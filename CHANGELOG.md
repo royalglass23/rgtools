@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reconcile dev with the released Kanban publisher, defer the canceled app-side assessment changes, and allow later migrations in the Quote Movement registry check.
+
 - Connect the Work Orders dashboard directly to Kanban bot through authenticated complete publications, atomic snapshots and server-derived row/field history in existing settings/audit tables. Preserve strict read-only columns, search, independent pagination and material previews. Request update acknowledges dispatch; visible pages update when a publication arrives. No schema migration or new dependency is required; existing operational records remain separate.
 
 - Assess installation/delivery evidence on each Work Orders source refresh, cache unchanged results, and show per-product AI suggestions with source quotes. Preserve staff dates and manual inclusion priority; add migration 0073 for separate assessment metadata.

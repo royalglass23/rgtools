@@ -11,7 +11,7 @@ describe("Quote Movement migration registry", () => {
     ) as { entries: Array<{ idx: number; tag: string }> };
     const entries = journal.entries;
 
-    expect(entries.slice(-2)).toMatchObject([
+    expect(entries.filter(({ idx }) => idx === 70 || idx === 71)).toMatchObject([
       { idx: 70, tag: "0070_quote_movement_batch_outcomes" },
       { idx: 71, tag: "0071_quote_movement_source_checkpoint" },
     ]);
