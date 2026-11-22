@@ -13,6 +13,18 @@ beforeEach(() => { vi.resetAllMocks(); mocks.read.mockResolvedValue(snapshot());
 async function show(params: Record<string, string> = {}) { render(await WorkOrderPage({ searchParams: Promise.resolve(params) })) }
 
 describe('published Work Orders tables', () => {
+  it('renders separate material controls for the older combined abbreviation publication used by Preview', async () => {
+    const rows = data()
+    rows.products[0].cells[1] = 'Bal 12m; SB; HR'
+    mocks.read.mockResolvedValue(snapshot(rows))
+    await show()
+    const table = screen.getAllByRole('table')[1]
+    const cell = table.querySelector('tbody tr')!.children[1] as HTMLElement
+    expect(within(cell).getAllByRole('button').map(button => button.textContent)).toEqual(['Bal 12m', 'SB', 'HR'])
+    fireEvent.click(within(cell).getByRole('button', { name: 'View material description: SB' }))
+    expect(screen.getByRole('dialog')).toHaveTextContent('SB')
+    expect(screen.getByRole('dialog')).not.toHaveTextContent('Bal 12m; SB; HR')
+  })
   const billingRows = () => {
     const rows = data()
     const parent = '11111111-1111-4111-8111-111111111111'

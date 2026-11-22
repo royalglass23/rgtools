@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Handle older Kanban job-level snapshots containing combined abbreviated material lists. Show each original abbreviation as its own preview control while retaining full billing descriptions and source publication identities unchanged.
+
 - Group Work Orders Table B by source job UUID, keeping each billing item separate inside Materials with the established product abbreviations and its own hover, keyboard and tap preview. Search retains complete matching jobs; pagination counts jobs. Preserve the eleven columns, billing-line publication identities and history. Pending deployment.
 
 - Install and publish RG-409's Kanban billing-line split. Table B now uses one row per eligible billing line with stable jobmaterial identities, keeping its 11 columns, search, independent pagination and material previews. Preserve Table A's five columns and job-level planning values. Support long descriptions across PDF pages with the default renderer. The first Production snapshot was verified at 50 Work Order rows and 64 billing-item rows; identical retry deduplicated. Both existing refresh routines require the identity-preserving collector. No receiver runtime/schema change was needed.

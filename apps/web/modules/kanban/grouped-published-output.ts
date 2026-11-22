@@ -3,6 +3,20 @@ import { shortMaterialDescription } from './material-description'
 
 export type PublishedJobGroup = PublishedRow & { materials: { key: string; label: string; description: string }[] }
 const sourceUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const legacyAbbreviation = /^(?:Bal|Shwr|PF|HR|Mir|SB|Part|Lvr|Cnpy|Str|Win|Dr|Fnc|Gls|Scope|Item)(?:\s+\d+(?:\.\d+)?\s*m)?$/i
+
+function publishedMaterials(row: PublishedRow): PublishedJobGroup['materials'] {
+  const labels = row.cells[1].split(';').map(label => label.trim()).filter(Boolean)
+  // Older job-level snapshots contain only abbreviated lists, with no per-item
+  // description. Split only that exact format; never split prose in billing lines.
+  if (!row.key.includes(':') && labels.length > 1 && labels.every(label => legacyAbbreviation.test(label))) {
+    return labels.map((label, index) => ({
+      // React presentation keys only: source/publication identities never change.
+      key: `${row.key}:legacy-display-${index}`, label, description: label,
+    }))
+  }
+  return [{ key: row.key, label: abbreviatedMaterial(row.cells[1]), description: row.cells[1] }]
+}
 
 // Existing Kanban product vocabulary. Invoice quantity is never a physical length.
 export function abbreviatedMaterial(description: string) {
@@ -31,7 +45,7 @@ export function groupPublishedProducts(data: PublishedOutput): PublishedJobGroup
     const key = sourceUuid.test(parent) && sourceUuid.test(line ?? '') && !extra.length && jobs.has(parent.toLowerCase()) ? parent.toLowerCase() : row.key
     const group = groups.get(key) ?? { rows: [], materials: [] }
     group.rows.push(row)
-    group.materials.push({ key: row.key, label: abbreviatedMaterial(row.cells[1]), description: row.cells[1] })
+    group.materials.push(...publishedMaterials(row))
     groups.set(key, group)
   }
   return [...groups].map(([key, group]) => ({
