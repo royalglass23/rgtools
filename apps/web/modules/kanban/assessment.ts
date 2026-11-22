@@ -1,15 +1,11 @@
 import { classifyFocus, validDate, type ManualState } from './work-orders'
 import { supportedEvidenceDates } from './temporal-evidence'
-import type { KanbanFlag } from './kanban-flags'
-import { planningEvidenceNeedsReview, readOperationalAssessment, trustworthyAuthoredAt, type OperationalAssessment } from './operational-assessment'
 
-export const ASSESSMENT_RULES = 'kanban-operational-v3-20261118'
-export type SourceKind = 'description' | 'item' | 'note' | 'email' | 'custom_field'
-export type AssessmentCoverage = Record<string, { state: 'complete' | 'missing' | 'unsupported'; reason: string }>
-export type AssessmentInstaller = { token: string; name: string; id: string }
-export type AssessmentSource = { token: string; kind: SourceKind; item: string | null; observedAt: string | null; text: string; reference: string | null; installerTokens?: string[] }
-export type AssessmentContext = { items: Array<{ token: string; text: string }>; sources: AssessmentSource[]; coverage?: AssessmentCoverage; installers?: AssessmentInstaller[]; fetchedAt?: string; inventoryVersion?: string }
-export type ProviderContext = { items: AssessmentContext['items']; sources: Array<Omit<AssessmentSource, 'reference'>>; coverage?: AssessmentCoverage; installers?: Array<Pick<AssessmentInstaller, 'token'>> }
+export const ASSESSMENT_RULES = 'kanban-due-v1-20261116'
+export type SourceKind = 'description' | 'item' | 'note' | 'email'
+export type AssessmentSource = { token: string; kind: SourceKind; item: string | null; observedAt: string | null; text: string; reference: string | null }
+export type AssessmentContext = { items: Array<{ token: string; text: string }>; sources: AssessmentSource[] }
+export type ProviderContext = { items: AssessmentContext['items']; sources: Array<Omit<AssessmentSource, 'reference'>> }
 export type DueResult = {
   status: 'dated' | 'review' | 'unknown'; date: string | null; kind: 'installation' | 'delivery' | 'unknown'; reason: string;
   evidence: Array<{ kind: SourceKind; reference: string | null; observedAt: string | null; quote: string }>
@@ -17,17 +13,13 @@ export type DueResult = {
 export type StoredAssessment = {
   state: 'complete' | 'failed'; sourceHash: string; snapshotHash: string; rules: string; model: string;
   checkedAt: string; assessedAt: string | null; result: DueResult | null; error: string | null;
-  operational?: OperationalAssessment; coverage?: AssessmentCoverage; sourceGeneration?: string | null;
-  installerVersion?: string; sourcePolicy?: string;
 }
 export type AssessmentJob = { id: string; sourceId: string; customer: string; address: string | null; description: string | null;
-  claim?: import('./assessment-runs').AssessmentClaim; assessmentReused?: boolean;
-  sourceGeneration?: string | null; installers?: AssessmentInstaller[];
   items: Array<{ id: string; label: string; description: string; stored: StoredAssessment | null }> }
 export type AssessmentStore = {
   list(): Promise<AssessmentJob[]>;
   save(job: AssessmentJob, values: Record<string, StoredAssessment>, actorId: string): Promise<boolean>;
-  fail(job: AssessmentJob, checkedAt: string, actorId: string, message?: string): Promise<void>;
+  fail(job: AssessmentJob, checkedAt: string, actorId: string): Promise<void>;
 }
 const normalized = (text: string) => text.replace(/\s+/g, ' ').trim().toLowerCase()
 const object = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === 'object' && !Array.isArray(value))
@@ -46,7 +38,7 @@ export function validateAssessmentOutput(raw: unknown, context: AssessmentContex
       const source = context.sources.find(source => source.token === ref.source)
       if (!source || !normalized(source.text).includes(normalized(ref.quote))) throw new Error('Assessment quote is absent from source.')
       if (source.item && source.item !== value.item) throw new Error('Evidence belongs to another product.')
-      return { kind: source.kind, reference: source.reference, observedAt: trustworthyAuthoredAt(source), quote: ref.quote.trim() }
+      return { kind: source.kind, reference: source.reference, observedAt: source.observedAt, quote: ref.quote.trim() }
     })
     if (value.status === 'dated' && (!value.date || value.kind === 'unknown' || !evidence.length)) throw new Error('A dated assessment requires supporting evidence.')
     let status = value.status as DueResult['status']
@@ -64,7 +56,6 @@ export function validateAssessmentOutput(raw: unknown, context: AssessmentContex
       if (!evidence.some(source => supportedEvidenceDates(source.quote, source.observedAt).includes(value.date as string))) {
         status = 'review'; reason = 'The proposed date cannot be resolved from supported source wording and its timestamp. ' + reason
       }
-      if (planningEvidenceNeedsReview(value, context)) { status = 'review'; reason = 'Current product-specific installation/delivery evidence needs review. ' + reason }
     }
     byItem.set(value.item, { status, date: value.date as string | null, kind: value.kind as DueResult['kind'], reason: reason.slice(0, 600), evidence })
   }
@@ -75,21 +66,19 @@ export function readStoredAssessment(raw: unknown): StoredAssessment | null {
   if (!object(raw) || !['complete', 'failed'].includes(String(raw.state)) || typeof raw.sourceHash !== 'string' || typeof raw.snapshotHash !== 'string' || typeof raw.rules !== 'string' || typeof raw.model !== 'string' || typeof raw.checkedAt !== 'string') return null
   const result = raw.result
   if (raw.state === 'complete' && !object(result)) return null
-  if (result !== null && (!object(result) || !['dated', 'review', 'unknown'].includes(String(result.status)) || (result.date !== null && !validDate(result.date)) || !['installation', 'delivery', 'unknown'].includes(String(result.kind)) || typeof result.reason !== 'string' || !Array.isArray(result.evidence) || result.evidence.some(ref => !object(ref) || !['description', 'item', 'note', 'email', 'custom_field'].includes(String(ref.kind)) || typeof ref.quote !== 'string') || (result.status === 'dated' && (!result.date || result.kind === 'unknown' || !result.evidence.length)))) return null
-  if (raw.operational !== undefined && !readOperationalAssessment(raw.operational)) return null
+  if (result !== null && (!object(result) || !['dated', 'review', 'unknown'].includes(String(result.status)) || (result.date !== null && !validDate(result.date)) || !['installation', 'delivery', 'unknown'].includes(String(result.kind)) || typeof result.reason !== 'string' || !Array.isArray(result.evidence) || result.evidence.some(ref => !object(ref) || !['description', 'item', 'note', 'email'].includes(String(ref.kind)) || typeof ref.quote !== 'string') || (result.status === 'dated' && (!result.date || result.kind === 'unknown' || !result.evidence.length)))) return null
   return raw as StoredAssessment
 }
 
-export function resolveProductPlanning(date: string | null, manual: ManualState, assessment: StoredAssessment | null, sourceCurrent: boolean, today: string, inheritedFlag: KanbanFlag | null = null, dateMode: 'auto' | 'staff' = 'auto') {
+export function resolveProductPlanning(date: string | null, manual: ManualState, assessment: StoredAssessment | null, sourceCurrent: boolean, today: string) {
   const usable = sourceCurrent && assessment?.state === 'complete' && assessment.rules === ASSESSMENT_RULES
   const detectedDate = usable && assessment.result?.status === 'dated' ? assessment.result.date : null
-  const planningDate = dateMode === 'staff' ? date : date ?? detectedDate
-  const choice = manual.focus !== 'auto' ? manual.focus : inheritedFlag === 'Y' ? 'include' : inheritedFlag === 'N' ? 'exclude' : inheritedFlag === '?' ? 'unknown' : 'auto'
-  const focus = dateMode === 'auto' && !date && choice === 'auto' && usable && assessment.result?.status === 'review'
-    ? 'conflict' as const : classifyFocus(planningDate, choice, today)
+  const planningDate = date ?? detectedDate
+  const focus = !date && manual.focus === 'auto' && usable && assessment.result?.status === 'review'
+    ? 'conflict' as const : classifyFocus(planningDate, manual.focus, today)
   // Bot rule: the team's explicit Y/N/? wins; an explicit Y can retain overdue work.
-  const inDueWindow = choice === 'include' || (choice === 'auto' && focus === 'upcoming')
-  return { planningDate, detectedDate, focus, inDueWindow, dateSource: date || dateMode === 'staff' ? 'staff' as const : detectedDate ? 'detected' as const : 'unknown' as const }
+  const inDueWindow = manual.focus === 'include' || (manual.focus === 'auto' && focus === 'upcoming')
+  return { planningDate, detectedDate, focus, inDueWindow, dateSource: date ? 'staff' as const : detectedDate ? 'detected' as const : 'unknown' as const }
 }
 
 export function assessmentIsCurrent(assessment: StoredAssessment | null, snapshotHash: string, syncedAt: Date | null) {

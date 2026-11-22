@@ -20,7 +20,6 @@ export type WorkOrderItemSummaryRow = {
   labelStatus?: 'pending' | 'generated' | 'manual' | 'failed' | 'source_changed'
   sourceDescriptionFingerprint?: string | null
   isActive: boolean
-  dashboardRevision?: number
   installerId: string | null
   installerName: string | null
   stageOptionId: string | null
@@ -93,7 +92,6 @@ export function attachActiveItemsToWorkOrders<T extends { id: string }>(
       labelStatus: item.labelStatus,
       sourceDescriptionFingerprint: item.sourceDescriptionFingerprint,
       isActive: item.isActive,
-      dashboardRevision: item.dashboardRevision,
       installerId: item.installerId,
       installerName: item.installerName,
       stageOptionId: item.stageOptionId,

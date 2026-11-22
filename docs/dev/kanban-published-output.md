@@ -1,6 +1,6 @@
 # Direct Kanban Work Orders publisher
 
-RG-408 replaces the rgtools Google HTML/Sheet reader with **Kanban → authenticated rgtools POST → atomic snapshot/history → dashboard**. The bot may continue using Google internally. rgtools needs no Kanban Google scopes, OIDC/WIF settings, receipt range or service-account key. Existing Google Maps settings serve their separate feature. No bot/routine/cloud configuration or live connection is established by installing this code.
+RG-408 introduces **Kanban → authenticated rgtools POST → atomic snapshot/history → dashboard**, replacing this dashboard's app-managed planning and assessment display with read-only bot publications. The bot may continue using Google internally. rgtools needs no Kanban Google scopes, OIDC/WIF settings, receipt range or service-account key. Existing Google Maps settings serve their separate feature. No bot/routine/cloud configuration or live connection is established by installing this code.
 
 ## Server configuration and deployment
 
@@ -20,8 +20,8 @@ Local `pnpm dev` loads root `.env.local` through the shared database loader, and
   "board": "work-orders",
   "publicationId": "12345678-1234-4123-8123-123456789abc",
   "requestId": "22345678-1234-4123-8123-123456789abc",
-  "sourceAsOf": "2026-11-20T00:00:00.000Z",
-  "generatedAt": "2026-11-20T00:01:00.000Z",
+  "sourceAsOf": "2026-11-19T20:00:00.000Z",
+  "generatedAt": "2026-11-19T20:01:00.000Z",
   "complete": true,
   "tables": {
     "jobs": [{"id":"job-source-uuid","cells":["R260001","Fictional Customer","Example Road","TBC","N"]}],
@@ -63,6 +63,8 @@ node ../../node_modules/vitest/vitest.mjs run modules/kanban/__tests__/publicati
 node node_modules/typescript/bin/tsc --noEmit
 ```
 
-Guarded integration test: `tests/integration/kanban-direct-publication.test.ts` runs only with the exact fictional loopback `RG408_TEST_DATABASE_URL` and fresh schema. See the local execution brief for fixture preparation; do not point it at shared development/production or run the package build, which migrates. Real PostgreSQL tests cover atomic rollback, concurrent duplicates/conflicts/staleness and archived dedupe. Mocked/fictional checks do not prove the bot can reach the deployed endpoint.
+Guarded integration test: `tests/integration/kanban-direct-publication.test.ts` runs only with the exact fictional loopback `RG408_TEST_DATABASE_URL` and a separately provisioned owned marker. Set `RG408_TEST_DATABASE_SENTINEL` to that marker’s64hex value. Before fixture schema/reset/constraint writes, the same transaction checks the actual database, server address/port, role and marker; a missing or mismatched marker fails before mutation. Resets only remove this integration’s setting and publication audit rows. See the local execution brief for fixture preparation; do not point it at shared development/production or run the package build, which migrates. Real PostgreSQL tests cover atomic rollback, concurrent duplicates/conflicts/staleness and archived dedupe. Mocked/fictional checks do not prove the bot can reach the deployed endpoint.
+
+The tracked Windows acceptance fixture is `apps/web/tests/fixtures/kanban-publication-acceptance.mjs`. It requires a disposable PostgreSQL server at `127.0.0.1:55442` with role `rg408` and its local WebSocket bridge at `127.0.0.1:55443`; it only creates/uses `rg408_production_e2e`, verifies its sentinel before resets, and applies main migrations0–73. From the repository root run `node apps/web/tests/fixtures/kanban-publication-acceptance.mjs run`. For production-build acceptance, build safely first, then set `RG408_E2E_PRODUCTION=1` for the same command. The fixture uses fictional accounts/data, owns loopback ports3058/3059, and stops its app/adapter on completion. Production mode creates a fixture-only TLS certificate under ignored `tmp`, trusts it only in the child process, and requires Git for Windows OpenSSL. It never changes the machine trust store. Do not aim this fixture at a shared database. Its seven Chromium journeys cover publication auth/dedupe, strict read-only tables, search/pagination, accessible material previews, automatic/history updates, and existing Roxy/Admin access.
 
 After separately approved deployment/secret/bot configuration, prove one fictional authenticated bot→receiver request, matching JSON acknowledgement, duplicate retry/one history event, then approve the intended routine wiring and real output. Production promotion remains separate. Keep original schedules and unrelated routine actions unchanged until specifically approved.

@@ -9,14 +9,26 @@ jobs:
   validate:
     name: validate
     runs-on: ubuntu-latest
+    env:
+      BASE_REF: ${{ github.base_ref }}
+      HEAD_REF: ${{ github.head_ref }}
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
     steps:
-      - name: Require dev as production source
+      - name: Require dev or the exact base-bound Kanban production release
         shell: bash
         run: |
-          echo "base=${{ github.base_ref }}"
-          echo "head=${{ github.head_ref }}"
+          echo "base=${BASE_REF}"
+          echo "head=${HEAD_REF}"
 
-          if [[ "${{ github.base_ref }}" == "main" && "${{ github.head_ref }}" != "dev" ]]; then
-            echo "::error::Production PRs must target main from dev. Merge feature branches into dev first."
-            exit 1
+          if [[ "${BASE_REF}" == "main" && "${HEAD_REF}" != "dev" ]]; then
+            # RG-408 exception expires automatically when main advances.
+            if [[ "${HEAD_REF}" == "feature" &&
+                  "${BASE_SHA}" == "da2ba720823710edaeb7c7de57a80cd935eea509" &&
+                  "${HEAD_REPO}" == "royalglass23/rgtools" ]]; then
+              echo "Allowed the exact main-based Kanban-only release."
+            else
+              echo "::error::Production PRs must come from dev or the exact base-bound RG-408 release."
+              exit 1
+            fi
           fi

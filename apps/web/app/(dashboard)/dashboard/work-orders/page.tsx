@@ -102,7 +102,7 @@ export default async function WorkOrderDashboard({ searchParams }: { searchParam
       <nav aria-label="Publication history pages">{historyPage > 1 && <Link href={href({ historyPage: String(historyPage - 1) })}>Newer publications</Link>}{' '}{history.hasNext && historyPage < 1000 && <Link href={href({ historyPage: String(historyPage + 1) })}>Older publications</Link>}</nav>
       {selected && <section aria-label="Publication changes">
         <h3>Publication {selected.publicationId}</h3>
-        {details.length === 0 ? <p>{selected.outcome === 'no_change' ? 'No row or field changes.' : 'This publication did not replace the stored snapshot.'}</p> : <>
+        {details.length === 0 ? <p>{selected.outcome === 'published' || selected.outcome === 'no_change' ? 'No row or field changes.' : 'This publication did not replace the stored snapshot.'}</p> : <>
           <ul>{details.slice((changePage - 1) * 50, changePage * 50).map(detail => <li key={detail.key}><strong>{detail.label}</strong><dl><dt>Before</dt><dd style={{ whiteSpace: 'pre-wrap' }}>{detail.before || '(blank)'}</dd><dt>After</dt><dd style={{ whiteSpace: 'pre-wrap' }}>{detail.after || '(blank)'}</dd></dl></li>)}</ul>
           <nav aria-label="Publication change pages">{changePage > 1 && <Link href={href({ changePage: String(changePage - 1) })}>Previous changes</Link>}{' '}{changePage * 50 < details.length && <Link href={href({ changePage: String(changePage + 1) })}>More changes</Link>}</nav>
         </>}

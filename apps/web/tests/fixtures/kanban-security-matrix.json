@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "feature": "kanban-work-orders",
+  "expectedTests": 18,
+  "rows": [
+    {"id":"M01","requirement":"Publisher authentication and narrow callback scope","tests":["receiver requires publisher authentication", "staff session cannot publish"]},
+    {"id":"M02","requirement":"Anonymous, forged, expired and revoked sessions denied","tests":["anonymous session cannot read", "forged session cannot read", "expired session cannot read", "deleted account is denied"]},
+    {"id":"M03","requirement":"Malformed schema/encoding cannot mutate the board","tests":["malformed schema encoding"]},
+    {"id":"M04","requirement":"Declared and chunked body limit enforced","tests":["declared and chunked oversized"]},
+    {"id":"M05","requirement":"Concurrent retry creates exactly one audit event","tests":["concurrent identical deliveries", "receiver requires publisher authentication"]},
+    {"id":"M06","requirement":"Visible update, exact change history and no_change","tests":["visible page loads a later publication"]},
+    {"id":"M07","requirement":"Exact readonly output and search before pagination","tests":["read-only dashboard preserves exact columns"]},
+    {"id":"M08","requirement":"Independent table pagination","tests":["table pages and sizes remain independent"]},
+    {"id":"M09","requirement":"Literal material text with keyboard/touch/accessibility","tests":["materials retain full literal source", "hostile source text stays literal"]},
+    {"id":"M10","requirement":"Privileged Roxy/Admin routes preserve access policy","tests":["staff cannot open Roxy Dashboard directly", "Admin access and old quote overview URLs"]},
+    {"id":"M11","requirement":"Cross-origin server-action replay denied","tests":["foreign-origin server-action replay", "read-only dashboard preserves exact columns"]},
+    {"id":"M12","requirement":"Secrets absent from browser/API/log channels","tests":["secrets stay absent from browser response"]},
+    {"id":"M13","requirement":"Dashboard makes no source writes or AI calls","tests":["read-only dashboard preserves exact columns", "Admin access and old quote overview URLs"]},
+    {"id":"M14","requirement":"Exact loopback DB/sentinel preflight precedes every setup/reset; sanitized child env","tests":["receiver requires publisher authentication", "malformed schema encoding"],"fixturePreflight":true}
+  ]
+}

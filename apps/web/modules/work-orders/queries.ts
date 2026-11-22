@@ -139,7 +139,6 @@ const workOrderItemSummarySelection = {
   labelStatus: workOrderItems.labelStatus,
   sourceDescriptionFingerprint: workOrderItems.sourceDescriptionFingerprint,
   isActive: workOrderItems.isActive,
-  dashboardRevision: workOrderItems.dashboardRevision,
   installerId: workOrderItems.installerId,
   installerName: workOrderInstallers.displayName,
   stageOptionId: workOrderItems.stageOptionId,
