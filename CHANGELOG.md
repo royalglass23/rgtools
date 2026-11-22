@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Group Work Orders Table B by source job UUID, keeping each billing item separate inside Materials with the established product abbreviations and its own hover, keyboard and tap preview. Search retains complete matching jobs; pagination counts jobs. Preserve the eleven columns, billing-line publication identities and history. Pending deployment.
+
+- Install and publish RG-409's Kanban billing-line split. Table B now uses one row per eligible billing line with stable jobmaterial identities, keeping its 11 columns, search, independent pagination and material previews. Preserve Table A's five columns and job-level planning values. Support long descriptions across PDF pages with the default renderer. The first Production snapshot was verified at 50 Work Order rows and 64 billing-item rows; identical retry deduplicated. Both existing refresh routines require the identity-preserving collector. No receiver runtime/schema change was needed.
+
 - Reconcile dev with the released Kanban publisher, defer the canceled app-side assessment changes, and allow later migrations in the Quote Movement registry check.
 
 - Connect the Work Orders dashboard directly to Kanban bot through authenticated complete publications, atomic snapshots and server-derived row/field history in existing settings/audit tables. Preserve strict read-only columns, search, independent pagination and material previews. Request update acknowledges dispatch; visible pages update when a publication arrives. No schema migration or new dependency is required; existing operational records remain separate.

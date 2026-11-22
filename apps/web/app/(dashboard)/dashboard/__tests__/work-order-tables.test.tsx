@@ -13,6 +13,59 @@ beforeEach(() => { vi.resetAllMocks(); mocks.read.mockResolvedValue(snapshot());
 async function show(params: Record<string, string> = {}) { render(await WorkOrderPage({ searchParams: Promise.resolve(params) })) }
 
 describe('published Work Orders tables', () => {
+  const billingRows = () => {
+    const rows = data()
+    const parent = '11111111-1111-4111-8111-111111111111'
+    rows.jobs[0].key = parent
+    rows.products = Array.from({ length: 12 }, (_, index) => ({
+      key: `${parent}:22222222-2222-4222-8222-${String(index).padStart(12, '0')}`,
+      cells: ['TEST409 / Fictional parent\nExample Road', index === 1 || index === 11 ? 'Same balustrade' : `Material ${index}`, 'Sample', 'N', '?', 'Y', 'Y', 'PS1 pending', 'N', '?', 'N'],
+    }))
+    return rows
+  }
+  it('keeps a job and all separate material previews together on one row and one page', async () => {
+    mocks.read.mockResolvedValue(snapshot(billingRows()))
+    await show({ jobsPage: '2', itemsPage: '2' })
+    const table = screen.getAllByRole('table')[1]
+    const rows = Array.from(table.querySelectorAll('tbody tr'))
+    expect(rows).toHaveLength(1)
+    expect(rows.every(row => row.children.length === 11 && row.children[0].textContent?.startsWith('TEST409 / Fictional parent'))).toBe(true)
+    expect(within(table).getByText('Material 5')).toBeVisible()
+    expect(within(table).getByText('Material 10')).toBeVisible()
+    expect(within(table).getAllByRole('button', { name: /View material description/ })).toHaveLength(12)
+    fireEvent.click(within(table).getByRole('button', { name: 'View material description: Material 10' }))
+    expect(screen.getByRole('dialog')).toHaveTextContent('Material 10')
+    expect(screen.getAllByRole('link', { name: 'Next' })).toHaveLength(1)
+    expect(screen.getByText('1 work order')).toBeVisible()
+  })
+  it('finds duplicate descriptions across all source lines and retains every material in the job', async () => {
+    mocks.read.mockResolvedValue(snapshot(billingRows()))
+    await show({ q: 'same BALUSTRADE', itemsPage: '3' })
+    const table = screen.getAllByRole('table')[1]
+    expect(table.querySelectorAll('tbody tr')).toHaveLength(1)
+    expect(within(table).getAllByRole('button', { name: 'View material description: Bal' })).toHaveLength(2)
+    expect(within(table).getByText('Material 0')).toBeVisible()
+    expect(within(table).getAllByRole('button', { name: /View material description/ })).toHaveLength(12)
+    expect(screen.getAllByText('Page 1 of 1')).toHaveLength(2)
+  })
+  it('paginates complete job groups and preserves the other table page and size', async () => {
+    const rows = data()
+    rows.products = rows.jobs.flatMap((job, index) => {
+      const parent = `11111111-1111-4111-8111-${String(index).padStart(12, '0')}`
+      job.key = parent
+      return [0, 1].map(line => ({ key: `${parent}:22222222-2222-4222-8222-${String(line).padStart(12, '0')}`, cells: [`${job.cells[0]} / ${job.cells[1]}\n${job.cells[2]}`, line ? 'Splashback' : 'Handrail', 'Waiting', '?', '?', '?', '?', '?', '?', '?', '?'] }))
+    })
+    mocks.read.mockResolvedValue(snapshot(rows))
+    await show({ jobsPage: '2', itemsPage: '2', jobsSize: '5', itemsSize: '5' })
+    const table = screen.getAllByRole('table')[1]
+    expect(table.querySelectorAll('tbody tr')).toHaveLength(5)
+    expect(within(table).getAllByRole('button', { name: /View material description/ })).toHaveLength(10)
+    expect(table.querySelector('tbody tr')?.textContent).toContain('R265')
+    const next = screen.getAllByRole('link', { name: 'Next' })[1]
+    expect(next).toHaveAttribute('href', expect.stringContaining('itemsPage=3'))
+    expect(next).toHaveAttribute('href', expect.stringContaining('jobsPage=2'))
+    expect(next).toHaveAttribute('href', expect.stringContaining('jobsSize=5'))
+  })
   it('requires sign-in before reading snapshots or publication history', async () => {
     mocks.auth.mockRejectedValue(new Error('sign in'))
     await expect(show()).rejects.toThrow('sign in'); expect(mocks.read).not.toHaveBeenCalled(); expect(mocks.history).not.toHaveBeenCalled(); expect(mocks.changes).not.toHaveBeenCalled()
