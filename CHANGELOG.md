@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Explain abbreviated materials on hover using the established product names while retaining their compact table labels. Support older unit-count lists, mark unspecified items clearly, and search the expanded names without altering billing descriptions or publication data.
+
 - Handle older Kanban job-level snapshots containing combined abbreviated material lists. Show each original abbreviation as its own preview control while retaining full billing descriptions and source publication identities unchanged.
 
 - Group Work Orders Table B by source job UUID, keeping each billing item separate inside Materials with the established product abbreviations and its own hover, keyboard and tap preview. Search retains complete matching jobs; pagination counts jobs. Preserve the eleven columns, billing-line publication identities and history. Pending deployment.

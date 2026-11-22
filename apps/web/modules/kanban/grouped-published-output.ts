@@ -3,7 +3,18 @@ import { shortMaterialDescription } from './material-description'
 
 export type PublishedJobGroup = PublishedRow & { materials: { key: string; label: string; description: string }[] }
 const sourceUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const legacyAbbreviation = /^(?:Bal|Shwr|PF|HR|Mir|SB|Part|Lvr|Cnpy|Str|Win|Dr|Fnc|Gls|Scope|Item)(?:\s+\d+(?:\.\d+)?\s*m)?$/i
+const legacyAbbreviation = /^(?:Bal|Shwr|PF|HR|Mir|SB|Part|Lvr|Cnpy|Str|Win|Dr|Fnc|Gls|Scope|Item)(?:\s+\d+(?:\.\d+)?\s*(?:m|u|units?))?$/i
+const legacyNames: Record<string, string> = {
+  bal: 'Balustrade', shwr: 'Shower', pf: 'Pool fence', hr: 'Handrail', mir: 'Mirror',
+  sb: 'Splashback', part: 'Partition', lvr: 'Louvre', cnpy: 'Canopy', str: 'Stairs',
+  win: 'Window', dr: 'Door', fnc: 'Fence / gate', gls: 'Glass', scope: 'Scope', item: 'Item',
+}
+
+function expandLegacyDescription(label: string) {
+  if (label.toLowerCase() === 'item') return 'Item — description not supplied'
+  return label.replace(/^(Bal|Shwr|PF|HR|Mir|SB|Part|Lvr|Cnpy|Str|Win|Dr|Fnc|Gls|Scope|Item)\b/i,
+    code => legacyNames[code.toLowerCase()]).replace(/\s+(\d+(?:\.\d+)?)\s*u\b/gi, ' — $1 units')
+}
 
 function publishedMaterials(row: PublishedRow): PublishedJobGroup['materials'] {
   const labels = row.cells[1].split(';').map(label => label.trim()).filter(Boolean)
@@ -12,10 +23,10 @@ function publishedMaterials(row: PublishedRow): PublishedJobGroup['materials'] {
   if (!row.key.includes(':') && labels.length > 1 && labels.every(label => legacyAbbreviation.test(label))) {
     return labels.map((label, index) => ({
       // React presentation keys only: source/publication identities never change.
-      key: `${row.key}:legacy-display-${index}`, label, description: label,
+      key: `${row.key}:legacy-display-${index}`, label, description: expandLegacyDescription(label),
     }))
   }
-  return [{ key: row.key, label: abbreviatedMaterial(row.cells[1]), description: row.cells[1] }]
+  return [{ key: row.key, label: abbreviatedMaterial(row.cells[1]), description: row.key.includes(':') ? row.cells[1] : expandLegacyDescription(row.cells[1]) }]
 }
 
 // Existing Kanban product vocabulary. Invoice quantity is never a physical length.
@@ -59,5 +70,5 @@ export function groupPublishedProducts(data: PublishedOutput): PublishedJobGroup
 
 export function filterPublishedGroups(groups: PublishedJobGroup[], query: string) {
   const q = query.trim().toLocaleLowerCase('en-NZ')
-  return groups.filter(group => !q || group.cells.some(cell => cell.toLocaleLowerCase('en-NZ').includes(q)) || group.materials.some(item => item.label.toLocaleLowerCase('en-NZ').includes(q)))
+  return groups.filter(group => !q || group.cells.some(cell => cell.toLocaleLowerCase('en-NZ').includes(q)) || group.materials.some(item => [item.label, item.description].some(text => text.toLocaleLowerCase('en-NZ').includes(q))))
 }

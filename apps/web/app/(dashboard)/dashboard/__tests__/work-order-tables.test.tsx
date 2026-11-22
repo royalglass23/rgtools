@@ -22,7 +22,7 @@ describe('published Work Orders tables', () => {
     const cell = table.querySelector('tbody tr')!.children[1] as HTMLElement
     expect(within(cell).getAllByRole('button').map(button => button.textContent)).toEqual(['Bal 12m', 'SB', 'HR'])
     fireEvent.click(within(cell).getByRole('button', { name: 'View material description: SB' }))
-    expect(screen.getByRole('dialog')).toHaveTextContent('SB')
+    expect(screen.getByRole('dialog')).toHaveTextContent('Splashback')
     expect(screen.getByRole('dialog')).not.toHaveTextContent('Bal 12m; SB; HR')
   })
   const billingRows = () => {

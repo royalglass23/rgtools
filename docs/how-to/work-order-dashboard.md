@@ -4,7 +4,7 @@ After signing in, open **Dashboard → Work Orders**. The page shows the last co
 
 Table B groups eligible billing lines into one row per work order. Each material stays separate inside the Materials cell, using the existing Kanban abbreviations (such as Bal, Shwr, HR, Mir and SB) with its own full-description preview. Duplicate billing items remain separate entries. The eleven columns remain unchanged; other cells retain the published work-order values. This display update is pending deployment.
 
-Older snapshots containing lists such as `Bal 12m; SB; HR` also show each abbreviation separately, preserving its original spelling. Those older snapshots contain only the abbreviated text, so their previews show that supplied text; newer billing-item snapshots retain each complete description.
+Older snapshots containing lists such as `Bal 12m; SB; HR` also show each abbreviation separately, preserving its original spelling and quantities such as `Shwr 9u`. Hover expands known names (Balustrade, Splashback, Handrail, Shower — 9 units); a generic `item` shows “Item — description not supplied”. Detailed billing-item descriptions are shown in full when supplied. Search also matches the expanded item names.
 
 - **Table A:** WO, Customer, Short address, Approx install date, Within 3 weeks?.
 - **Table B:** WO / client / address, Materials (per product), Client waiting for, Site ready, Glass ready, Hardware ready, Design Y/N/?, PS1 / PS3, Bottle strut, BC?, Minor var?.
