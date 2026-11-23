@@ -98,7 +98,10 @@ test.describe('RG-408 isolated direct Kanban publication acceptance', () => {
     const sourceCells = await products(page).locator('tbody tr').first().locator('td').allTextContents()
     expect(sourceCells).toHaveLength(11)
     expect([sourceCells[0], ...sourceCells.slice(2)]).toEqual([publication().tables.products[0].cells[0], ...publication().tables.products[0].cells.slice(2)])
-    expect(sourceCells[1]).toMatch(/^Fictional shower – 10 mm/); expect(sourceCells[1].length).toBeLessThanOrEqual(80)
+    expect(sourceCells[1]).toBe('Shwr')
+    await products(page).getByRole('button', { name: 'View material description: Shwr', exact: true }).click()
+    expect(await page.getByRole('dialog').locator('p').textContent()).toBe(material)
+    await page.getByRole('button', { name: 'Close materials preview', exact: true }).click()
     await expect(page.getByRole('button', { name: /Save product|Refresh from ServiceM8/ })).toHaveCount(0)
     await expect(page.getByRole('link', { name: 'Edit product', exact: true })).toHaveCount(0)
     await page.getByRole('searchbox', { name: 'Find a job or product' }).fill('WO40812')
@@ -107,8 +110,9 @@ test.describe('RG-408 isolated direct Kanban publication acceptance', () => {
     await expect(products(page).locator('tbody tr')).toHaveCount(1)
     await expect(jobs(page).getByRole('cell', { name: 'WO40812', exact: true })).toBeVisible()
     await page.getByRole('link', { name: 'Clear search', exact: true }).click()
-    await expect(page.getByText('12 work orders', { exact: true })).toBeVisible()
-    await expect(page.getByText('12 products', { exact: true })).toBeVisible()
+    for (const name of ['Table A - Every work order', 'Table B - Due within 3 weeks']) {
+      await expect(page.getByRole('region', { name, exact: true }).getByText('12 work orders', { exact: true })).toBeVisible()
+    }
     // Wait for the search/clear navigation and its client assets to settle before activation.
     await expect(page).toHaveURL(`${fixtureUrl}/dashboard/work-orders`)
     await page.waitForLoadState('networkidle')
