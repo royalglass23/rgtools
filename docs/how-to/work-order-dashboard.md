@@ -1,11 +1,15 @@
 # Work Orders dashboard
 
-After signing in, open **Dashboard → Work Orders**. The page shows the last complete snapshot received directly from Kanban bot. Published blanks, question marks, row membership and combined materials are preserved. There are no editing controls or separate AI assessments.
+After signing in, open **Dashboard → Work Orders**. The page shows the last complete snapshot received directly from Kanban bot. Published blanks, question marks, row membership and material descriptions are preserved. There are no editing controls or separate AI assessments.
+
+Table B groups eligible billing lines into one row per work order. Each material stays separate inside the Materials cell, using the existing Kanban abbreviations (such as Bal, Shwr, HR, Mir and SB) with its own full-description preview. Duplicate billing items remain separate entries. The eleven columns remain unchanged; other cells retain the published work-order values. This display update is pending deployment.
+
+Older snapshots containing lists such as `Bal 12m; SB; HR` also show each abbreviation separately, preserving its original spelling and quantities such as `Shwr 9u`. Hover expands known names (Balustrade, Splashback, Handrail, Shower — 9 units); a generic `item` shows “Item — description not supplied”. Detailed billing-item descriptions are shown in full when supplied. Search also matches the expanded item names.
 
 - **Table A:** WO, Customer, Short address, Approx install date, Within 3 weeks?.
 - **Table B:** WO / client / address, Materials (per product), Client waiting for, Site ready, Glass ready, Hardware ready, Design Y/N/?, PS1 / PS3, Bottle strut, BC?, Minor var?.
 
-Search all supplied cells by job, customer, site, material or other text. Each table has its own Previous/Next pages and 5/10/20/50 page-size selector. Hover over, focus or tap Materials for the full description; Close or Escape dismisses it. Job numbers stay plain text when no verified job link is supplied.
+Search all supplied cells by job, customer, site, material or other text, including the displayed abbreviations. A material match keeps the whole job and all its materials visible. Each table has its own Previous/Next pages and 5/10/20/50 page-size selector; Table B paginates complete jobs. Hover over, focus or tap an individual material for its full description; Close or Escape dismisses it. Job numbers stay plain text when no verified job link is supplied.
 
 Select **Request update** to dispatch the configured Kanban webhook. The button is disabled during dispatch and then reports **Update requested** when accepted. This acknowledgement does not mean the bot has finished. Existing rows, search and pagination stay usable. Uncertain acceptance is never automatically retried; check the bot before requesting again.
 

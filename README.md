@@ -21,6 +21,11 @@ This repository is a pnpm workspace:
 See [the architecture overview](docs/dev/architecture.md) for ownership boundaries and request
 flow.
 
+The approved [Work Orders dashboard](docs/how-to/work-order-dashboard.md) update
+(pending deployment) groups published billing items by work order. Materials stay
+separate with the existing abbreviations, individual description previews,
+eleven columns, search and independent pagination.
+
 ## Product areas
 
 | Area | What it does |

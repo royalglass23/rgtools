@@ -4,6 +4,7 @@ import { requireDashboardUser } from '@/lib/dashboard-access'
 import { PageHeader, DataPanel, TableShell, FeedbackState } from '@/components/precision-ui/PrecisionUI'
 import { PaginationBar } from '@/components/pagination/PaginationBar'
 import { filterPublishedOutput, type PublishedOutput } from '@/modules/kanban/published-output'
+import { filterPublishedGroups, groupPublishedProducts, type PublishedJobGroup } from '@/modules/kanban/grouped-published-output'
 import { readLatestPublication, readPublicationChanges, readPublicationHistory } from '@/modules/kanban/publication-store'
 import { UUID, type PublicationEvent, type StoredPublication } from '@/modules/kanban/publication'
 import { PublishedRefreshControl } from '@/modules/kanban/PublishedRefreshControl'
@@ -22,9 +23,14 @@ export default async function WorkOrderDashboard({ searchParams }: { searchParam
   const p = await searchParams
   const q = value(p, 'q').trim().slice(0, 100)
   let data: PublishedOutput = { jobs: [], products: [] }, loadFailed = false, latest: StoredPublication | null = null
+  let products: PublishedJobGroup[] = []
   try {
     latest = await readLatestPublication()
-    if (latest) data = filterPublishedOutput({ jobs: latest.publication.tables.jobs.map(row => ({ key: row.id, cells: row.cells })), products: latest.publication.tables.products.map(row => ({ key: row.id, cells: row.cells })) }, q)
+    if (latest) {
+      const source = { jobs: latest.publication.tables.jobs.map(row => ({ key: row.id, cells: row.cells })), products: latest.publication.tables.products.map(row => ({ key: row.id, cells: row.cells })) }
+      products = filterPublishedGroups(groupPublishedProducts(source), q)
+      data = filterPublishedOutput(source, q)
+    }
   }
   catch { loadFailed = true }
   const historyPage = Math.min(1000, pageNumber(p, 'historyPage')), publicationId = UUID.test(value(p, 'publication')) ? value(p, 'publication').toLowerCase() : ''
@@ -39,7 +45,7 @@ export default async function WorkOrderDashboard({ searchParams }: { searchParam
     ...selected.changes.changed.map(field => ({ key: `edit-${field.table}-${field.id}-${field.column}`, label: `Table ${field.table === 'jobs' ? 'A' : 'B'} · ${field.id} · ${field.label}`, before: field.before, after: field.after })),
   ] : []
   const changePage = Math.min(pageNumber(p, 'changePage'), Math.max(1, Math.ceil(details.length / 50)))
-  const { jobs, products } = data
+  const { jobs } = data
   const jobsSize = dashboardPageSize(value(p, 'jobsSize')); const itemsSize = dashboardPageSize(value(p, 'itemsSize'))
   const jobPages = Math.max(1, Math.ceil(jobs.length / jobsSize)); const jp = Math.min(pageNumber(p, 'jobsPage'), jobPages)
   const productPages = Math.max(1, Math.ceil(products.length / itemsSize)); const ip = Math.min(pageNumber(p, 'itemsPage'), productPages)
@@ -47,7 +53,7 @@ export default async function WorkOrderDashboard({ searchParams }: { searchParam
   function href(update: Record<string, string>) { return `/dashboard/work-orders?${new URLSearchParams({ ...current, ...update })}` }
   function pagination(kind: 'jobs' | 'items', total: number, page: number, pageCount: number, size: number) {
     const key = `${kind}Page`; const sizeKey = `${kind}Size`
-    return <PaginationBar count={`${total} ${kind === 'jobs' ? 'work orders' : 'products'}`} page={page} pageCount={pageCount}
+    return <PaginationBar count={`${total} work order${total === 1 ? '' : 's'}`} page={page} pageCount={pageCount}
       label={kind === 'jobs' ? 'Work Order pages' : 'Product pages'}
       previous={page > 1 ? <Link href={href({ [key]: String(page - 1) })}>Previous</Link> : <span aria-disabled="true">Previous</span>}
       next={page < pageCount ? <Link href={href({ [key]: String(page + 1) })}>Next</Link> : <span aria-disabled="true">Next</span>}
@@ -84,7 +90,7 @@ export default async function WorkOrderDashboard({ searchParams }: { searchParam
         <thead><tr>{['WO / client / address', 'Materials (per product)', 'Client waiting for', 'Site ready', 'Glass ready', 'Hardware ready', 'Design Y/N/?', 'PS1 / PS3', 'Bottle strut', 'BC?', 'Minor var?'].map(column => <th key={column} scope="col">{column}</th>)}</tr></thead>
         <tbody>{products.slice((ip - 1) * itemsSize, ip * itemsSize).map(row => <tr key={row.key}>
           <td style={{ whiteSpace: 'pre-line' }}>{row.cells[0]}</td>
-          <td><MaterialDescription label={row.cells[1]} description={row.cells[1]} jobNumber={row.cells[0].split('\n')[0]} /></td>
+          <td><div className={styles.materialList}>{row.materials.map(item => <MaterialDescription key={item.key} label={item.label} description={item.description} jobNumber={row.cells[0].split('\n')[0]} />)}</div></td>
           {row.cells.slice(2).map((cell, index) => <td key={index} style={{ whiteSpace: 'pre-line' }}>{cell}</td>)}
         </tr>)}</tbody>
       </table></TableShell>
